@@ -129,8 +129,8 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 ### Hizli Baslangic
 
 ```bash
-git clone https://github.com/AdanedhelWrites/teknoloji-radar.git
-cd teknoloji-radar/cybersecurity_news
+git clone https://github.com/AdanedhelWrites/tech-radar.git
+cd tech-radar/cybersecurity_news
 
 docker compose up -d --build
 ```
