@@ -1,0 +1,271 @@
+# ============================================================
+# Teknoloji Radar — Kubernetes Deployment Values
+# ============================================================
+# Bu dosya k8s/ manifest'lerindeki tum parametreleri
+# tek bir yerden yonetmenizi saglar.
+#
+# Kullanim:
+#   1. Bu dosyadaki degerleri ortaminiza gore duzenleyin
+#   2. k8s/ manifest'lerini kubectl apply ile uygulayin
+#   3. Veya Helm/Kustomize ile bu dosyayi overlay olarak kullanin
+#
+# Not: Bu dosya Helm chart'i degildir, ancak Helm'e
+# donusturmek icin hazir bir referans gorevi gorur.
+# ============================================================
+
+# -------------------------------------------------------
+# Genel
+# -------------------------------------------------------
+global:
+  namespace: teknoloji-haberleri
+  appName: teknoloji-haberleri
+  labels:
+    partOf: teknoloji-haberleri
+
+# -------------------------------------------------------
+# Backend (Django REST API + Gunicorn)
+# -------------------------------------------------------
+backend:
+  name: teknoloji-api
+  component: backend
+  image:
+    repository: teknoloji-haberleri-api
+    tag: latest
+    pullPolicy: IfNotPresent        # Registry kullaniyorsaniz: Always
+  replicas: 2
+  port: 8000
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  probes:
+    readiness:
+      path: /api/news/
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      timeoutSeconds: 5
+    liveness:
+      path: /api/news/
+      initialDelaySeconds: 30
+      periodSeconds: 15
+      timeoutSeconds: 5
+
+# -------------------------------------------------------
+# Frontend (React + Vite)
+# -------------------------------------------------------
+frontend:
+  name: teknoloji-frontend
+  component: frontend
+  image:
+    repository: teknoloji-haberleri-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  port: 3000
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  probes:
+    readiness:
+      path: /
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    liveness:
+      path: /
+      initialDelaySeconds: 10
+      periodSeconds: 15
+
+# -------------------------------------------------------
+# Celery Worker
+# -------------------------------------------------------
+worker:
+  name: teknoloji-worker
+  component: worker
+  # Backend image'ini kullanir (ayni codebase)
+  replicas: 1
+  command: ["celery", "-A", "cybernews", "worker", "-l", "info", "--concurrency=2"]
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# -------------------------------------------------------
+# Celery Beat (Periyodik Gorev Zamanlayici)
+# ONEMLI: Her zaman 1 replica olmali!
+# -------------------------------------------------------
+scheduler:
+  name: teknoloji-scheduler
+  component: scheduler
+  replicas: 1                        # DEGISTIRMEYIN — ayni anda 2 Beat calisamaz
+  strategy: Recreate
+  command: ["celery", "-A", "cybernews", "beat", "-l", "info"]
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# -------------------------------------------------------
+# PostgreSQL
+# -------------------------------------------------------
+# enabled: false yaparsaniz harici PostgreSQL kullanilir.
+# Bu durumda config.database altindaki host/port degerlerini
+# mevcut PostgreSQL adresinize yonlendirin.
+# -------------------------------------------------------
+postgresql:
+  enabled: true
+  name: teknoloji-postgresql
+  component: database
+  image:
+    repository: postgres
+    tag: 16-alpine
+  port: 5432
+  strategy: Recreate
+  storage:
+    size: 5Gi
+    accessMode: ReadWriteOnce
+    # storageClassName: ""           # Belirli bir storage class kullanmak icin
+  pgdata: /var/lib/postgresql/data/pgdata
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  probes:
+    readiness:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    liveness:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+
+# -------------------------------------------------------
+# Redis
+# -------------------------------------------------------
+# enabled: false yaparsaniz harici Redis kullanilir.
+# Bu durumda config.redis altindaki URL degerlerini
+# mevcut Redis adresinize yonlendirin.
+# -------------------------------------------------------
+redis:
+  enabled: true
+  name: teknoloji-redis
+  component: cache
+  image:
+    repository: redis
+    tag: 7-alpine
+  port: 6379
+  maxmemory: 256mb
+  maxmemoryPolicy: allkeys-lru
+  appendonly: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  probes:
+    readiness:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    liveness:
+      initialDelaySeconds: 15
+      periodSeconds: 10
+
+# -------------------------------------------------------
+# Ingress
+# -------------------------------------------------------
+ingress:
+  enabled: true
+  name: teknoloji-ingress
+  className: nginx
+  host: teknoloji.example.com       # Kendi domain adinizi yazin
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    enabled: false
+    secretName: teknoloji-tls
+    # hosts:
+    #   - teknoloji.example.com
+  paths:
+    # Sira onemli — en spesifik path en ustte olmali
+    - path: /api
+      pathType: Prefix
+      service: teknoloji-api
+      port: 8000
+    - path: /admin
+      pathType: Prefix
+      service: teknoloji-api
+      port: 8000
+    - path: /static
+      pathType: Prefix
+      service: teknoloji-api
+      port: 8000
+    - path: /
+      pathType: Prefix
+      service: teknoloji-frontend
+      port: 3000
+
+# -------------------------------------------------------
+# Migration Job
+# -------------------------------------------------------
+migration:
+  name: teknoloji-migrate
+  component: migration
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  restartPolicy: OnFailure
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# -------------------------------------------------------
+# Konfigürasyon (ConfigMap degerleri)
+# -------------------------------------------------------
+config:
+  django:
+    debug: "False"
+    allowedHosts: "*"
+    corsAllowedOrigins: "http://localhost:3000,http://teknoloji-frontend:3000"
+  database:
+    url: "postgresql"               # "postgresql" = PostgreSQL kullan, bos = SQLite
+    name: "cybernews"
+    host: "teknoloji-postgresql"     # postgresql.enabled=false ise harici adresi yazin
+    port: "5432"
+  redis:
+    url: "redis://teknoloji-redis:6379/0"         # redis.enabled=false ise harici adresi yazin
+    celeryBrokerUrl: "redis://teknoloji-redis:6379/1"
+
+# -------------------------------------------------------
+# Gizli Degerler (Secret)
+# -------------------------------------------------------
+# !! DEPLOY ONCESI BU DEGERLERI MUTLAKA DEGISTIRIN !!
+# Production'da bu dosyayi git'e commitlemek yerine
+# external-secrets, sealed-secrets veya vault kullanin.
+# -------------------------------------------------------
+secrets:
+  secretKey: "buraya-guclu-rastgele-secret-key-yazin-min-50-karakter"
+  dbUser: "cybernews"
+  dbPassword: "buraya-guclu-sifre-yazin"
+  postgresPassword: "buraya-guclu-sifre-yazin"

@@ -1,0 +1,97 @@
+# Celery Worker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.worker.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.worker.name }}
+    app.kubernetes.io/component: {{ .Values.worker.component }}
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.worker.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.worker.name }}
+        app.kubernetes.io/component: {{ .Values.worker.component }}
+    spec:
+      containers:
+        - name: worker
+          image: {{ include "tech-radar.backendImage" . }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: {{ .Values.worker.command | toJson }}
+          envFrom:
+            - configMapRef:
+                name: teknoloji-config
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: teknoloji-secret
+                  key: SECRET_KEY
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: teknoloji-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: teknoloji-secret
+                  key: DB_PASSWORD
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+---
+# Celery Beat — ONEMLI: Her zaman 1 replica olmali!
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.scheduler.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.scheduler.name }}
+    app.kubernetes.io/component: {{ .Values.scheduler.component }}
+spec:
+  replicas: {{ .Values.scheduler.replicas }}
+  strategy:
+    type: {{ .Values.scheduler.strategy }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.scheduler.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.scheduler.name }}
+        app.kubernetes.io/component: {{ .Values.scheduler.component }}
+    spec:
+      containers:
+        - name: scheduler
+          image: {{ include "tech-radar.backendImage" . }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: {{ .Values.scheduler.command | toJson }}
+          envFrom:
+            - configMapRef:
+                name: teknoloji-config
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: teknoloji-secret
+                  key: SECRET_KEY
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: teknoloji-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: teknoloji-secret
+                  key: DB_PASSWORD
+          resources:
+            {{- toYaml .Values.scheduler.resources | nindent 12 }}

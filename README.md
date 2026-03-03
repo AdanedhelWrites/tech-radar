@@ -46,7 +46,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 - **CVSS siddet filtresi** — Kritik / Yuksek / Orta / Dusuk (CVE sayfasi)
 - **HTML rapor disa aktarma** — Her bolumden koyu temali, yazdirilabilir HTML rapor indirilebilir
 - **Docker Compose** — Tek komutla 5 container ayaga kalkar
-- **Kubernetes** — Production-ready manifest'ler + Helm values.yaml
+- **Kubernetes** — Production-ready manifest'ler + Helm chart
 
 ---
 
@@ -253,7 +253,7 @@ cybersecurity_news/
 │   ├── index.html
 │   └── package.json
 │
-├── k8s/                        # Kubernetes manifest'leri
+├── k8s/                        # Kubernetes manifest'leri (kubectl apply)
 │   ├── 00-namespace.yaml
 │   ├── 01-configmap.yaml       # Uygulama ayarlari
 │   ├── 02-secret.yaml          # Gizli bilgiler (placeholder)
@@ -265,7 +265,25 @@ cybersecurity_news/
 │   ├── 08-ingress.yaml         # Nginx Ingress kurallari
 │   └── 09-migration-job.yaml   # DB migration Job
 │
-├── values.yaml                 # Helm-tarz K8s konfigurasyonu (tek dosya)
+├── helm/tech-radar/            # Helm chart
+│   ├── Chart.yaml              # Chart metadata (v1.0.0)
+│   ├── values.yaml             # Varsayilan degerler
+│   ├── .helmignore
+│   └── templates/
+│       ├── _helpers.tpl        # Paylasilan template fonksiyonlari
+│       ├── namespace.yaml
+│       ├── configmap.yaml
+│       ├── secret.yaml
+│       ├── postgresql.yaml     # postgresql.enabled ile kontrol edilir
+│       ├── redis.yaml          # redis.enabled ile kontrol edilir
+│       ├── backend.yaml
+│       ├── frontend.yaml
+│       ├── celery.yaml         # Worker + Beat
+│       ├── ingress.yaml        # ingress.enabled ile kontrol edilir
+│       ├── migration-job.yaml  # post-install/post-upgrade hook
+│       └── NOTES.txt           # helm install sonrasi bilgi mesaji
+│
+├── values.yaml                 # Root-level values referansi (Helm chart'a kopyasi)
 ├── docker-compose.yml          # 5 servis (lokal gelistirme)
 ├── Dockerfile                  # Backend multi-stage build
 ├── entrypoint.sh               # Startup: wait-for-db + migrate
@@ -444,11 +462,168 @@ kubectl port-forward svc/teknoloji-frontend 3000:3000 -n teknoloji-haberleri
 kubectl port-forward svc/teknoloji-api 8000:8000 -n teknoloji-haberleri
 ```
 
-### Opsion B — values.yaml ile (Tek Dosya Konfigurasyonu)
+### Opsion B — Helm Chart ile Deploy
 
-Proje kokunde `values.yaml` dosyasi bulunur. Bu dosya Helm chart degil, ancak tum K8s deployment parametrelerini tek dosyada toplar. `k8s/` klasorundeki manifest'leri uygulamadan once bu dosyayi kendi ortaminiza gore duzenleyin.
+Helm chart `helm/tech-radar/` dizininde bulunur. Tum K8s kaynaklarini tek komutla deploy eder ve `values.yaml` uzerinden yapilandirma saglar.
 
-Detaylar icin [values.yaml](values.yaml) dosyasina bakin.
+#### On Gereksinimler
+
+- Kubernetes cluster (minikube, k3s, EKS, GKE, AKS, vb.)
+- `kubectl` CLI kurulu ve cluster'a bagli
+- [Helm 3](https://helm.sh/docs/intro/install/) kurulu
+- Docker image'lar build edilmis (Opsion A, Adim 1'e bakin)
+
+#### Adim 1 — values.yaml Duzenleme
+
+`helm/tech-radar/values.yaml` dosyasini ortaminiza gore duzenleyin:
+
+```yaml
+# Onemli degerler:
+secrets:
+  secretKey: "min-50-karakter-rastgele-guclu-bir-key"
+  dbUser: "cybernews"
+  dbPassword: "guclu-veritabani-sifresi"
+  postgresPassword: "guclu-veritabani-sifresi"
+
+ingress:
+  enabled: true
+  host: teknoloji.example.com      # Kendi domain adiniz
+
+# Harici PostgreSQL kullaniyorsaniz:
+postgresql:
+  enabled: false                    # Cluster icine kurma
+config:
+  database:
+    host: "postgres.ornek-ns.svc.cluster.local"
+
+# Harici Redis kullaniyorsaniz:
+redis:
+  enabled: false
+config:
+  redis:
+    url: "redis://redis.ornek-ns.svc.cluster.local:6379/0"
+    celeryBrokerUrl: "redis://redis.ornek-ns.svc.cluster.local:6379/1"
+```
+
+#### Adim 2 — Helm Install
+
+```bash
+# Varsayilan degerlerle kurulum
+helm install tech-radar ./helm/tech-radar \
+  --namespace teknoloji-haberleri \
+  --create-namespace
+
+# Veya ozel values dosyasiyla
+helm install tech-radar ./helm/tech-radar \
+  --namespace teknoloji-haberleri \
+  --create-namespace \
+  -f my-values.yaml
+
+# Veya komut satirindan deger gecirerek
+helm install tech-radar ./helm/tech-radar \
+  --namespace teknoloji-haberleri \
+  --create-namespace \
+  --set ingress.host=radar.example.com \
+  --set secrets.secretKey="$(openssl rand -hex 32)" \
+  --set secrets.dbPassword="$(openssl rand -hex 16)" \
+  --set secrets.postgresPassword="$(openssl rand -hex 16)"
+```
+
+> **Not:** Migration job, Helm `post-install` ve `post-upgrade` hook olarak otomatik calisir. Manuel calistirmaya gerek yoktur.
+
+#### Adim 3 — Dogrulama
+
+```bash
+# Pod durumlari
+kubectl get pods -n teknoloji-haberleri
+
+# Helm release durumu
+helm status tech-radar -n teknoloji-haberleri
+
+# Uygulama loglari
+kubectl logs -f deployment/teknoloji-api -n teknoloji-haberleri
+```
+
+Ingress yoksa port forward:
+
+```bash
+kubectl port-forward svc/teknoloji-frontend 3000:3000 -n teknoloji-haberleri
+kubectl port-forward svc/teknoloji-api 8000:8000 -n teknoloji-haberleri
+```
+
+#### Guncelleme (Helm Upgrade)
+
+```bash
+# Yeni image build sonrasi
+helm upgrade tech-radar ./helm/tech-radar \
+  --namespace teknoloji-haberleri \
+  --set backend.image.tag=v2 \
+  --set frontend.image.tag=v2
+
+# Veya values dosyasini guncelleyip
+helm upgrade tech-radar ./helm/tech-radar \
+  --namespace teknoloji-haberleri \
+  -f my-values.yaml
+```
+
+Migration job her upgrade'de otomatik calisir (post-upgrade hook).
+
+#### Geri Alma (Rollback)
+
+```bash
+# Onceki surume geri don
+helm rollback tech-radar -n teknoloji-haberleri
+
+# Belirli bir revision'a geri don
+helm history tech-radar -n teknoloji-haberleri
+helm rollback tech-radar 2 -n teknoloji-haberleri
+```
+
+#### Kaldirma
+
+```bash
+helm uninstall tech-radar -n teknoloji-haberleri
+kubectl delete namespace teknoloji-haberleri
+```
+
+#### Helm Chart Yapisi
+
+```
+helm/tech-radar/
+├── Chart.yaml            # name: tech-radar, version: 1.0.0
+├── values.yaml            # Tum varsayilan degerler
+├── .helmignore
+└── templates/
+    ├── _helpers.tpl       # Paylasilan label/image fonksiyonlari
+    ├── NOTES.txt          # Install sonrasi bilgi mesaji
+    ├── namespace.yaml
+    ├── configmap.yaml     # Django, DB, Redis ortam degiskenleri
+    ├── secret.yaml        # SECRET_KEY, DB_USER, DB_PASSWORD
+    ├── postgresql.yaml    # PVC + Deployment + Service (postgresql.enabled)
+    ├── redis.yaml         # Deployment + Service (redis.enabled)
+    ├── backend.yaml       # Django API Deployment + Service
+    ├── frontend.yaml      # Nginx Frontend Deployment + Service
+    ├── celery.yaml        # Worker + Beat Deployment
+    ├── ingress.yaml       # Nginx Ingress (ingress.enabled)
+    └── migration-job.yaml # post-install/post-upgrade hook
+```
+
+#### Onemli values.yaml Parametreleri
+
+| Parametre | Varsayilan | Aciklama |
+|-----------|-----------|----------|
+| `backend.replicas` | `2` | API pod sayisi |
+| `frontend.replicas` | `2` | Frontend pod sayisi |
+| `worker.replicas` | `1` | Celery worker sayisi |
+| `scheduler.replicas` | `1` | Beat scheduler (degistirmeyin!) |
+| `postgresql.enabled` | `true` | `false` = harici PostgreSQL kullan |
+| `redis.enabled` | `true` | `false` = harici Redis kullan |
+| `ingress.enabled` | `true` | `false` = Ingress olusturma |
+| `ingress.host` | `teknoloji.example.com` | Domain adiniz |
+| `ingress.tls.enabled` | `false` | TLS/HTTPS aktif et |
+| `backend.image.tag` | `latest` | Backend image tag |
+| `frontend.image.tag` | `latest` | Frontend image tag |
+| `postgresql.storage.size` | `5Gi` | PVC boyutu |
 
 ---
 
@@ -475,6 +650,8 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 
 ## Guncelleme (Kubernetes)
 
+### kubectl ile (Opsion A)
+
 ```bash
 # Yeni image build
 docker build -t teknoloji-haberleri-api:v2 .
@@ -491,9 +668,31 @@ kubectl set image deployment/teknoloji-worker worker=teknoloji-haberleri-api:v2 
 kubectl set image deployment/teknoloji-scheduler scheduler=teknoloji-haberleri-api:v2 -n teknoloji-haberleri
 ```
 
+### Helm ile (Opsion B)
+
+```bash
+# Yeni image build
+docker build -t teknoloji-haberleri-api:v2 .
+docker build -t teknoloji-haberleri-frontend:v2 ./frontend
+
+# Upgrade (migration otomatik calisir)
+helm upgrade tech-radar ./helm/tech-radar \
+  -n teknoloji-haberleri \
+  --set backend.image.tag=v2 \
+  --set frontend.image.tag=v2
+
+# Geri alma
+helm rollback tech-radar -n teknoloji-haberleri
+```
+
 ### Kaldirma
 
 ```bash
+# kubectl ile
+kubectl delete namespace teknoloji-haberleri
+
+# Helm ile
+helm uninstall tech-radar -n teknoloji-haberleri
 kubectl delete namespace teknoloji-haberleri
 ```
 

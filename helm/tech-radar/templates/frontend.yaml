@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.frontend.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.frontend.name }}
+    app.kubernetes.io/component: {{ .Values.frontend.component }}
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.frontend.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.frontend.name }}
+        app.kubernetes.io/component: {{ .Values.frontend.component }}
+    spec:
+      containers:
+        - name: frontend
+          image: {{ include "tech-radar.frontendImage" . }}
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.frontend.port }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.frontend.probes.readiness.path }}
+              port: {{ .Values.frontend.port }}
+            initialDelaySeconds: {{ .Values.frontend.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontend.probes.readiness.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.frontend.probes.liveness.path }}
+              port: {{ .Values.frontend.port }}
+            initialDelaySeconds: {{ .Values.frontend.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontend.probes.liveness.periodSeconds }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.frontend.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.frontend.name }}
+    app.kubernetes.io/component: {{ .Values.frontend.component }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.frontend.port }}
+      targetPort: {{ .Values.frontend.port }}
+  selector:
+    app.kubernetes.io/name: {{ .Values.frontend.name }}

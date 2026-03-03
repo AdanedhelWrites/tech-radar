@@ -1,0 +1,107 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.postgresql.name }}-pvc
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.postgresql.name }}
+spec:
+  accessModes:
+    - {{ .Values.postgresql.storage.accessMode }}
+  {{- if .Values.postgresql.storage.storageClassName }}
+  storageClassName: {{ .Values.postgresql.storage.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.postgresql.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.postgresql.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.postgresql.name }}
+    app.kubernetes.io/component: {{ .Values.postgresql.component }}
+spec:
+  replicas: 1
+  strategy:
+    type: {{ .Values.postgresql.strategy }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.postgresql.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.postgresql.name }}
+        app.kubernetes.io/component: {{ .Values.postgresql.component }}
+    spec:
+      containers:
+        - name: postgresql
+          image: {{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}
+          ports:
+            - containerPort: {{ .Values.postgresql.port }}
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: teknoloji-config
+                  key: DB_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: teknoloji-secret
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: teknoloji-secret
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: {{ .Values.postgresql.pgdata }}
+          volumeMounts:
+            - name: postgresql-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.secrets.dbUser }}
+            initialDelaySeconds: {{ .Values.postgresql.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.postgresql.probes.readiness.periodSeconds }}
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.secrets.dbUser }}
+            initialDelaySeconds: {{ .Values.postgresql.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.postgresql.probes.liveness.periodSeconds }}
+      volumes:
+        - name: postgresql-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.postgresql.name }}-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.postgresql.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.postgresql.name }}
+    app.kubernetes.io/component: {{ .Values.postgresql.component }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.postgresql.port }}
+      targetPort: {{ .Values.postgresql.port }}
+  selector:
+    app.kubernetes.io/name: {{ .Values.postgresql.name }}
+{{- end }}

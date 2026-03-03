@@ -1,0 +1,22 @@
+apiVersion: v2
+name: tech-radar
+description: >-
+  Turkish tech news aggregator — scrapes 27 sources
+  (cybersecurity, CVE, Kubernetes, SRE, DevTools),
+  translates to Turkish, and serves via a dark-mode UI.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - news-aggregator
+  - cybersecurity
+  - kubernetes
+  - sre
+  - devtools
+  - django
+  - react
+home: https://github.com/AdanedhelWrites/tech-radar
+sources:
+  - https://github.com/AdanedhelWrites/tech-radar
+maintainers:
+  - name: AdanedhelWrites
