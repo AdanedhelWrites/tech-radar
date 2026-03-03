@@ -1,8 +1,8 @@
 # Teknoloji Radar
 
-Siber güvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri ve DevTools altyapı araçları güncellemelerini **27 farklı kaynaktan** toplayan, Türkçeye çeviren ve modern bir arayüzde sunan full-stack haber agregasyon uygulaması.
+Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri ve DevTools altyapi araclari guncellemelerini **27 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
 
-> Bu proje **Vibe Coding** yaklaşımıyla, Claude Code (claude-opus-4-6) ile birlikte geliştirilmiştir.
+> Bu proje **Vibe Coding** yaklasimiyla, Claude Code (claude-opus-4-6) ile birlikte gelistirilmistir.
 
 ---
 
@@ -33,78 +33,80 @@ Siber güvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Rel
                               └─────────────────────────┘
 ```
 
-## Özellikler
+## Ozellikler
 
-- **27 farklı kaynak** — 5 siber güvenlik, 5 CVE, 3 Kubernetes, 5 SRE, 9 DevTools
-- **Tam makale çevirisi** — Kısaltma yok, tüm içerik Türkçeye çevrilir
-- **Teknik terim koruması** — 60+ terim (CVE, CVSS, Kubernetes, Docker, vb.) çeviri sırasında bozulmaz
-- **Parça tabanlı çeviri** — Uzun makaleler cümle sınırlarından 4500 karakterlik parçalara bölünerek çevrilir
-- **Karanlık mod** — Koyu tonlarda arayüz
-- **DevTools takibi** — MinIO, Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle release güncellemeleri
-- **Tarih filtresi** — 1-15 gün (haberler) / 1-60 gün (DevTools) slider ile filtreleme
-- **CVSS şiddet filtresi** — Kritik / Yüksek / Orta / Düşük (CVE sayfası)
-- **Docker Compose** — Tek komutla 5 container ayağa kalkar
-- **Kubernetes** — Production-ready manifest'ler
+- **27 farkli kaynak** — 5 siber guvenlik, 5 CVE, 3 Kubernetes, 5 SRE, 9 DevTools
+- **Tam makale cevirisi** — Kisaltma yok, tum icerik Turkceye cevrilir
+- **Teknik terim korumasi** — 130+ terim (Kubernetes, Docker, Elasticsearch, CVE, CVSS, vb.) ceviri sirasinda bozulmaz
+- **Turkce imla post-processing** — Cumle basi buyuk harf, noktalama duzeltme, URL/surum koruma
+- **Parca tabanli ceviri** — Uzun makaleler cumle sinirlarindan 4500 karakterlik parcalara bolunerek cevrilir
+- **Karanlik mod** — Koyu tonlarda arayuz (steel blue `#5b86a7` vurgu rengi)
+- **DevTools takibi** — MinIO, Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle release guncellemeleri
+- **Tarih filtresi** — 1-15 gun (haberler) / 1-60 gun (DevTools) slider ile filtreleme
+- **CVSS siddet filtresi** — Kritik / Yuksek / Orta / Dusuk (CVE sayfasi)
+- **HTML rapor disa aktarma** — Her bolumden koyu temali, yazdirilabilir HTML rapor indirilebilir
+- **Docker Compose** — Tek komutla 5 container ayaga kalkar
+- **Kubernetes** — Production-ready manifest'ler + Helm values.yaml
 
 ---
 
-## Veri Kaynakları
+## Veri Kaynaklari
 
-### Siber Güvenlik Haberleri (5 kaynak)
+### Siber Guvenlik Haberleri (5 kaynak)
 
-| Kaynak | Yöntem | Açıklama |
+| Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
-| The Hacker News | HTML Scraping | Tam makale içeriği çekilir |
-| Bleeping Computer | HTML Scraping | Sponsorlu içerik filtrelenir |
-| SecurityWeek | HTML Scraping | Güvenlik odaklı haberler |
-| Dark Reading | RSS Feed | HTML 403 döndüğü için RSS kullanılır |
-| Krebs on Security | HTML Scraping | Brian Krebs'in güvenlik blogu |
+| The Hacker News | HTML Scraping | Tam makale icerigi cekilir |
+| Bleeping Computer | HTML Scraping | Sponsorlu icerik filtrelenir |
+| SecurityWeek | HTML Scraping | Guvenlik odakli haberler |
+| Dark Reading | RSS Feed | HTML 403 dondugu icin RSS kullanilir |
+| Krebs on Security | HTML Scraping | Brian Krebs'in guvenlik blogu |
 
 ### CVE Zafiyetleri (5 kaynak)
 
-| Kaynak | Yöntem | Açıklama |
+| Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
-| NVD (Yayınlanan) | REST API | Yeni yayınlanan CVE'ler |
-| NVD (Güncel) | REST API | Son güncellenen CVE'ler |
+| NVD (Yayinlanan) | REST API | Yeni yayinlanan CVE'ler |
+| NVD (Guncel) | REST API | Son guncellenen CVE'ler |
 | GitHub Advisory | REST API | CVSS, CWE, etkilenen paketler dahil |
 | Tenable | HTML Scraping | Severity bilgisi dahil |
-| CIRCL | REST API | Lüksemburg CERT |
+| CIRCL | REST API | Luksemburg CERT |
 
 ### Kubernetes (3 kaynak)
 
-| Kaynak | Yöntem | Açıklama |
+| Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
-| Kubernetes Blog | HTML Scraping | Resmi Kubernetes blog yazıları |
-| Kubernetes GitHub | REST API | Release notları, CHANGELOG formatında |
+| Kubernetes Blog | HTML Scraping | Resmi Kubernetes blog yazilari |
+| Kubernetes GitHub | REST API | Release notlari, CHANGELOG formatinda |
 | CNCF Blog | WordPress API | Cloud Native Computing Foundation haberleri |
 
 ### SRE (5 kaynak)
 
-| Kaynak | Yöntem | Açıklama |
+| Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
-| SRE Weekly | RSS Feed | Haftalık bülten, bireysel makalelere ayrıştırılır |
+| SRE Weekly | RSS Feed | Haftalik bulten, bireysel makalelere ayristirilir |
 | InfoQ SRE | HTML Scraping | SRE etiketli makaleler |
 | PagerDuty Eng | RSS Feed | Incident management ve SRE makaleleri |
 | Google Cloud SRE | RSS Feed | SRE anahtar kelime filtresiyle |
 | DZone DevOps | RSS Feed | SRE/DevOps konulu makaleler |
 
-### DevTools — Altyapı Araçları (9 kaynak)
+### DevTools — Altyapi Araclari (9 kaynak)
 
-| Kaynak | Yöntem | Açıklama |
+| Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
-| MinIO | GitHub Releases API | S3 uyumlu object storage, detaylı changelog |
-| Seq | Datalust Blog RSS | Yapılandırılmış log arama motoru, release filtreli |
-| Ceph | GitHub Releases Atom | Dağıtık storage, version tag tabanlı |
-| MongoDB | Blog RSS | Release ve güncelleme filtreli blog yazıları |
-| PostgreSQL | Resmi News RSS | Resmi haberler, release notları, ekosistem |
-| RabbitMQ | GitHub Releases API | Mesaj kuyruğu, tam changelog |
-| Elasticsearch + Kibana | GitHub Releases API | ES ve Kibana sürümleri, deduplicate edilir |
-| Redis | Blog RSS | Announcing/release filtreli blog yazıları |
-| Moodle | GitHub Tags API | Stabil sürüm tag'leri, commit tarihinden date çıkarılır |
+| MinIO | GitHub Releases API | S3 uyumlu object storage, detayli changelog |
+| Seq | Datalust Blog RSS | Yapilandirilmis log arama motoru, release filtreli |
+| Ceph | GitHub Releases Atom | Dagitik storage, version tag tabanli |
+| MongoDB | Blog RSS | Release ve guncelleme filtreli blog yazilari |
+| PostgreSQL | Resmi News RSS | Resmi haberler, release notlari, ekosistem |
+| RabbitMQ | GitHub Releases API | Mesaj kuyrugu, tam changelog |
+| Elasticsearch + Kibana | GitHub Releases API + elastic.co release notes | Resmi release notes sayfasindan detayli changelog |
+| Redis | Blog RSS + tam makale | Blog sayfasindan tam icerik cekilir (blockContent) |
+| Moodle | GitHub Tags API + moodledev.io | Resmi release notes sayfasindan gercek icerik |
 
 ---
 
-## Teknoloji Yığını
+## Teknoloji Yigini
 
 | Katman | Teknolojiler |
 |--------|-------------|
@@ -112,8 +114,8 @@ Siber güvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Rel
 | **Frontend** | React 18, Vite 5, React Bootstrap 2.9, React Router DOM 6, Axios |
 | **Veri** | SQLite (lokal), PostgreSQL 16 (K8s), Redis 7 (cache + broker) |
 | **Scraping** | BeautifulSoup4, lxml, Requests |
-| **Çeviri** | deep-translator (Google Translate) |
-| **Altyapı** | Docker Compose, Kubernetes, Nginx 1.25, Whitenoise |
+| **Ceviri** | deep-translator (Google Translate) + merkezi post-processing |
+| **Altyapi** | Docker Compose, Kubernetes, Nginx 1.25, Whitenoise |
 
 ---
 
@@ -122,12 +124,12 @@ Siber güvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Rel
 ### Gereksinimler
 
 - Docker ve Docker Compose
-- İnternet bağlantısı (kaynak sitelere ve Google Translate'e erişim)
+- Internet baglantisi (kaynak sitelere ve Google Translate'e erisim)
 
-### Hızlı Başlangıç
+### Hizli Baslangic
 
 ```bash
-git clone https://github.com/KULLANICI_ADI/teknoloji-radar.git
+git clone https://github.com/AdanedhelWrites/teknoloji-radar.git
 cd teknoloji-radar/cybersecurity_news
 
 docker compose up -d --build
@@ -140,26 +142,26 @@ docker compose up -d --build
 
 ### Container'lar
 
-| Container | Image | Port | Görev |
+| Container | Image | Port | Gorev |
 |-----------|-------|------|-------|
-| `teknoloji-api` | `teknoloji-haberleri-api:latest` | 8000 | Django REST API, scraping, çeviri, veritabanı |
-| `teknoloji-frontend` | `node:18-alpine` | 3000 | React arayüz (Vite dev server, hot-reload) |
+| `teknoloji-api` | `teknoloji-haberleri-api:latest` | 8000 | Django REST API, scraping, ceviri, veritabani |
+| `teknoloji-frontend` | `node:18-alpine` | 3000 | React arayuz (Vite dev server, hot-reload) |
 | `teknoloji-redis` | `redis:7-alpine` | 6379 | Cache + Celery message broker |
-| `teknoloji-worker` | `teknoloji-haberleri-api:latest` | — | Arka plan scraping + çeviri |
-| `teknoloji-scheduler` | `teknoloji-haberleri-api:latest` | — | Periyodik görev zamanlayıcı (Celery Beat) |
+| `teknoloji-worker` | `teknoloji-haberleri-api:latest` | — | Arka plan scraping + ceviri |
+| `teknoloji-scheduler` | `teknoloji-haberleri-api:latest` | — | Periyodik gorev zamanlayici (Celery Beat) |
 
-Container'lar `teknoloji-network` bridge network üzerinden haberleşir.
+Container'lar `teknoloji-network` bridge network uzerinden haberlesir.
 
-### Yönetim Komutları
+### Yonetim Komutlari
 
 ```bash
-# Başlat
+# Baslat
 docker compose up -d --build
 
 # Durdur
 docker compose down
 
-# Logları izle
+# Loglari izle
 docker compose logs -f teknoloji-api
 docker compose logs -f teknoloji-worker
 
@@ -169,103 +171,105 @@ docker compose exec teknoloji-redis redis-cli FLUSHDB
 # Django shell
 docker compose exec teknoloji-api python manage.py shell
 
-# Sıfırdan başlat (volume'lar dahil)
+# Sifirdan baslat (volume'lar dahil)
 docker compose down -v && docker compose up -d --build
 ```
 
 ---
 
-## Kullanım
+## Kullanim
 
-Her sayfa aynı düzeni takip eder:
+Her sayfa ayni duzeni takip eder:
 
-1. Sol panelden **gün aralığını** (1-15) ve **kaynakları** seçin
-2. **"Getir"** butonuna tıklayın
-3. Haberler çekilir, Türkçeye çevrilir ve orta panelde listelenir
-4. Bir habere tıklayarak sağ panelde detayını görüntüleyin
+1. Sol panelden **gun araligini** (1-15 / DevTools icin 1-60) ve **kaynaklari** secin
+2. **"Getir"** butonuna tiklayin
+3. Haberler cekilir, Turkceye cevrilir ve orta panelde listelenir
+4. Bir habere tiklayarak sag panelde detayini goruntuleyin
 
 **Ek butonlar:**
-- **Yenile** — Mevcut verileri yeniden yükler
-- **Sıfırla** — Tüm verileri temizler
-- **İndir** — JSON formatında dışa aktarır
+- **Yenile** — Mevcut verileri yeniden yukler
+- **Sifirla** — Tum verileri temizler
+- **Indir** — Koyu temali HTML rapor olarak disa aktarir
 
 ---
 
 ## API Endpoints
 
-Her bölüm (news, cve, k8s, sre, devtools) aynı endpoint yapısını kullanır:
+Her bolum (news, cve, k8s, sre, devtools) ayni endpoint yapisini kullanir:
 
-| Method | Endpoint Deseni | Açıklama |
+| Method | Endpoint Deseni | Aciklama |
 |--------|-----------------|----------|
-| GET | `/api/{bölüm}/` | Kayıtlı verileri listele |
-| POST | `/api/{bölüm}/fetch/` | Yeni verileri çek (body: `{"days": 7, "sources": [...]}`) |
-| POST | `/api/{bölüm}/clear/` | Tüm verileri sil |
-| GET | `/api/{bölüm}/stats/` | İstatistikleri getir |
-| GET | `/api/{bölüm}/export/` | JSON olarak dışa aktar |
+| GET | `/api/{bolum}/` | Kayitli verileri listele |
+| POST | `/api/{bolum}/fetch/` | Yeni verileri cek (body: `{"days": 7, "sources": [...]}`) |
+| POST | `/api/{bolum}/clear/` | Tum verileri sil |
+| GET | `/api/{bolum}/stats/` | Istatistikleri getir |
+| GET | `/api/{bolum}/export/` | HTML rapor olarak disa aktar |
 
-**Bölüm isimleri:** `news` (Siber Güvenlik, fetch endpoint: `/api/fetch/`), `cve`, `k8s`, `sre`, `devtools`
+**Bolum isimleri:** `news` (Siber Guvenlik, fetch endpoint: `/api/fetch/`), `cve`, `k8s`, `sre`, `devtools`
 
-> **Not:** Siber güvenlik bölümünün fetch, clear, stats ve export endpoint'leri `/api/news/` altında değil, doğrudan `/api/` altındadır: `/api/fetch/`, `/api/clear/`, `/api/stats/`, `/api/export/`
+> **Not:** Siber guvenlik bolumunun fetch, clear, stats ve export endpoint'leri `/api/news/` altinda degil, dogrudan `/api/` altindadir: `/api/fetch/`, `/api/clear/`, `/api/stats/`, `/api/export/`
 
 ---
 
-## Proje Yapısı
+## Proje Yapisi
 
 ```
 cybersecurity_news/
-├── cybernews/                  # Django proje ayarları
-│   ├── settings.py             # Env-var tabanlı config (DB, Redis, CORS)
-│   ├── urls.py                 # Root URL yapılandırması
-│   ├── celery.py               # Celery yapılandırması
+├── cybernews/                  # Django proje ayarlari
+│   ├── settings.py             # Env-var tabanli config (DB, Redis, CORS)
+│   ├── urls.py                 # Root URL yapilandirmasi
+│   ├── celery.py               # Celery yapilandirmasi
 │   └── wsgi.py
 │
-├── news/                       # Ana Django uygulaması
+├── news/                       # Ana Django uygulamasi
 │   ├── models.py               # NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry
-│   ├── views.py                # API endpoint'leri (5 bölüm x 5 endpoint = 25)
-│   ├── serializers.py          # DRF serializer'ları
+│   ├── views.py                # API endpoint'leri (5 bolum x 5 endpoint = 25)
+│   ├── serializers.py          # DRF serializer'lari
 │   ├── urls.py                 # API URL pattern'leri
-│   ├── cve_scraper.py          # 5 CVE kaynağı scraper'ı
-│   ├── k8s_scraper.py          # 3 Kubernetes kaynağı scraper'ı
-│   ├── sre_scraper.py          # 5 SRE kaynağı scraper'ı
-│   ├── devtools_scraper.py     # 9 DevTools kaynağı scraper'ı
-│   └── admin.py                # Django admin kayıtları
+│   ├── translation_utils.py    # Merkezi ceviri modulu (terim koruma + post-processing)
+│   ├── cve_scraper.py          # 5 CVE kaynagi scraper'i
+│   ├── k8s_scraper.py          # 3 Kubernetes kaynagi scraper'i
+│   ├── sre_scraper.py          # 5 SRE kaynagi scraper'i
+│   ├── devtools_scraper.py     # 9 DevTools kaynagi scraper'i
+│   └── admin.py                # Django admin kayitlari
 │
-├── scraper_multi.py            # 5 siber güvenlik kaynağı scraper'ı
+├── scraper_multi.py            # 5 siber guvenlik kaynagi scraper'i
 │
 ├── frontend/                   # React SPA
 │   ├── src/
-│   │   ├── App.jsx             # Router, Navbar, Karanlık Mod
+│   │   ├── App.jsx             # Router, Navbar, Karanlik Mod
 │   │   ├── App.css             # Tema stilleri
 │   │   ├── components/
-│   │   │   ├── NewsComponent.jsx       # Siber güvenlik sayfası
-│   │   │   ├── CVEComponent.jsx        # CVE sayfası
-│   │   │   ├── KubernetesComponent.jsx # Kubernetes sayfası
-│   │   │   ├── SREComponent.jsx        # SRE sayfası
-│   │   │   └── DevToolsComponent.jsx   # DevTools sayfası
+│   │   │   ├── NewsComponent.jsx       # Siber guvenlik sayfasi
+│   │   │   ├── CVEComponent.jsx        # CVE sayfasi
+│   │   │   ├── KubernetesComponent.jsx # Kubernetes sayfasi
+│   │   │   ├── SREComponent.jsx        # SRE sayfasi
+│   │   │   └── DevToolsComponent.jsx   # DevTools sayfasi
 │   │   └── services/
 │   │       └── api.js          # Axios API servisleri
 │   ├── Dockerfile              # Production build: Node + Nginx
 │   ├── nginx.conf              # SPA routing + /api proxy
-│   ├── vite.config.js          # Dev proxy ayarları
+│   ├── vite.config.js          # Dev proxy ayarlari
 │   ├── index.html
 │   └── package.json
 │
 ├── k8s/                        # Kubernetes manifest'leri
 │   ├── 00-namespace.yaml
-│   ├── 01-configmap.yaml       # Uygulama ayarları
+│   ├── 01-configmap.yaml       # Uygulama ayarlari
 │   ├── 02-secret.yaml          # Gizli bilgiler (placeholder)
 │   ├── 03-postgresql.yaml      # PostgreSQL (opsiyonel)
 │   ├── 04-redis.yaml           # Redis (opsiyonel)
 │   ├── 05-backend.yaml         # Django API Deployment + Service
 │   ├── 06-frontend.yaml        # Nginx Frontend Deployment + Service
 │   ├── 07-celery.yaml          # Worker + Beat Deployment
-│   ├── 08-ingress.yaml         # Nginx Ingress kuralları
+│   ├── 08-ingress.yaml         # Nginx Ingress kurallari
 │   └── 09-migration-job.yaml   # DB migration Job
 │
-├── docker-compose.yml          # 5 servis (lokal geliştirme)
+├── values.yaml                 # Helm-tarz K8s konfigurasyonu (tek dosya)
+├── docker-compose.yml          # 5 servis (lokal gelistirme)
 ├── Dockerfile                  # Backend multi-stage build
 ├── entrypoint.sh               # Startup: wait-for-db + migrate
-├── requirements.txt            # Python bağımlılıkları
+├── requirements.txt            # Python bagimliliklari
 ├── .gitignore
 ├── .dockerignore
 └── manage.py
@@ -273,24 +277,52 @@ cybersecurity_news/
 
 ---
 
-## Çeviri Sistemi
+## Ceviri Sistemi
 
-1. **Teknik Terim Koruması** — 60+ terim çeviri öncesinde placeholder'larla değiştirilir, çeviri sonrası geri yerleştirilir
-2. **Parça Tabanlı Çeviri** — Metin cümle sınırlarına göre 4500 karakterlik parçalara bölünür (Google Translate 5000 karakter limiti)
-3. **Hata Yönetimi** — Başarısız çevirilerde retry mekanizması, rate limit'e karşı 0.3s bekleme
+Tum scraper'lar `news/translation_utils.py` merkezi modulunu kullanir. 3 katmanli mimari:
+
+### 1. Teknik Terim Korumasi
+
+Ceviri oncesinde 130+ teknik terim `XTRM####X` formatiyla placeholder'lara donusturulur. Ceviri sonrasi geri yerlestirilir. Ek olarak:
+
+- **URL'ler** (`https://...`) otomatik korunur
+- **Surum numaralari** (`v1.2.3`, `9.3.1`) otomatik korunur
+- **CVE numaralari** (`CVE-2024-12345`) otomatik korunur
+- **Backtick kod parcalari** (`` `kubectl get pods` ``) otomatik korunur
+- **SIG etiketleri** (`[SIG Node]`) otomatik korunur
+- **GitHub URL'leri** ve paket isimleri otomatik korunur
+
+Terimler uzunluktan kisaya siralanarak islenir — kisa terimlerin kelime icinde eslesmesin onlenir.
+
+### 2. Parca Tabanli Ceviri
+
+Uzun metinler cumle sinirlarindan 4500 karakterlik parcalara bolunur (Google Translate 5000 karakter limiti). Her parca icin ayri terim koruma uygulanir. Parcalar arasi 0.3 saniye bekleme (rate limit).
+
+### 3. Turkce Post-Processing
+
+Ceviri sonrasi otomatik duzeltmeler:
+
+- Cumle basi ve satir basi buyuk harf
+- Noktalama duzeltmeleri (noktadan sonra bosluk, parantez temizligi)
+- URL/email/dosya uzantisi korumasi (post-processing'in `.co` -> `. Co` yapmasi engellenir)
+- Ingilizce ay isimlerinin Turkceyecevirisi
+- Bozuk Turkce karakter encoding duzeltmesi
+- K8s kisaltmasinin korunmasi
 
 ---
 
 ## Kubernetes'e Deploy Etme
 
-### Ön Gereksinimler
+### Opsion A — Manifest'lerle (kubectl apply)
+
+#### On Gereksinimler
 
 - Kubernetes cluster (minikube, k3s, EKS, GKE, AKS, vb.)
-- `kubectl` CLI kurulu ve cluster'a bağlı
-- Docker image build ortamı
+- `kubectl` CLI kurulu ve cluster'a bagli
+- Docker image build ortami
 - Nginx Ingress Controller (opsiyonel)
 
-### Mimari (Kubernetes)
+#### Mimari (Kubernetes)
 
 ```
                     ┌─────────────────────┐
@@ -323,12 +355,12 @@ cybersecurity_news/
 └──────────────────┘  └───────────────────┘
 ```
 
-Docker Compose'dan farklı olarak Kubernetes'te:
-- **PostgreSQL** kullanılır (SQLite yerine — çoklu replica desteği)
+Docker Compose'dan farkli olarak Kubernetes'te:
+- **PostgreSQL** kullanilir (SQLite yerine — coklu replica destegi)
 - Frontend **Nginx** ile statik dosya olarak sunulur (Vite dev server yerine)
-- Tüm konfigürasyon **ConfigMap** ve **Secret** ile yönetilir
+- Tum konfigrasyon **ConfigMap** ve **Secret** ile yonetilir
 
-### Adım 1 — Docker Image'larını Build Edin
+#### Adim 1 — Docker Image'larini Build Edin
 
 ```bash
 # Backend
@@ -338,7 +370,7 @@ docker build -t teknoloji-haberleri-api:latest .
 docker build -t teknoloji-haberleri-frontend:latest ./frontend
 ```
 
-Private registry kullanıyorsanız tag'leyip push edin:
+Private registry kullaniyorsaniz tag'leyip push edin:
 
 ```bash
 docker tag teknoloji-haberleri-api:latest REGISTRY/teknoloji-haberleri-api:latest
@@ -347,11 +379,11 @@ docker push REGISTRY/teknoloji-haberleri-api:latest
 docker push REGISTRY/teknoloji-haberleri-frontend:latest
 ```
 
-Registry kullandığınızda K8s manifest'lerindeki `image:` değerlerini ve `imagePullPolicy` satırını güncellemeyi unutmayın.
+Registry kullandiginizda K8s manifest'lerindeki `image:` degerlerini ve `imagePullPolicy` satirini guncellemeyi unutmayin.
 
-### Adım 2 — Secret'ları Oluşturun
+#### Adim 2 — Secret'lari Olusturun
 
-`k8s/02-secret.yaml` dosyasındaki placeholder değerleri gerçek değerlerle değiştirin:
+`k8s/02-secret.yaml` dosyasindaki placeholder degerleri gercek degerlerle degistirin:
 
 ```yaml
 stringData:
@@ -361,7 +393,7 @@ stringData:
   POSTGRES_PASSWORD: "guclu-veritabani-sifresi"
 ```
 
-Veya doğrudan kubectl ile:
+Veya dogrudan kubectl ile:
 
 ```bash
 kubectl create namespace teknoloji-haberleri
@@ -374,103 +406,74 @@ kubectl create secret generic teknoloji-secret \
   --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 16)"
 ```
 
-### Adım 3 — ConfigMap'i Düzenleyin
-
-`k8s/01-configmap.yaml` dosyasını ortamınıza göre düzenleyin:
-
-| Değişken | Varsayılan | Açıklama |
-|----------|-----------|----------|
-| `DEBUG` | `"False"` | Django debug modu |
-| `ALLOWED_HOSTS` | `"*"` | İzin verilen host'lar |
-| `CORS_ALLOWED_ORIGINS` | `"http://localhost:3000,http://teknoloji-frontend:3000"` | CORS origin'leri |
-| `DATABASE_URL` | `"postgresql"` | Boş olmayan herhangi bir değer PostgreSQL'i aktifler |
-| `DB_NAME` | `"cybernews"` | Veritabanı adı |
-| `DB_HOST` | `"teknoloji-postgresql"` | PostgreSQL adresi |
-| `DB_PORT` | `"5432"` | PostgreSQL portu |
-| `REDIS_URL` | `"redis://teknoloji-redis:6379/0"` | Redis bağlantısı (cache) |
-| `CELERY_BROKER_URL` | `"redis://teknoloji-redis:6379/1"` | Redis bağlantısı (Celery) |
-
-**Cluster'da mevcut PostgreSQL/Redis varsa** `DB_HOST` ve `REDIS_URL`/`CELERY_BROKER_URL` değerlerini mevcut servis adreslerine yönlendirin. Bu durumda `03-postgresql.yaml` ve `04-redis.yaml` dosyalarını uygulamayın.
-
-```yaml
-# Örnek: Farklı namespace'teki mevcut PostgreSQL
-DB_HOST: "postgresql.database-namespace.svc.cluster.local"
-
-# Örnek: Mevcut Redis
-REDIS_URL: "redis://redis-master.cache-namespace.svc.cluster.local:6379/0"
-CELERY_BROKER_URL: "redis://redis-master.cache-namespace.svc.cluster.local:6379/1"
-```
-
-### Adım 4 — Manifest'leri Uygulayın
+#### Adim 3 — Manifest'leri Uygulayin
 
 ```bash
-# 1. Namespace
-kubectl apply -f k8s/00-namespace.yaml
+# Tum manifest'leri uygula
+kubectl apply -f k8s/
 
-# 2. ConfigMap ve Secret
+# Veya adim adim:
+kubectl apply -f k8s/00-namespace.yaml
 kubectl apply -f k8s/01-configmap.yaml
 kubectl apply -f k8s/02-secret.yaml
-
-# 3. Veritabanı ve Cache (mevcut varsa ATLAYIN)
-kubectl apply -f k8s/03-postgresql.yaml
-kubectl apply -f k8s/04-redis.yaml
-
-# 4. PostgreSQL'in hazır olmasını bekleyin
+kubectl apply -f k8s/03-postgresql.yaml     # Mevcut PostgreSQL varsa ATLA
+kubectl apply -f k8s/04-redis.yaml           # Mevcut Redis varsa ATLA
 kubectl wait --for=condition=ready pod \
   -l app.kubernetes.io/name=teknoloji-postgresql \
   -n teknoloji-haberleri --timeout=120s
-
-# 5. DB migration
 kubectl apply -f k8s/09-migration-job.yaml
 kubectl wait --for=condition=complete job/teknoloji-migrate \
   -n teknoloji-haberleri --timeout=120s
-
-# 6. Uygulama
 kubectl apply -f k8s/05-backend.yaml
 kubectl apply -f k8s/06-frontend.yaml
 kubectl apply -f k8s/07-celery.yaml
-
-# 7. Ingress (opsiyonel)
-kubectl apply -f k8s/08-ingress.yaml
+kubectl apply -f k8s/08-ingress.yaml         # Ingress Controller yoksa ATLA
 ```
 
-**Tek komutla hepsini uygulamak:**
+#### Adim 4 — Dogrulama
 
 ```bash
-kubectl apply -f k8s/
-```
-
-### Adım 5 — Doğrulama
-
-```bash
-# Pod durumları
 kubectl get pods -n teknoloji-haberleri
-
-# Beklenen:
-# teknoloji-api-xxxxx          1/1     Running     0
-# teknoloji-api-yyyyy          1/1     Running     0
-# teknoloji-frontend-xxxxx     1/1     Running     0
-# teknoloji-frontend-yyyyy     1/1     Running     0
-# teknoloji-worker-xxxxx       1/1     Running     0
-# teknoloji-scheduler-xxxxx    1/1     Running     0
-# teknoloji-postgresql-xxxxx   1/1     Running     0
-# teknoloji-redis-xxxxx        1/1     Running     0
-# teknoloji-migrate-xxxxx      0/1     Completed   0
-
-# Loglar
 kubectl logs -f deployment/teknoloji-api -n teknoloji-haberleri
 ```
 
-### Ingress Yoksa — Port Forward
+Ingress yoksa port forward:
 
 ```bash
 kubectl port-forward svc/teknoloji-frontend 3000:3000 -n teknoloji-haberleri
 kubectl port-forward svc/teknoloji-api 8000:8000 -n teknoloji-haberleri
 ```
 
-Tarayıcıda `http://localhost:3000` adresine gidin.
+### Opsion B — values.yaml ile (Tek Dosya Konfigurasyonu)
 
-### Güncelleme
+Proje kokunde `values.yaml` dosyasi bulunur. Bu dosya Helm chart degil, ancak tum K8s deployment parametrelerini tek dosyada toplar. `k8s/` klasorundeki manifest'leri uygulamadan once bu dosyayi kendi ortaminiza gore duzenleyin.
+
+Detaylar icin [values.yaml](values.yaml) dosyasina bakin.
+
+---
+
+## Ortam Degiskenleri
+
+Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `docker-compose.yml` icinde, Kubernetes'te ConfigMap + Secret ile ayarlanir.
+
+| Degisken | Varsayilan | Aciklama |
+|----------|-----------|----------|
+| `SECRET_KEY` | `django-insecure-...` | Django secret key (production'da mutlaka degistirin) |
+| `DEBUG` | `False` | Django debug modu |
+| `ALLOWED_HOSTS` | `*` | Virgulle ayrilmis izinli host listesi |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,...` | Frontend origin'leri |
+| `DATABASE_URL` | _(bos)_ | Herhangi bir deger atanirsa PostgreSQL aktif olur, bossa SQLite |
+| `DB_HOST` | `localhost` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_NAME` | `cybernews` | Veritabani adi |
+| `DB_USER` | `cybernews` | Veritabani kullanicisi |
+| `DB_PASSWORD` | _(bos)_ | Veritabani sifresi |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis baglantisi (cache) |
+| `CELERY_BROKER_URL` | `redis://127.0.0.1:6379/1` | Redis baglantisi (Celery broker) |
+
+---
+
+## Guncelleme (Kubernetes)
 
 ```bash
 # Yeni image build
@@ -481,14 +484,14 @@ docker build -t teknoloji-haberleri-frontend:v2 ./frontend
 kubectl delete job teknoloji-migrate -n teknoloji-haberleri --ignore-not-found
 kubectl apply -f k8s/09-migration-job.yaml
 
-# Deployment güncelleme
+# Deployment guncelleme
 kubectl set image deployment/teknoloji-api api=teknoloji-haberleri-api:v2 -n teknoloji-haberleri
 kubectl set image deployment/teknoloji-frontend frontend=teknoloji-haberleri-frontend:v2 -n teknoloji-haberleri
 kubectl set image deployment/teknoloji-worker worker=teknoloji-haberleri-api:v2 -n teknoloji-haberleri
 kubectl set image deployment/teknoloji-scheduler scheduler=teknoloji-haberleri-api:v2 -n teknoloji-haberleri
 ```
 
-### Kaldırma
+### Kaldirma
 
 ```bash
 kubectl delete namespace teknoloji-haberleri
@@ -496,33 +499,14 @@ kubectl delete namespace teknoloji-haberleri
 
 ---
 
-## Ortam Değişkenleri
+## Bilinen Kisitlamalar
 
-Uygulama tamamen ortam değişkenleri ile yapılandırılabilir. Docker Compose'da `docker-compose.yml` içinde, Kubernetes'te ConfigMap + Secret ile ayarlanır.
-
-| Değişken | Varsayılan | Açıklama |
-|----------|-----------|----------|
-| `SECRET_KEY` | `django-insecure-...` | Django secret key (production'da mutlaka değiştirin) |
-| `DEBUG` | `False` | Django debug modu |
-| `ALLOWED_HOSTS` | `*` | Virgülle ayrılmış izinli host listesi |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,...` | Frontend origin'leri |
-| `DATABASE_URL` | _(boş)_ | Herhangi bir değer atanırsa PostgreSQL aktif olur, boşsa SQLite |
-| `DB_HOST` | `localhost` | PostgreSQL host |
-| `DB_PORT` | `5432` | PostgreSQL port |
-| `DB_NAME` | `cybernews` | Veritabanı adı |
-| `DB_USER` | `cybernews` | Veritabanı kullanıcısı |
-| `DB_PASSWORD` | _(boş)_ | Veritabanı şifresi |
-| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis bağlantısı (cache) |
-| `CELERY_BROKER_URL` | `redis://127.0.0.1:6379/1` | Redis bağlantısı (Celery broker) |
-
----
-
-## Bilinen Kısıtlamalar
-
-- Google Translate ücretsiz API rate limit'e takılabilir — çok sayıda makale çekildiğinde yavaşlama olabilir
-- Dark Reading HTML scraping'e 403 döner, bu yüzden RSS feed kullanılır
-- Gunicorn timeout 300 saniye — çok fazla kaynak seçilirse zaman aşımı olabilir
-- Her fetch'te toplam makale sayısı **30 ile sınırlıdır** (Gunicorn timeout'undan kaçınmak için)
+- Google Translate ucretsiz API rate limit'e takilabilir — cok sayida makale cekildiginde yavaslama olabilir
+- Dark Reading HTML scraping'e 403 doner, bu yuzden RSS feed kullanilir
+- Gunicorn timeout 300 saniye — cok fazla kaynak secilirse zaman asimi olabilir
+- Her fetch'te toplam makale sayisi **30 ile sinirlidir** (Gunicorn timeout'undan kacinmak icin)
+- Redis blog sayfasi JS-rendered — `blockContent` div'inden icerik cekilir, eger site yapisi degisirse guncelleme gerekebilir
+- Elastic 8.x serisi release notes farkli URL'de (`/guide/en/...`), sadece 9.x serisi icin detayli changelog cekilir
 
 ---
 
