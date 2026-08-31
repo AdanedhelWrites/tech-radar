@@ -112,9 +112,10 @@ def fetch_k8s_task(days=30, selected_sources=None):
                         'source': entry['source'],
                         'original_title': entry['original_title'],
                         'turkish_title': entry.get('turkish_title', ''),
-                        'original_description': entry['original_description'],
+                        'original_description': entry.get('original_description', ''),
                         'turkish_description': entry.get('turkish_description', ''),
-                        'entry_type': entry.get('entry_type', 'haber'),
+                        'category': entry.get('category', 'blog'),
+                        'version': entry.get('version', ''),
                         'published_date': entry['published_date'],
                     }
                 )
@@ -148,9 +149,8 @@ def fetch_sre_task(days=30, selected_sources=None):
                         'source': entry['source'],
                         'original_title': entry['original_title'],
                         'turkish_title': entry.get('turkish_title', ''),
-                        'original_description': entry['original_description'],
+                        'original_description': entry.get('original_description', ''),
                         'turkish_description': entry.get('turkish_description', ''),
-                        'entry_type': entry.get('entry_type', 'haber'),
                         'published_date': entry['published_date'],
                     }
                 )
@@ -184,8 +184,9 @@ def fetch_devtools_task(days=30, selected_sources=None):
                         'source': entry['source'],
                         'original_title': entry['original_title'],
                         'turkish_title': entry.get('turkish_title', ''),
-                        'original_description': entry['original_description'],
+                        'original_description': entry.get('original_description', ''),
                         'turkish_description': entry.get('turkish_description', ''),
+                        'version': entry.get('version', ''),
                         'entry_type': entry.get('entry_type', 'release'),
                         'published_date': entry['published_date'],
                     }
@@ -220,9 +221,9 @@ def fetch_ai_news_task(days=30, selected_sources=None):
                         'source': entry['source'],
                         'original_title': entry['original_title'],
                         'turkish_title': entry.get('turkish_title', ''),
-                        'original_description': entry['original_description'],
+                        'original_description': entry.get('original_description', ''),
                         'turkish_description': entry.get('turkish_description', ''),
-                        'published_date': entry.get('date') or entry.get('published_date'),
+                        'published_date': entry.get('published_date') or entry.get('date'),
                     }
                 )
                 saved_count += 1

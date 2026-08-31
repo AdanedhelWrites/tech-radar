@@ -25,11 +25,19 @@ class SREScraper(BaseRSSScraper):
     """SRE Scraper temel sinifi"""
 
     def __init__(self):
+        super().__init__()
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         })
+
+
+class SREWeeklyScraper(SREScraper):
+    """SRE Weekly RSS scraper"""
+
+    FEED_URL = "https://sreweekly.com/feed/"
+
     def fetch_entries(self, days: int = 30) -> List[Dict]:
         """SRE Weekly RSS'ten bireysel makaleleri ceker"""
         print(f"[SRE Weekly] Son {days} gunun haberleri cekiliyor (RSS)...")
