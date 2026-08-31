@@ -451,17 +451,7 @@ class DarkReadingSource(NewsSource):
                     desc_text = desc_tag.get_text(strip=True)
                     short_desc = re.sub(r'<[^>]+>', '', desc_text).strip()
 
-                # Tam icerik icin makaleye git
-                content = ''
-                if link:
-                    print(f"  [DR] Tam icerik cekiliyor: {title[:50]}...")
-                    article_data = self.fetch_full_article(link)
-                    if article_data['title'] and len(article_data['title']) > len(title):
-                        title = article_data['title']
-                    content = article_data['content']
-
-                if not content:
-                    content = short_desc or title
+                content = short_desc or title
 
                 articles.append({
                     'title': title,
@@ -478,7 +468,10 @@ class DarkReadingSource(NewsSource):
         print(f"[{self.get_name()}] {len(articles)} haber bulundu.")
         return articles
 
-    
+
+class KrebsOnSecuritySource(NewsSource):
+    """Krebs on Security kaynagi"""
+
     def get_name(self):
         return "Krebs on Security"
 
@@ -546,7 +539,7 @@ class DarkReadingSource(NewsSource):
                         'date': pub_date.strftime('%Y-%m-%d'),
                         'original_date': date_str,
                         'source': self.get_name()
-                })
+                    })
             except Exception as e:
                 print(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
@@ -562,15 +555,6 @@ class DarkReadingSource(NewsSource):
                 return datetime.strptime(date_str, '%b %d, %Y')
             except:
                 return datetime.now()
-
-
-
-class KrebsOnSecuritySource(NewsSource):
-    SOURCE_NAME = 'Krebs on Security'
-    FEED_URL = 'https://krebsonsecurity.com/feed/'
-    
-    def fetch_entries(self, days=30):
-        return self.fetch_standard_rss_entries(self.FEED_URL, self.SOURCE_NAME, days)
 
 class MultiSourceScraper(BaseRSSScraper):
     """Coklu kaynak haber cekici"""

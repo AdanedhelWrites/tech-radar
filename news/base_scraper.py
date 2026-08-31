@@ -17,17 +17,22 @@ class BaseRSSScraper:
     def _parse_rss_date(self, date_str: str) -> Optional[datetime]:
         if not date_str: return None
         try:
-            return parsedate_to_datetime(date_str)
+            dt = parsedate_to_datetime(date_str)
+            return dt.replace(tzinfo=None) if dt else None
         except:
             pass
         formats = [
             '%a, %d %b %Y %H:%M:%S %Z', '%a, %d %b %Y %H:%M:%S %z',
             '%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S%z',
-            '%a, %d %b %Y %H:%M:%S +0000', '%Y-%m-%d %H:%M:%S'
+            '%a, %d %b %Y %H:%M:%S +0000', '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d', '%B %d, %Y', '%b %d, %Y'
         ]
         for fmt in formats:
-            try: return datetime.strptime(date_str.strip(), fmt)
-            except: continue
+            try:
+                dt = datetime.strptime(date_str.strip(), fmt)
+                return dt.replace(tzinfo=None)
+            except:
+                continue
         return None
 
     def _html_to_text(self, html_content: str) -> str:
