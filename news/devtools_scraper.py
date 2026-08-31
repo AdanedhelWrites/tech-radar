@@ -21,9 +21,10 @@ import time
 from email.utils import parsedate_to_datetime
 
 from news.translation_utils import translate_text, translate_long_text
+from news.base_scraper import BaseRSSScraper
 
 
-class DevToolsScraper:
+class DevToolsScraper(BaseRSSScraper):
     """DevTools Scraper temel sinifi"""
 
     def __init__(self):
@@ -32,36 +33,6 @@ class DevToolsScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json, text/html, application/xhtml+xml, application/xml;q=0.9,*/*;q=0.8',
         })
-
-    def _parse_rss_date(self, date_str: str) -> Optional[datetime]:
-        if not date_str:
-            return None
-        try:
-            return parsedate_to_datetime(date_str)
-        except Exception:
-            pass
-        formats = [
-            '%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S%z',
-            '%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%S.%f%z',
-            '%B %d, %Y', '%b %d, %Y', '%Y-%m-%d',
-        ]
-        for fmt in formats:
-            try:
-                return datetime.strptime(date_str.strip(), fmt)
-            except Exception:
-                continue
-        return None
-
-    def _html_to_text(self, html_content: str) -> str:
-        if not html_content:
-            return ""
-        soup = BeautifulSoup(html_content, 'html.parser')
-        for tag in soup.find_all(['script', 'style']):
-            tag.decompose()
-        text = soup.get_text(separator=' ', strip=True)
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text
-
     def _markdown_to_text(self, md: str) -> str:
         """Markdown'dan temiz metin cikarir"""
         if not md:
@@ -781,7 +752,6 @@ class MoodleScraper(DevToolsScraper):
                     'version': version,
                     'entry_type': 'release',
                 })
-
         except Exception as e:
             print(f"[Moodle] Tags hatasi: {e}")
 
@@ -854,7 +824,6 @@ class MultiDevToolsScraper(DevToolsScraper):
 
     def process_entries(self, entries: List[Dict]) -> List[Dict]:
         """DevTools haberlerini Turkceye cevirir"""
-        processed = []
         total = len(entries)
         print(f"\nDevTools guncellemeleri cevriliyor ({total} adet)...")
 
@@ -867,7 +836,7 @@ class MultiDevToolsScraper(DevToolsScraper):
                 except Exception:
                     translated_title = entry['title']
                 translated_desc = translate_long_text(entry['description'])
-                processed.append({
+                yield {
                     'original_title': entry['title'],
                     'turkish_title': translated_title,
                     'original_description': entry['description'],
@@ -877,10 +846,10 @@ class MultiDevToolsScraper(DevToolsScraper):
                     'source': entry['source'],
                     'version': entry.get('version', ''),
                     'entry_type': entry.get('entry_type', 'release'),
-                })
+                }
             except Exception as e:
                 print(f"  DevTools haber isleme hatasi: {e}")
-                processed.append({
+                yield {
                     'original_title': entry['title'],
                     'turkish_title': entry['title'],
                     'original_description': entry['description'],
@@ -890,10 +859,8 @@ class MultiDevToolsScraper(DevToolsScraper):
                     'source': entry['source'],
                     'version': entry.get('version', ''),
                     'entry_type': entry.get('entry_type', 'release'),
-                })
-
-        print(f"Ceviri tamamlandi: {len(processed)} DevTools guncellemesi islendi")
-        return processed
+                }
+        
 
 
 if __name__ == "__main__":

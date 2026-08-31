@@ -1,10 +1,11 @@
+import toast from 'react-hot-toast';
 import { useState, useEffect } from 'react'
-import { 
-  Container, Row, Col, Card, Button, Form, 
-  Badge, Spinner, Alert, Modal 
+import {
+  Container, Row, Col, Card, Button, Form,
+  Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
-import { 
-  FaDownload, FaSync, FaTrash, FaFileExport, 
+import {
+  FaDownload, FaSync, FaTrash, FaFileExport,
   FaShieldAlt, FaChartBar, FaCogs, FaExclamationTriangle,
   FaCalendar, FaExternalLinkAlt,
   FaDatabase, FaGithub, FaShieldVirus, FaGlobe, FaClock
@@ -25,11 +26,11 @@ function CVEComponent() {
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState(null)
-  const [stats, setStats] = useState({ 
-    total: 0, 
-    by_source: {}, 
+  const [stats, setStats] = useState({
+    total: 0,
+    by_source: {},
     by_severity: {},
-    last_update: null 
+    last_update: null
   })
   const [days, setDays] = useState(7)
   const [selectedSources, setSelectedSources] = useState(
@@ -81,19 +82,18 @@ function CVEComponent() {
     try {
       setFetching(true)
       setError(null)
-      
-      // Önce cache'i temizle
-      await cveApi.clearCache()
-      
+
+
       // CVE'leri çek
       const response = await cveApi.fetchCVEs({
         days: parseInt(days),
         sources: activeSources
       })
-      
+
       if (response.data.success) {
         setCVEs(response.data.data)
         loadStats()
+        toast.success("Haber çekimi başladı! Haberler otomatik olarak ekrana yansıyacak.", { icon: "🚀", duration: 4000 })
       } else {
         setError(response.data.message)
       }
@@ -106,12 +106,13 @@ function CVEComponent() {
 
   const handleClearCache = async () => {
     if (!window.confirm('Tüm CVE verileri silinecek ve sıfırlanacak. Emin misiniz?')) return
-    
+
     try {
       await cveApi.clearCache()
       setCVEs([])
       setSelectedCVE(null)
       loadStats()
+      toast.success("Veriler başarıyla temizlendi", { icon: "🗑️" })
     } catch (err) {
       setError('Sıfırlama sırasında hata oluştu')
     }
@@ -217,13 +218,13 @@ ${items.map(item => {
     { value: 'low', label: 'Düşük', color: '#28a745', min: 0, max: 3.9 },
   ]
 
-  const filteredCVEs = severityFilter === 'all' 
-    ? cves 
+  const filteredCVEs = severityFilter === 'all'
+    ? cves
     : cves.filter(cve => {
-        const opt = severityOptions.find(o => o.value === severityFilter)
-        if (!opt || !cve.cvss_score) return false
-        return cve.cvss_score >= opt.min && cve.cvss_score <= opt.max
-      })
+      const opt = severityOptions.find(o => o.value === severityFilter)
+      if (!opt || !cve.cvss_score) return false
+      return cve.cvss_score >= opt.min && cve.cvss_score <= opt.max
+    })
 
   const getSourceIcon = (sourceName) => {
     const found = sources.find(s => s.value === sourceName)
@@ -251,10 +252,10 @@ ${items.map(item => {
             <Card.Body>
               <Form.Group className="mb-4">
                 <Form.Label className="fw-bold">Kaç Günlük CVE?</Form.Label>
-                <Form.Range 
-                  min={1} 
-                  max={15} 
-                  value={days} 
+                <Form.Range
+                  min={1}
+                  max={15}
+                  value={days}
                   onChange={(e) => setDays(e.target.value)}
                 />
                 <div className="text-center">
@@ -267,7 +268,7 @@ ${items.map(item => {
                 {sources.map(source => {
                   const IconComp = source.icon
                   return (
-                    <Form.Check 
+                    <Form.Check
                       key={source.id}
                       type="checkbox"
                       id={source.id}
@@ -314,9 +315,9 @@ ${items.map(item => {
                 )}
               </Form.Group>
 
-              <Button 
-                variant="danger" 
-                className="w-100 mb-2" 
+              <Button
+                variant="danger"
+                className="w-100 mb-2"
                 onClick={handleFetchCVEs}
                 disabled={fetching}
               >
@@ -326,33 +327,33 @@ ${items.map(item => {
                   <><FaDownload className="me-2" />CVE Zafiyetlerini Getir</>
                 )}
               </Button>
-              
-              <Button 
-                variant="outline-secondary" 
-                className="w-100 mb-2" 
+
+              <Button
+                variant="outline-secondary"
+                className="w-100 mb-2"
                 onClick={loadCVEs}
                 disabled={loading}
               >
                 <FaSync className="me-2" />Yenile
               </Button>
-              
+
               <div className="d-flex gap-2">
-                <Button 
-                  variant="outline-danger" 
-                  className="flex-fill" 
+                <Button
+                  variant="outline-danger"
+                  className="flex-fill"
                   size="sm"
                   onClick={handleClearCache}
-                   title="Tüm CVE verilerini sil ve sıfırla"
+                  title="Tüm CVE verilerini sil ve sıfırla"
                 >
                   <FaTrash className="me-1" />Sıfırla
                 </Button>
-                
-                <Button 
-                  variant="outline-warning" 
-                  className="flex-fill" 
+
+                <Button
+                  variant="outline-warning"
+                  className="flex-fill"
                   size="sm"
                   onClick={handleExport}
-                   title="CVE zafiyetlerini HTML rapor olarak indir"
+                  title="CVE zafiyetlerini HTML rapor olarak indir"
                 >
                   <FaFileExport className="me-1" />İndir
                 </Button>
@@ -371,14 +372,14 @@ ${items.map(item => {
                 <div className="d-flex justify-content-between mb-2">
                   <span>Son Güncelleme:</span>
                   <span className="fw-bold">
-                    {stats.last_update 
-                      ? new Date(stats.last_update).toLocaleString('tr-TR') 
+                    {stats.last_update
+                      ? new Date(stats.last_update).toLocaleString('tr-TR')
                       : '-'}
                   </span>
                 </div>
-                
+
                 <div className="mt-3">
-                  <small><strong>Kaynaklar:</strong></small><br/>
+                  <small><strong>Kaynaklar:</strong></small><br />
                   {Object.entries(stats.by_source).map(([source, count]) => (
                     <div key={source} className="d-flex justify-content-between mt-1">
                       <span>{source}:</span>
@@ -388,7 +389,7 @@ ${items.map(item => {
                 </div>
 
                 <div className="mt-3">
-                  <small><strong>Şiddet Dağılımı:</strong></small><br/>
+                  <small><strong>Şiddet Dağılımı:</strong></small><br />
                   {Object.entries(stats.by_severity).map(([severity, count]) => (
                     <div key={severity} className="d-flex justify-content-between mt-1">
                       <Badge className={`${getSeverityClass(severity)} me-2`}>
@@ -414,20 +415,20 @@ ${items.map(item => {
               {loading ? (
                 <div className="text-center p-5">
                   <Spinner animation="border" />
-                   <p className="mt-3">CVE verileri yükleniyor...</p>
+                  <p className="mt-3">CVE verileri yükleniyor...</p>
                 </div>
               ) : filteredCVEs.length === 0 ? (
                 <div className="text-center p-5 text-muted">
                   <FaShieldAlt size={48} className="mb-3" />
-                  <p>{cves.length === 0 
-                    ? <>CVE listesi boş.<br/>"CVE Zafiyetlerini Getir" butonuna basın.</>
+                  <p>{cves.length === 0
+                    ? <>CVE listesi boş.<br />"CVE Zafiyetlerini Getir" butonuna basın.</>
                     : <>Bu filtre ile eşleşen CVE bulunamadı.</>
                   }</p>
                 </div>
               ) : (
                 <div className="list-group list-group-flush">
                   {filteredCVEs.map((item, index) => (
-                    <div 
+                    <div
                       key={index}
                       className={`list-group-item cve-item p-3 ${selectedCVE === item ? 'active' : ''}`}
                       onClick={() => setSelectedCVE(item)}
@@ -468,11 +469,11 @@ ${items.map(item => {
               {!selectedCVE ? (
                 <div className="text-center p-5 text-muted">
                   <FaShieldAlt size={48} className="mb-3" />
-                  <p>Detayları görmek için<br/>listeden bir CVE seçin.</p>
+                  <p>Detayları görmek için<br />listeden bir CVE seçin.</p>
                 </div>
               ) : (
                 <div className="fade-in">
-                  <div 
+                  <div
                     className="p-2 text-white mb-3 rounded d-flex justify-content-between align-items-center"
                     style={{ backgroundColor: getSourceColor(selectedCVE.source) }}
                   >
@@ -496,24 +497,24 @@ ${items.map(item => {
                       </span>
                     </div>
                   )}
-                  
+
                   <div className="mb-3">
                     <h6 className="fw-bold text-danger">Başlık</h6>
                     <div className="p-2 bg-light rounded">
                       {selectedCVE.turkish_title || selectedCVE.original_title}
                     </div>
                   </div>
-                  
+
                   <div className="mb-3">
                     <h6 className="fw-bold text-danger">Açıklama</h6>
                     <div className="article-content p-3 bg-light rounded">
                       {(selectedCVE.turkish_description || selectedCVE.original_description) ? (
                         (selectedCVE.turkish_description || selectedCVE.original_description)
                           .split('\n\n').map((paragraph, idx) => (
-                          <p key={idx} className="mb-2" style={{ lineHeight: '1.7', textAlign: 'justify' }}>
-                            {paragraph}
-                          </p>
-                        ))
+                            <p key={idx} className="mb-2" style={{ lineHeight: '1.7', textAlign: 'justify' }}>
+                              {paragraph}
+                            </p>
+                          ))
                       ) : (
                         <p className="text-muted">İçerik bulunmuyor.</p>
                       )}
@@ -557,10 +558,10 @@ ${items.map(item => {
                       </ul>
                     </div>
                   )}
-                  
-                  <a 
-                    href={selectedCVE.link} 
-                    target="_blank" 
+
+                  <a
+                    href={selectedCVE.link}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-outline-danger btn-sm"
                   >
@@ -584,8 +585,8 @@ ${items.map(item => {
 
       {/* Error Alert */}
       {error && (
-        <Alert 
-          variant="danger" 
+        <Alert
+          variant="danger"
           className="position-fixed top-0 end-0 m-3"
           style={{ zIndex: 9999, minWidth: '300px' }}
           dismissible

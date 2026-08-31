@@ -4,12 +4,17 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.core.cache import cache
 from datetime import datetime
-from .models import NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry
+from .models import (
+    NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
+)
+from .tasks import fetch_news_task, fetch_cve_task, fetch_k8s_task, fetch_sre_task, fetch_devtools_task, fetch_ai_news_task
 from .serializers import (
-    NewsArticleSerializer, CVEEntrySerializer, KubernetesEntrySerializer,
-    SREEntrySerializer, DevToolsEntrySerializer,
-    FetchNewsRequestSerializer, FetchCVERequestSerializer, FetchK8sRequestSerializer,
-    FetchSRERequestSerializer, FetchDevToolsRequestSerializer,
+    NewsArticleSerializer, FetchNewsRequestSerializer,
+    CVEEntrySerializer, FetchCVERequestSerializer,
+    KubernetesEntrySerializer, FetchK8sRequestSerializer,
+    SREEntrySerializer, FetchSRERequestSerializer,
+    DevToolsEntrySerializer, FetchDevToolsRequestSerializer,
+    AINewsEntrySerializer, FetchAINewsRequestSerializer,
     StatsSerializer
 )
 from scraper_multi import MultiSourceScraper
@@ -17,6 +22,7 @@ from .cve_scraper import MultiCVEScraper
 from .k8s_scraper import MultiK8sScraper
 from .sre_scraper import MultiSREScraper
 from .devtools_scraper import MultiDevToolsScraper
+from .ai_scraper import MultiAINewsScraper
 
 
 @api_view(['GET'])
@@ -53,64 +59,25 @@ def get_news(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_news(request):
-    """Yeni haberleri cek - SENKRON"""
-    serializer = FetchNewsRequestSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({
-            'success': False,
-            'message': 'Gecersiz istek',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
+    """Yeni Siber Guvenlik Haberlerini cek - ASYNC"""
     try:
-        days = serializer.validated_data.get('days', 7)
-        selected_sources = serializer.validated_data.get('sources', None)
+        days = request.data.get('days', 7)
+        selected_sources = request.data.get('sources', None)
         
-        # Senkron olarak cek (Celery yok)
-        scraper = MultiSourceScraper()
-        articles = scraper.fetch_all_news(days=days, selected_sources=selected_sources)
-        
-        if articles:
-            processed = scraper.process_news(articles)
-            
-            # Database'e kaydet
-            saved_count = 0
-            for article in processed:
-                obj, created = NewsArticle.objects.update_or_create(
-                    link=article['link'],
-                    defaults={
-                        'source': article['source'],
-                        'original_title': article['original_title'],
-                        'turkish_title': article['turkish_title'],
-                        'original_description': article.get('turkish_description', ''),
-                        'turkish_description': article.get('turkish_description', ''),
-                        'turkish_summary': article.get('turkish_summary', ''),
-                        'date': article['date'],
-                        'original_date': article.get('original_date', ''),
-                    }
-                )
-                saved_count += 1
-            
-            # Cache'i guncelle
-            all_articles = NewsArticle.objects.all().order_by('-date')[:100]
-            cached_data = NewsArticleSerializer(all_articles, many=True).data
-            
-            cache.set('cybersecurity_news', cached_data, 3600)
-            cache.set('last_update', datetime.now().isoformat(), 3600)
-            
-            return Response({
-                'success': True,
-                'message': f'{saved_count} haber basariyla cekildi ve kaydedildi',
-                'count': saved_count,
-                'data': cached_data
-            })
-        else:
-            return Response({
-                'success': False,
-                'message': 'Haber bulunamadi',
-                'count': 0,
-                'data': []
-            })
+        # Cache'i hemen temizle - task baslamadan once bosalt ki
+        # polling yeni gelen haberleri direkt gorulsun
+        cache.delete('cybersecurity_news')
+        cache.delete('last_update')
+
+        # Trigger Celery Task
+        fetch_news_task.delay(days=days, selected_sources=selected_sources, clear_existing=False)
+
+        return Response({
+            'success': True,
+            'message': 'Haber cekimi baslatildi. Haberler ekrana otomatik yansiyacak.',
+            'count': 0,
+            'data': []
+        })
             
     except Exception as e:
         return Response({
@@ -222,69 +189,22 @@ def get_cves(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_cves(request):
-    """Yeni CVE'leri cek - SENKRON"""
-    serializer = FetchCVERequestSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({
-            'success': False,
-            'message': 'Gecersiz istek',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
+    """Yeni CVE'leri cek - ASYNC"""
     try:
-        days = serializer.validated_data.get('days', 30)
-        selected_sources = serializer.validated_data.get('sources', None)
-        
-        # CVE'leri cek
-        scraper = MultiCVEScraper()
-        cves = scraper.fetch_all_cves(days=days, selected_sources=selected_sources)
-        
-        if cves:
-            processed = scraper.process_cves(cves)
-            
-            # Database'e kaydet
-            saved_count = 0
-            for cve in processed:
-                obj, created = CVEEntry.objects.update_or_create(
-                    cve_id=cve['cve_id'],
-                    defaults={
-                        'source': cve['source'],
-                        'original_title': cve['original_title'],
-                        'turkish_title': cve.get('turkish_title', ''),
-                        'original_description': cve['original_description'],
-                        'turkish_description': cve.get('turkish_description', ''),
-                        'severity': cve.get('severity', 'Bilinmiyor'),
-                        'cvss_score': cve.get('cvss_score'),
-                        'published_date': cve['published_date'],
-                        'modified_date': cve.get('modified_date'),
-                        'link': cve['link'],
-                        'cwe_ids': cve.get('cwe_ids', []),
-                        'references': cve.get('references', []),
-                        'affected_products': cve.get('affected_products', ''),
-                    }
-                )
-                saved_count += 1
-            
-            # Cache'i guncelle
-            all_cves = CVEEntry.objects.all().order_by('-published_date')[:100]
-            cached_data = CVEEntrySerializer(all_cves, many=True).data
-            
-            cache.set('cve_entries', cached_data, 3600)
-            cache.set('cve_last_update', datetime.now().isoformat(), 3600)
-            
-            return Response({
-                'success': True,
-                'message': f'{saved_count} CVE basariyla cekildi ve kaydedildi',
-                'count': saved_count,
-                'data': cached_data
-            })
-        else:
-            return Response({
-                'success': False,
-                'message': 'CVE bulunamadi',
-                'count': 0,
-                'data': []
-            })
+        days = request.data.get('days', 7)
+        selected_sources = request.data.get('sources', None)
+
+        cache.delete('cve_entries')
+        cache.delete('cve_last_update')
+
+        fetch_cve_task.delay(days=days, selected_sources=selected_sources)
+
+        return Response({
+            'success': True,
+            'message': 'CVE cekimi baslatildi. Otomatik yansiyacak.',
+            'count': 0,
+            'data': []
+        })
             
     except Exception as e:
         return Response({
@@ -401,61 +321,26 @@ def get_k8s(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_k8s(request):
-    """Yeni Kubernetes haberlerini cek - SENKRON"""
+    """Yeni K8s Haberlerini cek - ASYNC"""
     serializer = FetchK8sRequestSerializer(data=request.data)
     if not serializer.is_valid():
-        return Response({
-            'success': False,
-            'message': 'Gecersiz istek',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': False, 'message': 'Gecersiz istek'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         days = serializer.validated_data.get('days', 30)
         selected_sources = serializer.validated_data.get('sources', None)
 
-        scraper = MultiK8sScraper()
-        entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        cache.delete('k8s_entries')
+        cache.delete('k8s_last_update')
 
-        if entries:
-            processed = scraper.process_entries(entries)
+        fetch_k8s_task.delay(days=days, selected_sources=selected_sources)
 
-            saved_count = 0
-            for entry in processed:
-                obj, created = KubernetesEntry.objects.update_or_create(
-                    link=entry['link'],
-                    defaults={
-                        'source': entry['source'],
-                        'original_title': entry['original_title'],
-                        'turkish_title': entry.get('turkish_title', ''),
-                        'original_description': entry['original_description'],
-                        'turkish_description': entry.get('turkish_description', ''),
-                        'published_date': entry['published_date'],
-                        'category': entry.get('category', 'blog'),
-                        'version': entry.get('version', ''),
-                    }
-                )
-                saved_count += 1
-
-            all_entries = KubernetesEntry.objects.all().order_by('-published_date')[:100]
-            cached_data = KubernetesEntrySerializer(all_entries, many=True).data
-
-            cache.set('k8s_entries', cached_data, 3600)
-            cache.set('k8s_last_update', datetime.now().isoformat(), 3600)
-
-            return Response({
-                'success': True,
-                'message': f'{saved_count} Kubernetes haberi basariyla cekildi ve kaydedildi',
-                'count': saved_count,
-                'data': cached_data
-            })
-        else:
-            return Response({
-                'success': False,
-                'message': 'Kubernetes haberi bulunamadi',
-                'count': 0,
-                'data': []
-            })
+        return Response({
+            'success': True,
+            'message': 'K8s haber cekimi baslatildi. Otomatik yansiyacak.',
+            'count': 0,
+            'data': []
+        })
 
     except Exception as e:
         return Response({
@@ -567,59 +452,26 @@ def get_sre(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_sre(request):
-    """Yeni SRE haberlerini cek - SENKRON"""
+    """Yeni SRE Haberlerini cek - ASYNC"""
     serializer = FetchSRERequestSerializer(data=request.data)
     if not serializer.is_valid():
-        return Response({
-            'success': False,
-            'message': 'Gecersiz istek',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': False, 'message': 'Gecersiz istek'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         days = serializer.validated_data.get('days', 30)
         selected_sources = serializer.validated_data.get('sources', None)
 
-        scraper = MultiSREScraper()
-        entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        cache.delete('sre_entries')
+        cache.delete('sre_last_update')
 
-        if entries:
-            processed = scraper.process_entries(entries)
+        fetch_sre_task.delay(days=days, selected_sources=selected_sources)
 
-            saved_count = 0
-            for entry in processed:
-                obj, created = SREEntry.objects.update_or_create(
-                    link=entry['link'],
-                    defaults={
-                        'source': entry['source'],
-                        'original_title': entry['original_title'],
-                        'turkish_title': entry.get('turkish_title', ''),
-                        'original_description': entry['original_description'],
-                        'turkish_description': entry.get('turkish_description', ''),
-                        'published_date': entry['published_date'],
-                    }
-                )
-                saved_count += 1
-
-            all_entries = SREEntry.objects.all().order_by('-published_date')[:100]
-            cached_data = SREEntrySerializer(all_entries, many=True).data
-
-            cache.set('sre_entries', cached_data, 3600)
-            cache.set('sre_last_update', datetime.now().isoformat(), 3600)
-
-            return Response({
-                'success': True,
-                'message': f'{saved_count} SRE haberi basariyla cekildi ve kaydedildi',
-                'count': saved_count,
-                'data': cached_data
-            })
-        else:
-            return Response({
-                'success': False,
-                'message': 'SRE haberi bulunamadi',
-                'count': 0,
-                'data': []
-            })
+        return Response({
+            'success': True,
+            'message': 'SRE haber cekimi baslatildi. Otomatik yansiyacak.',
+            'count': 0,
+            'data': []
+        })
 
     except Exception as e:
         return Response({
@@ -724,61 +576,26 @@ def get_devtools(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_devtools(request):
-    """Yeni DevTools guncellemelerini cek - SENKRON"""
+    """Yeni DevTools Haberlerini cek - ASYNC"""
     serializer = FetchDevToolsRequestSerializer(data=request.data)
     if not serializer.is_valid():
-        return Response({
-            'success': False,
-            'message': 'Gecersiz istek',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': False, 'message': 'Gecersiz istek'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        days = serializer.validated_data.get('days', 60)
+        days = serializer.validated_data.get('days', 30)
         selected_sources = serializer.validated_data.get('sources', None)
 
-        scraper = MultiDevToolsScraper()
-        entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        cache.delete('devtools_entries')
+        cache.delete('devtools_last_update')
 
-        if entries:
-            processed = scraper.process_entries(entries)
+        fetch_devtools_task.delay(days=days, selected_sources=selected_sources)
 
-            saved_count = 0
-            for entry in processed:
-                obj, created = DevToolsEntry.objects.update_or_create(
-                    link=entry['link'],
-                    defaults={
-                        'source': entry['source'],
-                        'original_title': entry['original_title'],
-                        'turkish_title': entry.get('turkish_title', ''),
-                        'original_description': entry['original_description'],
-                        'turkish_description': entry.get('turkish_description', ''),
-                        'published_date': entry['published_date'],
-                        'version': entry.get('version', ''),
-                        'entry_type': entry.get('entry_type', 'release'),
-                    }
-                )
-                saved_count += 1
-
-            all_entries = DevToolsEntry.objects.all().order_by('-published_date')[:100]
-            cached_data = DevToolsEntrySerializer(all_entries, many=True).data
-
-            cache.set('devtools_entries', cached_data, 3600)
-            cache.set('devtools_last_update', datetime.now().isoformat(), 3600)
-
-            return Response({
-                'success': True,
-                'message': f'{saved_count} DevTools guncellemesi basariyla cekildi ve kaydedildi',
-                'count': saved_count,
-                'data': cached_data
-            })
-        else:
-            return Response({
-                'success': False,
-                'message': 'DevTools guncellemesi bulunamadi',
-                'count': 0,
-                'data': []
-            })
+        return Response({
+            'success': True,
+            'message': 'DevTools cekimi baslatildi. Otomatik yansiyacak.',
+            'count': 0,
+            'data': []
+        })
 
     except Exception as e:
         return Response({
@@ -848,6 +665,125 @@ def export_devtools(request):
     """DevTools guncellemelerini JSON olarak disari aktar"""
     entries = DevToolsEntry.objects.all().order_by('-published_date')
     serializer = DevToolsEntrySerializer(entries, many=True)
+
+    return Response({
+        'success': True,
+        'data': serializer.data,
+        'exported_at': datetime.now().isoformat(),
+        'count': len(serializer.data)
+    })
+
+# ==================== AI NEWS ENDPOINTS ====================
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_ai_news(request):
+    """AI Haberlerini getir (cache veya database'den)"""
+    cached_ai = cache.get('ai_entries')
+    if cached_ai:
+        return Response({
+            'success': True,
+            'data': cached_ai,
+            'cached': True,
+            'count': len(cached_ai)
+        })
+
+    entries = AINewsEntry.objects.all().order_by('-published_date')[:100]
+    serializer = AINewsEntrySerializer(entries, many=True)
+    data = serializer.data
+
+    if data:
+        cache.set('ai_entries', data, 3600)
+
+    return Response({
+        'success': True,
+        'data': data,
+        'cached': False,
+        'count': len(data)
+    })
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def fetch_ai_news(request):
+    """Yeni AI Haberlerini cek - ASYNC"""
+    serializer = FetchAINewsRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response({'success': False, 'message': 'Gecersiz istek'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        days = serializer.validated_data.get('days', 30)
+        selected_sources = serializer.validated_data.get('sources', None)
+
+        cache.delete('ai_entries')
+        cache.delete('ai_last_update')
+
+        fetch_ai_news_task.delay(days=days, selected_sources=selected_sources)
+
+        return Response({
+            'success': True,
+            'message': 'AI haber cekimi baslatildi. Otomatik yansiyacak.',
+            'count': 0,
+            'data': []
+        })
+
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': str(e),
+            'count': 0,
+            'data': []
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def clear_ai_cache(request):
+    """AI cache ve database'i temizle"""
+    try:
+        cache.delete('ai_entries')
+        cache.delete('ai_last_update')
+
+        AINewsEntry.objects.all().delete()
+
+        return Response({
+            'success': True,
+            'message': 'AI cache ve veritabani temizlendi'
+        })
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_ai_stats(request):
+    """AI istatistiklerini getir"""
+    total = AINewsEntry.objects.count()
+
+    from django.db.models import Count
+    source_stats = AINewsEntry.objects.values('source').annotate(
+        count=Count('source')
+    ).order_by('-count')
+
+    by_source = {item['source']: item['count'] for item in source_stats}
+
+    last_entry = AINewsEntry.objects.order_by('-created_at').first()
+    last_update = last_entry.created_at.isoformat() if last_entry else None
+
+    return Response({
+        'success': True,
+        'total': total,
+        'by_source': by_source,
+        'last_update': last_update,
+        'cached': cache.get('ai_entries') is not None
+    })
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def export_ai_news(request):
+    """AI Haberlerini JSON olarak disari aktar"""
+    entries = AINewsEntry.objects.all().order_by('-published_date')
+    serializer = AINewsEntrySerializer(entries, many=True)
 
     return Response({
         'success': True,

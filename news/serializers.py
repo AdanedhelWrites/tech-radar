@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry
+from .models import NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
 
 
 class NewsArticleSerializer(serializers.ModelSerializer):
@@ -98,3 +98,21 @@ class StatsSerializer(serializers.Serializer):
     by_source = serializers.DictField(child=serializers.IntegerField())
     last_update = serializers.DateTimeField(allow_null=True)
     cached = serializers.BooleanField()
+
+
+class AINewsEntrySerializer(serializers.ModelSerializer):
+    """AI Haber serializer"""
+
+    class Meta:
+        model = AINewsEntry
+        fields = '__all__'
+
+
+class FetchAINewsRequestSerializer(serializers.Serializer):
+    """AI Haber cekme istegi serializer"""
+    days = serializers.IntegerField(default=30, min_value=1, max_value=90)
+    sources = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        allow_empty=True
+    )

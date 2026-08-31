@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { Navbar, Nav, Container } from 'react-bootstrap'
-import { FaNewspaper, FaShieldAlt, FaHome, FaDharmachakra, FaSun, FaMoon, FaTree, FaServer, FaToolbox } from 'react-icons/fa'
+import { FaNewspaper, FaShieldAlt, FaHome, FaDharmachakra, FaSun, FaMoon, FaTree, FaServer, FaToolbox, FaRobot } from 'react-icons/fa'
 import NewsComponent from './components/NewsComponent'
 import CVEComponent from './components/CVEComponent'
 import KubernetesComponent from './components/KubernetesComponent'
 import SREComponent from './components/SREComponent'
 import DevToolsComponent from './components/DevToolsComponent'
+import AINewsComponent from './components/AINewsComponent'
+import { Toaster } from 'react-hot-toast'
 import './App.css'
 
 function App() {
@@ -22,6 +24,7 @@ function App() {
 
   return (
     <div className={`App ${darkMode ? 'dark-mode' : 'light-mode'}`}>
+      <Toaster position="bottom-right" toastOptions={{ duration: 4000 }} />
       <Navbar bg="dark" variant="dark" expand="lg" className="mb-4">
         <Container>
           <Navbar.Brand href="/">
@@ -49,6 +52,9 @@ function App() {
               <Nav.Link as={NavLink} to="/devtools">
                 <FaToolbox className="me-1" /> DevTools
               </Nav.Link>
+              <Nav.Link as={NavLink} to="/ai">
+                <FaRobot className="me-1" /> Yapay Zeka
+              </Nav.Link>
             </Nav>
             <button
               className="theme-toggle-icon"
@@ -70,6 +76,7 @@ function App() {
           <Route path="/k8s" element={<KubernetesComponent />} />
           <Route path="/sre" element={<SREComponent />} />
           <Route path="/devtools" element={<DevToolsComponent />} />
+          <Route path="/ai" element={<AINewsComponent />} />
         </Routes>
       </Container>
     </div>
@@ -81,10 +88,10 @@ function HomePage() {
     <div className="text-center py-5">
       <h1 className="display-4 mb-4">Teknoloji Radar</h1>
       <p className="lead mb-5">
-        Güncel siber güvenlik haberleri, CVE (Common Vulnerabilities and Exposures), 
+        Güncel siber güvenlik haberleri, CVE (Common Vulnerabilities and Exposures),
         Kubernetes, SRE (Site Reliability Engineering) ve DevTools altyapı araçları güncellemelerini tek bir yerden takip edin.
       </p>
-      
+
       <div className="row justify-content-center">
         <div className="col-md-3 mb-4">
           <div className="card h-100 shadow-sm">
@@ -92,7 +99,7 @@ function HomePage() {
               <FaNewspaper size={48} className="text-primary mb-3" />
               <h5 className="card-title">Siber Güvenlik</h5>
               <p className="card-text">
-                5 kaynaktan siber güvenlik haberlerini çekin, Türkçeye çevrilmiş 
+                5 kaynaktan siber güvenlik haberlerini çekin, Türkçeye çevrilmiş
                 tam makale içeriklerini okuyun ve HTML rapor olarak indirin.
               </p>
               <NavLink to="/news" className="btn btn-primary">
@@ -101,14 +108,14 @@ function HomePage() {
             </div>
           </div>
         </div>
-        
+
         <div className="col-md-3 mb-4">
           <div className="card h-100 shadow-sm">
             <div className="card-body">
               <FaShieldAlt size={48} className="text-danger mb-3" />
               <h5 className="card-title">CVE Zafiyetleri</h5>
               <p className="card-text">
-                5 kaynaktan güncel CVE zafiyetlerini çekin, CVSS şiddet seviyesine 
+                5 kaynaktan güncel CVE zafiyetlerini çekin, CVSS şiddet seviyesine
                 göre filtreleyin ve Türkçe açıklamalarını okuyun.
               </p>
               <NavLink to="/cve" className="btn btn-danger">
@@ -124,7 +131,7 @@ function HomePage() {
               <FaDharmachakra size={48} className="text-info mb-3" />
               <h5 className="card-title">Kubernetes</h5>
               <p className="card-text">
-                3 kaynaktan Kubernetes blog yazılarını, release notlarını ve 
+                3 kaynaktan Kubernetes blog yazılarını, release notlarını ve
                 CNCF haberlerini çekin, Türkçe olarak takip edin.
               </p>
               <NavLink to="/k8s" className="btn btn-info text-white">
@@ -140,7 +147,7 @@ function HomePage() {
               <FaServer size={48} className="text-success mb-3" />
               <h5 className="card-title">SRE</h5>
               <p className="card-text">
-                5 kaynaktan Site Reliability Engineering haberlerini çekin, 
+                5 kaynaktan Site Reliability Engineering haberlerini çekin,
                 incident management ve DevOps içeriklerini Türkçe okuyun.
               </p>
               <NavLink to="/sre" className="btn btn-success">
@@ -158,11 +165,26 @@ function HomePage() {
               <FaToolbox size={48} className="mb-3" style={{ color: '#e67e22' }} />
               <h5 className="card-title">DevTools</h5>
               <p className="card-text">
-                9 kaynaktan altyapı araçları güncellemelerini çekin — MinIO, PostgreSQL, 
+                9 kaynaktan altyapı araçları güncellemelerini çekin — MinIO, PostgreSQL,
                 MongoDB, Redis, Elasticsearch, RabbitMQ, Ceph, Seq ve Moodle.
               </p>
               <NavLink to="/devtools" className="btn" style={{ backgroundColor: '#e67e22', color: '#fff' }}>
                 Güncellemeleri Görüntüle
+              </NavLink>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-md-4 mb-4">
+          <div className="card h-100 shadow-sm">
+            <div className="card-body">
+              <FaRobot size={48} className="mb-3" style={{ color: '#8e44ad' }} />
+              <h5 className="card-title">Yapay Zeka (AI)</h5>
+              <p className="card-text">
+                Popüler yapay zeka ve LLM gelişmeleri ile benchmark haberlerini, güncel AI kaynaklarından takip edin ve Türkçe okuyun.
+              </p>
+              <NavLink to="/ai" className="btn" style={{ backgroundColor: '#8e44ad', color: '#fff' }}>
+                Gelişmeleri Gör
               </NavLink>
             </div>
           </div>

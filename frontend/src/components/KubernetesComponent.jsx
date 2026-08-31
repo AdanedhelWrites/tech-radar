@@ -1,10 +1,11 @@
+import toast from 'react-hot-toast';
 import { useState, useEffect } from 'react'
-import { 
-  Container, Row, Col, Card, Button, Form, 
-  Badge, Spinner, Alert, Modal 
+import {
+  Container, Row, Col, Card, Button, Form,
+  Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
-import { 
-  FaDownload, FaSync, FaTrash, FaFileExport, 
+import {
+  FaDownload, FaSync, FaTrash, FaFileExport,
   FaDharmachakra, FaChartBar, FaCogs,
   FaExternalLinkAlt, FaTag, FaCodeBranch,
   FaGithub, FaCloud, FaBug, FaStar, FaCode
@@ -31,11 +32,11 @@ function KubernetesComponent() {
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState(null)
-  const [stats, setStats] = useState({ 
-    total: 0, 
-    by_source: {}, 
+  const [stats, setStats] = useState({
+    total: 0,
+    by_source: {},
     by_category: {},
-    last_update: null 
+    last_update: null
   })
   const [days, setDays] = useState(7)
   const [selectedSources, setSelectedSources] = useState(
@@ -43,22 +44,30 @@ function KubernetesComponent() {
   )
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      loadEntries(true)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+
+  useEffect(() => {
     loadEntries()
     loadStats()
   }, [])
 
-  const loadEntries = async () => {
+  const loadEntries = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const response = await k8sApi.getK8s()
       if (response.data.success) {
         setEntries(response.data.data)
       }
     } catch (err) {
-      setError('Kubernetes haberleri yüklenirken hata oluştu')
+      if (!silent) setError('Kubernetes haberleri yüklenirken hata oluştu')
       console.error(err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -86,17 +95,17 @@ function KubernetesComponent() {
     try {
       setFetching(true)
       setError(null)
-      
-      await k8sApi.clearCache()
-      
+
+
       const response = await k8sApi.fetchK8s({
         days: parseInt(days),
         sources: activeSources
       })
-      
+
       if (response.data.success) {
         setEntries(response.data.data)
         loadStats()
+        toast.success("Haber çekimi başladı! Haberler otomatik olarak ekrana yansıyacak.", { icon: "🚀", duration: 4000 })
       } else {
         setError(response.data.message)
       }
@@ -109,12 +118,13 @@ function KubernetesComponent() {
 
   const handleClearCache = async () => {
     if (!window.confirm('Tüm Kubernetes haberleri silinecek ve sıfırlanacak. Emin misiniz?')) return
-    
+
     try {
       await k8sApi.clearCache()
       setEntries([])
       setSelectedEntry(null)
       loadStats()
+      toast.success("Veriler başarıyla temizlendi", { icon: "🗑️" })
     } catch (err) {
       setError('Sıfırlama sırasında hata oluştu')
     }
@@ -361,10 +371,10 @@ ${items.map(item => {
             <Card.Body>
               <Form.Group className="mb-4">
                 <Form.Label className="fw-bold">Kaç Günlük Haber?</Form.Label>
-                <Form.Range 
-                  min={1} 
-                  max={15} 
-                  value={days} 
+                <Form.Range
+                  min={1}
+                  max={15}
+                  value={days}
                   onChange={(e) => setDays(e.target.value)}
                 />
                 <div className="text-center">
@@ -377,7 +387,7 @@ ${items.map(item => {
                 {sources.map(source => {
                   const IconComp = source.icon
                   return (
-                    <Form.Check 
+                    <Form.Check
                       key={source.id}
                       type="checkbox"
                       id={source.id}
@@ -394,9 +404,9 @@ ${items.map(item => {
                 })}
               </Form.Group>
 
-              <Button 
-                variant="info" 
-                className="w-100 mb-2 text-white" 
+              <Button
+                variant="info"
+                className="w-100 mb-2 text-white"
                 onClick={handleFetchK8s}
                 disabled={fetching}
               >
@@ -406,30 +416,30 @@ ${items.map(item => {
                   <><FaDownload className="me-2" />Kubernetes Haberlerini Getir</>
                 )}
               </Button>
-              
-              <Button 
-                variant="outline-secondary" 
-                className="w-100 mb-2" 
-                onClick={loadEntries}
+
+              <Button
+                variant="outline-secondary"
+                className="w-100 mb-2"
+                onClick={() => loadEntries()}
                 disabled={loading}
               >
                 <FaSync className="me-2" />Yenile
               </Button>
-              
+
               <div className="d-flex gap-2">
-                <Button 
-                  variant="outline-danger" 
-                  className="flex-fill" 
+                <Button
+                  variant="outline-danger"
+                  className="flex-fill"
                   size="sm"
                   onClick={handleClearCache}
                   title="Tüm K8s haberlerini sil ve sıfırla"
                 >
                   <FaTrash className="me-1" />Sıfırla
                 </Button>
-                
-                <Button 
-                  variant="outline-warning" 
-                  className="flex-fill" 
+
+                <Button
+                  variant="outline-warning"
+                  className="flex-fill"
                   size="sm"
                   onClick={handleExport}
                   title="Kubernetes haberlerini HTML rapor olarak indir"
@@ -451,14 +461,14 @@ ${items.map(item => {
                 <div className="d-flex justify-content-between mb-2">
                   <span>Son Güncelleme:</span>
                   <span className="fw-bold">
-                    {stats.last_update 
-                      ? new Date(stats.last_update).toLocaleString('tr-TR') 
+                    {stats.last_update
+                      ? new Date(stats.last_update).toLocaleString('tr-TR')
                       : '-'}
                   </span>
                 </div>
-                
+
                 <div className="mt-3">
-                  <small><strong>Kaynaklar:</strong></small><br/>
+                  <small><strong>Kaynaklar:</strong></small><br />
                   {Object.entries(stats.by_source || {}).map(([source, count]) => (
                     <div key={source} className="d-flex justify-content-between mt-1">
                       <span>{source}:</span>
@@ -468,7 +478,7 @@ ${items.map(item => {
                 </div>
 
                 <div className="mt-3">
-                  <small><strong>Kategoriler:</strong></small><br/>
+                  <small><strong>Kategoriler:</strong></small><br />
                   {Object.entries(stats.by_category || {}).map(([cat, count]) => (
                     <div key={cat} className="d-flex justify-content-between mt-1">
                       <Badge className={getCategoryClass(cat)}>
@@ -499,12 +509,12 @@ ${items.map(item => {
               ) : entries.length === 0 ? (
                 <div className="text-center p-5 text-muted">
                   <FaDharmachakra size={48} className="mb-3" />
-                  <p>Kubernetes haber listesi boş.<br/>"Kubernetes Haberlerini Getir" butonuna basın.</p>
+                  <p>Kubernetes haber listesi boş.<br />"Kubernetes Haberlerini Getir" butonuna basın.</p>
                 </div>
               ) : (
                 <div className="list-group list-group-flush">
                   {entries.map((item, index) => (
-                    <div 
+                    <div
                       key={index}
                       className={`list-group-item k8s-item p-3 ${selectedEntry === item ? 'active' : ''}`}
                       onClick={() => setSelectedEntry(item)}
@@ -548,11 +558,11 @@ ${items.map(item => {
               {!selectedEntry ? (
                 <div className="text-center p-5 text-muted">
                   <FaDharmachakra size={48} className="mb-3" />
-                  <p>Detayları görmek için<br/>listeden bir haber seçin.</p>
+                  <p>Detayları görmek için<br />listeden bir haber seçin.</p>
                 </div>
               ) : (
                 <div className="fade-in">
-                  <div 
+                  <div
                     className="p-2 text-white mb-3 rounded d-flex justify-content-between align-items-center"
                     style={{ backgroundColor: getSourceColor(selectedEntry.source) }}
                   >
@@ -576,14 +586,14 @@ ${items.map(item => {
                       </span>
                     )}
                   </div>
-                  
+
                   <div className="mb-3 article-content p-3 bg-light rounded">
                     {renderDetailContent(selectedEntry)}
                   </div>
-                  
-                  <a 
-                    href={selectedEntry.link} 
-                    target="_blank" 
+
+                  <a
+                    href={selectedEntry.link}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-outline-info btn-sm"
                   >
@@ -607,8 +617,8 @@ ${items.map(item => {
 
       {/* Error Alert */}
       {error && (
-        <Alert 
-          variant="danger" 
+        <Alert
+          variant="danger"
           className="position-fixed top-0 end-0 m-3"
           style={{ zIndex: 9999, minWidth: '300px' }}
           dismissible

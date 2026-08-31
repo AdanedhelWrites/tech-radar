@@ -12,9 +12,10 @@ import time
 from abc import ABC, abstractmethod
 
 from news.translation_utils import translate_text, translate_long_text
+from news.base_scraper import BaseRSSScraper
 
 
-class NewsSource(ABC):
+class NewsSource(BaseRSSScraper):
     """Haber kaynagi icin abstract base class"""
 
     def __init__(self):
@@ -24,7 +25,6 @@ class NewsSource(ABC):
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
         })
-
     @abstractmethod
     def get_name(self):
         pass
@@ -168,8 +168,7 @@ class TheHackerNewsSource(NewsSource):
                         'date': pub_date.strftime('%Y-%m-%d'),
                         'original_date': date_str,
                         'source': self.get_name()
-                    })
-
+                })
             except Exception as e:
                 print(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
@@ -279,7 +278,6 @@ class BleepingComputerSource(NewsSource):
                     'original_date': date_str,
                     'source': self.get_name()
                 })
-
             except Exception as e:
                 print(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
@@ -366,8 +364,7 @@ class SecurityWeekSource(NewsSource):
                         'date': pub_date.strftime('%Y-%m-%d'),
                         'original_date': date_str,
                         'source': self.get_name()
-                    })
-
+                })
             except Exception as e:
                 print(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
@@ -474,7 +471,6 @@ class DarkReadingSource(NewsSource):
                     'original_date': date_str,
                     'source': self.get_name()
                 })
-
             except Exception as e:
                 print(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
@@ -482,20 +478,7 @@ class DarkReadingSource(NewsSource):
         print(f"[{self.get_name()}] {len(articles)} haber bulundu.")
         return articles
 
-    def _parse_rss_date(self, date_str):
-        """RSS tarih formati: Mon, 23 Feb 2026 22:20:08 GMT"""
-        try:
-            return datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %Z')
-        except:
-            try:
-                return datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %z')
-            except:
-                return datetime.now()
-
-
-class KrebsOnSecuritySource(NewsSource):
-    """Krebs on Security kaynagi"""
-
+    
     def get_name(self):
         return "Krebs on Security"
 
@@ -563,8 +546,7 @@ class KrebsOnSecuritySource(NewsSource):
                         'date': pub_date.strftime('%Y-%m-%d'),
                         'original_date': date_str,
                         'source': self.get_name()
-                    })
-
+                })
             except Exception as e:
                 print(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
@@ -582,7 +564,15 @@ class KrebsOnSecuritySource(NewsSource):
                 return datetime.now()
 
 
-class MultiSourceScraper:
+
+class KrebsOnSecuritySource(NewsSource):
+    SOURCE_NAME = 'Krebs on Security'
+    FEED_URL = 'https://krebsonsecurity.com/feed/'
+    
+    def fetch_entries(self, days=30):
+        return self.fetch_standard_rss_entries(self.FEED_URL, self.SOURCE_NAME, days)
+
+class MultiSourceScraper(BaseRSSScraper):
     """Coklu kaynak haber cekici"""
 
     def __init__(self):
@@ -638,7 +628,6 @@ class MultiSourceScraper:
 
     def process_news(self, articles):
         """Haberleri tam olarak Turkceye cevirir"""
-        processed = []
 
         total = len(articles)
         print(f"\n{'='*60}")
@@ -661,7 +650,7 @@ class MultiSourceScraper:
                     article['description']
                 )
 
-                processed.append({
+                yield {
                     'original_title': article['title'],
                     'turkish_title': translated_title,
                     'turkish_description': translated_desc,
@@ -670,10 +659,10 @@ class MultiSourceScraper:
                     'date': article['date'],
                     'original_date': article['original_date'],
                     'source': article['source']
-                })
+                }
             except Exception as e:
                 print(f"Haber islenirken hata: {e}")
-                processed.append({
+                yield {
                     'original_title': article['title'],
                     'turkish_title': article['title'],
                     'turkish_description': article['description'],
@@ -682,13 +671,11 @@ class MultiSourceScraper:
                     'date': article['date'],
                     'original_date': article['original_date'],
                     'source': article['source']
-                })
-
+                }
         print(f"\n{'='*60}")
-        print(f"CEVIRI TAMAMLANDI: {len(processed)}/{total} haber cevirildi")
         print(f"{'='*60}\n")
 
-        return processed
+        
 
     def save_to_json(self, articles, filename=None):
         """Haberleri JSON olarak kaydeder"""
@@ -709,6 +696,5 @@ if __name__ == "__main__":
     if articles:
         processed = scraper.process_news(articles)
         scraper.save_to_json(processed)
-        print(f"\nIslem tamamlandi! Toplam {len(processed)} haber.")
     else:
         print("\nHaber bulunamadi!")

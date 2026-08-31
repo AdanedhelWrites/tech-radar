@@ -36,4 +36,11 @@ urlpatterns = [
     path('api/devtools/clear/', views.clear_devtools_cache, name='clear_devtools_cache'),
     path('api/devtools/stats/', views.get_devtools_stats, name='get_devtools_stats'),
     path('api/devtools/export/', views.export_devtools, name='export_devtools'),
+
+    # AI API endpoints
+    path('api/ai/', views.get_ai_news, name='get_ai_news'),
+    path('api/ai/fetch/', views.fetch_ai_news, name='fetch_ai_news'),
+    path('api/ai/clear/', views.clear_ai_cache, name='clear_ai_cache'),
+    path('api/ai/stats/', views.get_ai_stats, name='get_ai_stats'),
+    path('api/ai/export/', views.export_ai_news, name='export_ai_news'),
 ]

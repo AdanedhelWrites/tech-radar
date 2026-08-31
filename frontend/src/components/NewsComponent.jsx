@@ -1,10 +1,11 @@
+import toast from 'react-hot-toast';
 import { useState, useEffect } from 'react'
-import { 
-  Container, Row, Col, Card, Button, Form, 
-  Badge, Spinner, Alert, Modal 
+import {
+  Container, Row, Col, Card, Button, Form,
+  Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
-import { 
-  FaDownload, FaSync, FaTrash, FaFileExport, 
+import {
+  FaDownload, FaSync, FaTrash, FaFileExport,
   FaNewspaper, FaChartBar, FaCogs,
   FaSkullCrossbones, FaLaptopCode, FaShieldAlt, FaMoon, FaUserSecret
 } from 'react-icons/fa'
@@ -31,22 +32,29 @@ function NewsComponent() {
   )
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      loadNews(true)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
     loadNews()
     loadStats()
   }, [])
 
-  const loadNews = async () => {
+  const loadNews = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const response = await newsApi.getNews()
       if (response.data.success) {
         setNews(response.data.data)
       }
     } catch (err) {
-      setError('Siber güvenlik haberleri yüklenirken hata oluştu')
+      if (!silent) setError('Siber güvenlik haberleri yüklenirken hata oluştu')
       console.error(err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -74,19 +82,18 @@ function NewsComponent() {
     try {
       setFetching(true)
       setError(null)
-      
-      // Önce cache'i temizle
-      await newsApi.clearCache()
-      
+
+
       // Haberleri çek
       const response = await newsApi.fetchNews({
         days: parseInt(days),
         sources: activeSources
       })
-      
+
       if (response.data.success) {
         setNews(response.data.data)
         loadStats()
+        toast.success("Haber çekimi başladı! Haberler otomatik olarak ekrana yansıyacak.", { icon: "🚀", duration: 4000 })
       } else {
         setError(response.data.message)
       }
@@ -99,12 +106,13 @@ function NewsComponent() {
 
   const handleClearCache = async () => {
     if (!window.confirm('Tüm haberler silinecek ve sıfırlanacak. Emin misiniz?')) return
-    
+
     try {
       await newsApi.clearCache()
       setNews([])
       setSelectedNews(null)
       loadStats()
+      toast.success("Veriler başarıyla temizlendi", { icon: "🗑️" })
     } catch (err) {
       setError('Sıfırlama sırasında hata oluştu')
     }
@@ -195,10 +203,10 @@ ${items.map(item => {
             <Card.Body>
               <Form.Group className="mb-4">
                 <Form.Label className="fw-bold">Kaç Günlük Haber?</Form.Label>
-                <Form.Range 
-                  min={1} 
-                  max={15} 
-                  value={days} 
+                <Form.Range
+                  min={1}
+                  max={15}
+                  value={days}
                   onChange={(e) => setDays(e.target.value)}
                 />
                 <div className="text-center">
@@ -211,7 +219,7 @@ ${items.map(item => {
                 {sources.map(source => {
                   const IconComp = source.icon
                   return (
-                    <Form.Check 
+                    <Form.Check
                       key={source.id}
                       type="checkbox"
                       id={source.id}
@@ -228,9 +236,9 @@ ${items.map(item => {
                 })}
               </Form.Group>
 
-              <Button 
-                variant="primary" 
-                className="w-100 mb-2" 
+              <Button
+                variant="primary"
+                className="w-100 mb-2"
                 onClick={handleFetchNews}
                 disabled={fetching}
               >
@@ -240,33 +248,33 @@ ${items.map(item => {
                   <><FaDownload className="me-2" />Siber Güvenlik Haberlerini Getir</>
                 )}
               </Button>
-              
-              <Button 
-                variant="outline-secondary" 
-                className="w-100 mb-2" 
+
+              <Button
+                variant="outline-secondary"
+                className="w-100 mb-2"
                 onClick={loadNews}
                 disabled={loading}
               >
                 <FaSync className="me-2" />Yenile
               </Button>
-              
+
               <div className="d-flex gap-2">
-                <Button 
-                  variant="outline-danger" 
-                  className="flex-fill" 
+                <Button
+                  variant="outline-danger"
+                  className="flex-fill"
                   size="sm"
                   onClick={handleClearCache}
                   title="Tüm haberleri sil ve sıfırla"
                 >
                   <FaTrash className="me-1" />Sıfırla
                 </Button>
-                
-                <Button 
-                  variant="outline-warning" 
-                  className="flex-fill" 
+
+                <Button
+                  variant="outline-warning"
+                  className="flex-fill"
                   size="sm"
                   onClick={handleExport}
-                   title="Siber güvenlik haberlerini HTML rapor olarak indir"
+                  title="Siber güvenlik haberlerini HTML rapor olarak indir"
                 >
                   <FaFileExport className="me-1" />İndir
                 </Button>
@@ -285,13 +293,13 @@ ${items.map(item => {
                 <div className="d-flex justify-content-between mb-2">
                   <span>Son Güncelleme:</span>
                   <span className="fw-bold">
-                    {stats.last_update 
-                      ? new Date(stats.last_update).toLocaleString('tr-TR') 
+                    {stats.last_update
+                      ? new Date(stats.last_update).toLocaleString('tr-TR')
                       : '-'}
                   </span>
                 </div>
                 <div className="mt-3">
-                  <small><strong>Kaynaklar:</strong></small><br/>
+                  <small><strong>Kaynaklar:</strong></small><br />
                   {Object.entries(stats.by_source).map(([source, count]) => (
                     <div key={source} className="d-flex justify-content-between mt-1">
                       <span>{source}:</span>
@@ -315,17 +323,17 @@ ${items.map(item => {
               {loading ? (
                 <div className="text-center p-5">
                   <Spinner animation="border" />
-                   <p className="mt-3">Siber güvenlik haberleri yükleniyor...</p>
+                  <p className="mt-3">Siber güvenlik haberleri yükleniyor...</p>
                 </div>
               ) : news.length === 0 ? (
                 <div className="text-center p-5 text-muted">
                   <FaNewspaper size={48} className="mb-3" />
-                   <p>Haber listesi boş.<br/>"Siber Güvenlik Haberlerini Getir" butonuna basın.</p>
+                  <p>Haber listesi boş.<br />"Siber Güvenlik Haberlerini Getir" butonuna basın.</p>
                 </div>
               ) : (
                 <div className="list-group list-group-flush">
                   {news.map((item, index) => (
-                    <div 
+                    <div
                       key={index}
                       className={`list-group-item news-item p-3 ${selectedNews === item ? 'active' : ''}`}
                       onClick={() => setSelectedNews(item)}
@@ -337,8 +345,8 @@ ${items.map(item => {
                         <small className="text-muted">{item.date}</small>
                       </div>
                       <h6 className="mb-1 fw-bold">
-                        {item.turkish_title?.length > 70 
-                          ? item.turkish_title.substring(0, 70) + '...' 
+                        {item.turkish_title?.length > 70
+                          ? item.turkish_title.substring(0, 70) + '...'
                           : item.turkish_title}
                       </h6>
                     </div>
@@ -359,13 +367,13 @@ ${items.map(item => {
               {!selectedNews ? (
                 <div className="text-center p-5 text-muted">
                   <FaNewspaper size={48} className="mb-3" />
-                  <p>Detayları görmek için<br/>listeden bir haber seçin.</p>
+                  <p>Detayları görmek için<br />listeden bir haber seçin.</p>
                 </div>
               ) : (
                 <div className="fade-in">
-                  <div 
+                  <div
                     className="p-2 text-white mb-3 rounded d-flex justify-content-between align-items-center"
-                    style={{ 
+                    style={{
                       backgroundColor: {
                         'The Hacker News': '#e74c3c',
                         'Bleeping Computer': '#3498db',
@@ -378,9 +386,9 @@ ${items.map(item => {
                     <small><FaNewspaper className="me-2" />{selectedNews.source}</small>
                     <small>{selectedNews.date}</small>
                   </div>
-                  
+
                   <h5 className="fw-bold mb-3">{selectedNews.turkish_title}</h5>
-                  
+
                   <div className="mb-3 article-content p-3 bg-light rounded">
                     {selectedNews.turkish_description ? (
                       selectedNews.turkish_description.split('\n\n').map((paragraph, idx) => (
@@ -392,10 +400,10 @@ ${items.map(item => {
                       <p className="text-muted">İçerik bulunmuyor.</p>
                     )}
                   </div>
-                  
-                  <a 
-                    href={selectedNews.link} 
-                    target="_blank" 
+
+                  <a
+                    href={selectedNews.link}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-outline-primary btn-sm"
                   >
@@ -419,8 +427,8 @@ ${items.map(item => {
 
       {/* Error Alert */}
       {error && (
-        <Alert 
-          variant="danger" 
+        <Alert
+          variant="danger"
           className="position-fixed top-0 end-0 m-3"
           style={{ zIndex: 9999, minWidth: '300px' }}
           dismissible

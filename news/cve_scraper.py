@@ -12,9 +12,10 @@ from typing import List, Dict, Optional
 import time
 
 from news.translation_utils import translate_text, translate_long_text
+from news.base_scraper import BaseRSSScraper
 
 
-class CVEScraper:
+class CVEScraper(BaseRSSScraper):
     """CVE Scraper temel sınıfı"""
     
     def __init__(self):
@@ -22,7 +23,6 @@ class CVEScraper:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
-    
     def parse_cvss_score(self, severity_text: str) -> Optional[float]:
         """CVSS skorunu metinden çıkarır"""
         if not severity_text:
@@ -825,8 +825,6 @@ class MultiCVEScraper(CVEScraper):
     def process_cves(self, cves: List[Dict]) -> List[Dict]:
         """CVE'leri Türkçeye çevirir ve işler"""
         print(f"\nCVE'ler işleniyor ve Türkçeye çevriliyor ({len(cves)} adet)...")
-        
-        processed = []
         total = len(cves)
         
         for i, cve in enumerate(cves, 1):
@@ -843,16 +841,15 @@ class MultiCVEScraper(CVEScraper):
                 else:
                     cve['turkish_description'] = desc
                 
-                processed.append(cve)
+                yield cve
                 
             except Exception as e:
                 print(f"İşleme hatası ({cve['cve_id']}): {e}")
                 cve['turkish_title'] = cve['original_title']
                 cve['turkish_description'] = cve['original_description']
-                processed.append(cve)
+                yield cve
         
-        print(f"Çeviri tamamlandı: {len(processed)} CVE işlendi")
-        return processed
+        
 
 
 if __name__ == "__main__":

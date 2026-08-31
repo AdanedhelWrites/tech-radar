@@ -100,6 +100,13 @@ PROTECTED_TERMS = [
     'Observability', 'Monitoring', 'Alerting',
     'IaC', 'Infrastructure as Code',
 
+    # --- AI / Yapay Zeka ---
+    'LLM', 'AI', 'AGI', 'RAG', 'LoRA', 'Transformers', 'GenAI', 
+    'Prompt', 'Token', 'Fine-tuning', 'Embeddings', 'LangChain', 
+    'LlamaIndex', 'Hugging Face', 'PyTorch', 'TensorFlow', 'OpenAI',
+    'Anthropic', 'Claude', 'GPT-4', 'Gemini', 'Midjourney', 'Stable Diffusion',
+    'Benchmark', 'Leaderboard', 'MMLU', 'HumanEval',
+
     # --- Surumler / Etiketler ---
     'RELEASE', 'LTS', 'GA', 'RC', 'Beta', 'Alpha',
     'CHANGELOG',
@@ -230,10 +237,19 @@ def translate_text(text: str) -> str:
         translated = translator.translate(protected)
         if not translated:
             return text
+            
+        # HATA KONTROLU: Google Translate rate-limit veya 500 error aldiginda error html text'ini dondurebilir
+        error_keywords = ["Error 500 (Server Error)", "That’s an error.", "Please try again later", "That's all we know", "Error 429"]
+        if any(keyword in translated for keyword in error_keywords):
+            print("  [Ceviri] Google Translate hata sayfasi dondurdu, orijinal metin kullanilacak.")
+            return text
+            
         restored = _restore_terms(translated, replacements)
+        time.sleep(0.4)
         return turkish_post_process(restored)
     except Exception as e:
         print(f"  [Ceviri] Hata: {e}")
+        time.sleep(0.4)
         return text
 
 

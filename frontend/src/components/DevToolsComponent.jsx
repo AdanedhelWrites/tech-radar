@@ -1,10 +1,11 @@
+import toast from 'react-hot-toast';
 import { useState, useEffect } from 'react'
-import { 
-  Container, Row, Col, Card, Button, Form, 
-  Badge, Spinner, Alert, Modal 
+import {
+  Container, Row, Col, Card, Button, Form,
+  Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
-import { 
-  FaDownload, FaSync, FaTrash, FaFileExport, 
+import {
+  FaDownload, FaSync, FaTrash, FaFileExport,
   FaChartBar, FaCogs, FaExternalLinkAlt,
   FaDatabase, FaStream, FaHdd, FaLeaf,
   FaEnvelope, FaSearch, FaBolt, FaGraduationCap,
@@ -30,11 +31,11 @@ function DevToolsComponent() {
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState(null)
-  const [stats, setStats] = useState({ 
-    total: 0, 
-    by_source: {}, 
+  const [stats, setStats] = useState({
+    total: 0,
+    by_source: {},
     by_type: {},
-    last_update: null 
+    last_update: null
   })
   const [days, setDays] = useState(30)
   const [selectedSources, setSelectedSources] = useState(
@@ -42,22 +43,30 @@ function DevToolsComponent() {
   )
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      loadEntries(true)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+
+  useEffect(() => {
     loadEntries()
     loadStats()
   }, [])
 
-  const loadEntries = async () => {
+  const loadEntries = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const response = await devtoolsApi.getDevTools()
       if (response.data.success) {
         setEntries(response.data.data)
       }
     } catch (err) {
-      setError('DevTools güncellemeleri yüklenirken hata oluştu')
+      if (!silent) setError('DevTools güncellemeleri yüklenirken hata oluştu')
       console.error(err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -85,17 +94,17 @@ function DevToolsComponent() {
     try {
       setFetching(true)
       setError(null)
-      
-      await devtoolsApi.clearCache()
-      
+
+
       const response = await devtoolsApi.fetchDevTools({
         days: parseInt(days),
         sources: activeSources
       })
-      
+
       if (response.data.success) {
         setEntries(response.data.data)
         loadStats()
+        toast.success("Haber çekimi başladı! Haberler otomatik olarak ekrana yansıyacak.", { icon: "🚀", duration: 4000 })
       } else {
         setError(response.data.message)
       }
@@ -108,12 +117,13 @@ function DevToolsComponent() {
 
   const handleClearCache = async () => {
     if (!window.confirm('Tüm DevTools güncellemeleri silinecek ve sıfırlanacak. Emin misiniz?')) return
-    
+
     try {
       await devtoolsApi.clearCache()
       setEntries([])
       setSelectedEntry(null)
       loadStats()
+      toast.success("Veriler başarıyla temizlendi", { icon: "🗑️" })
     } catch (err) {
       setError('Sıfırlama sırasında hata oluştu')
     }
@@ -207,10 +217,10 @@ ${items.map(item => {
             <Card.Body>
               <Form.Group className="mb-4">
                 <Form.Label className="fw-bold">Kaç Günlük Güncelleme?</Form.Label>
-                <Form.Range 
-                  min={1} 
-                  max={60} 
-                  value={days} 
+                <Form.Range
+                  min={1}
+                  max={60}
+                  value={days}
                   onChange={(e) => setDays(e.target.value)}
                 />
                 <div className="text-center">
@@ -223,7 +233,7 @@ ${items.map(item => {
                 {sources.map(source => {
                   const IconComp = source.icon
                   return (
-                    <Form.Check 
+                    <Form.Check
                       key={source.id}
                       type="checkbox"
                       id={source.id}
@@ -240,9 +250,9 @@ ${items.map(item => {
                 })}
               </Form.Group>
 
-              <Button 
-                variant="primary" 
-                className="w-100 mb-2" 
+              <Button
+                variant="primary"
+                className="w-100 mb-2"
                 onClick={handleFetchDevTools}
                 disabled={fetching}
               >
@@ -252,30 +262,30 @@ ${items.map(item => {
                   <><FaDownload className="me-2" />Güncellemeleri Getir</>
                 )}
               </Button>
-              
-              <Button 
-                variant="outline-secondary" 
-                className="w-100 mb-2" 
-                onClick={loadEntries}
+
+              <Button
+                variant="outline-secondary"
+                className="w-100 mb-2"
+                onClick={() => loadEntries()}
                 disabled={loading}
               >
                 <FaSync className="me-2" />Yenile
               </Button>
-              
+
               <div className="d-flex gap-2">
-                <Button 
-                  variant="outline-danger" 
-                  className="flex-fill" 
+                <Button
+                  variant="outline-danger"
+                  className="flex-fill"
                   size="sm"
                   onClick={handleClearCache}
                   title="Tüm DevTools güncellemelerini sil ve sıfırla"
                 >
                   <FaTrash className="me-1" />Sıfırla
                 </Button>
-                
-                <Button 
-                  variant="outline-warning" 
-                  className="flex-fill" 
+
+                <Button
+                  variant="outline-warning"
+                  className="flex-fill"
                   size="sm"
                   onClick={handleExport}
                   title="DevTools güncellemelerini HTML rapor olarak indir"
@@ -297,13 +307,13 @@ ${items.map(item => {
                 <div className="d-flex justify-content-between mb-2">
                   <span>Son Güncelleme:</span>
                   <span className="fw-bold">
-                    {stats.last_update 
-                      ? new Date(stats.last_update).toLocaleString('tr-TR') 
+                    {stats.last_update
+                      ? new Date(stats.last_update).toLocaleString('tr-TR')
                       : '-'}
                   </span>
                 </div>
                 <div className="mt-3">
-                  <small><strong>Kaynaklar:</strong></small><br/>
+                  <small><strong>Kaynaklar:</strong></small><br />
                   {Object.entries(stats.by_source).map(([source, count]) => (
                     <div key={source} className="d-flex justify-content-between mt-1">
                       <span>{source}:</span>
@@ -332,19 +342,19 @@ ${items.map(item => {
               ) : entries.length === 0 ? (
                 <div className="text-center p-5 text-muted">
                   <FaToolbox size={48} className="mb-3" />
-                  <p>Güncelleme listesi boş.<br/>"Güncellemeleri Getir" butonuna basın.</p>
+                  <p>Güncelleme listesi boş.<br />"Güncellemeleri Getir" butonuna basın.</p>
                 </div>
               ) : (
                 <div className="list-group list-group-flush">
                   {entries.map((item, index) => (
-                    <div 
+                    <div
                       key={index}
                       className={`list-group-item news-item p-3 ${selectedEntry === item ? 'active' : ''}`}
                       onClick={() => setSelectedEntry(item)}
                     >
                       <div className="d-flex w-100 justify-content-between mb-2">
                         <div className="d-flex align-items-center gap-1">
-                          <span 
+                          <span
                             className="badge rounded-pill text-white"
                             style={{ backgroundColor: getSourceColor(item.source) }}
                           >
@@ -359,8 +369,8 @@ ${items.map(item => {
                         <small className="text-muted">{item.published_date}</small>
                       </div>
                       <h6 className="mb-1 fw-bold">
-                        {item.turkish_title?.length > 80 
-                          ? item.turkish_title.substring(0, 80) + '...' 
+                        {item.turkish_title?.length > 80
+                          ? item.turkish_title.substring(0, 80) + '...'
                           : item.turkish_title || item.original_title}
                       </h6>
                     </div>
@@ -381,11 +391,11 @@ ${items.map(item => {
               {!selectedEntry ? (
                 <div className="text-center p-5 text-muted">
                   <FaToolbox size={48} className="mb-3" />
-                  <p>Detayları görmek için<br/>listeden bir güncelleme seçin.</p>
+                  <p>Detayları görmek için<br />listeden bir güncelleme seçin.</p>
                 </div>
               ) : (
                 <div className="fade-in">
-                  <div 
+                  <div
                     className="p-2 text-white mb-3 rounded d-flex justify-content-between align-items-center"
                     style={{ backgroundColor: getSourceColor(selectedEntry.source) }}
                   >
@@ -399,16 +409,16 @@ ${items.map(item => {
                         <FaTag className="me-1" />{selectedEntry.version}
                       </Badge>
                       <Badge bg="info">
-                        {selectedEntry.entry_type === 'release' ? 'Release' : 
-                         selectedEntry.entry_type === 'blog' ? 'Blog' : 'Haber'}
+                        {selectedEntry.entry_type === 'release' ? 'Release' :
+                          selectedEntry.entry_type === 'blog' ? 'Blog' : 'Haber'}
                       </Badge>
                     </div>
                   )}
-                  
+
                   <h5 className="fw-bold mb-3">
                     {selectedEntry.turkish_title || selectedEntry.original_title}
                   </h5>
-                  
+
                   <div className="mb-3 article-content p-3 bg-light rounded">
                     {selectedEntry.turkish_description ? (
                       selectedEntry.turkish_description.split('\n\n').map((paragraph, idx) => (
@@ -420,10 +430,10 @@ ${items.map(item => {
                       <p className="text-muted">İçerik bulunmuyor.</p>
                     )}
                   </div>
-                  
-                  <a 
-                    href={selectedEntry.link} 
-                    target="_blank" 
+
+                  <a
+                    href={selectedEntry.link}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-outline-primary btn-sm"
                   >
@@ -447,8 +457,8 @@ ${items.map(item => {
 
       {/* Error Alert */}
       {error && (
-        <Alert 
-          variant="danger" 
+        <Alert
+          variant="danger"
           className="position-fixed top-0 end-0 m-3"
           style={{ zIndex: 9999, minWidth: '300px' }}
           dismissible

@@ -1,3 +1,4 @@
+from news.base_scraper import BaseRSSScraper
 """
 Kubernetes Scraper Module
 kubernetes.io/blog, GitHub Releases, CNCF Blog kaynaklarindan
@@ -18,7 +19,7 @@ from news.translation_utils import (
 )
 
 
-class K8sScraper:
+class K8sScraper(BaseRSSScraper):
     """Kubernetes Scraper temel sinifi"""
 
     def __init__(self):
@@ -27,7 +28,6 @@ class K8sScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         })
-
     def fetch_article_content(self, url: str) -> Dict:
         """Haber linkine gidip gercek baslik ve icerigi ceker"""
         result = {'title': '', 'description': ''}
@@ -197,7 +197,7 @@ class K8sBlogScraper(K8sScraper):
                         'published_date': pub_date,
                         'category': category,
                         'version': self._extract_version(title + ' ' + desc),
-                    })
+                })
                 except Exception as e:
                     print(f"[K8s Blog] Isleme hatasi: {e}")
                     continue
@@ -650,7 +650,7 @@ class CNCFBlogScraper(K8sScraper):
                         'published_date': pub_date,
                         'category': category,
                         'version': self._extract_version(title + ' ' + desc),
-                    })
+                })
                 except Exception as e:
                     print(f"[CNCF Blog] Isleme hatasi: {e}")
                     continue
@@ -786,7 +786,6 @@ class MultiK8sScraper(K8sScraper):
 
     def process_entries(self, entries: List[Dict]) -> List[Dict]:
         print("\nKubernetes haberleri Turkceye cevriliyor...")
-        processed = []
         total = len(entries)
 
         for i, entry in enumerate(entries, 1):
@@ -804,13 +803,13 @@ class MultiK8sScraper(K8sScraper):
                     # Normal blog/haber icerigi — standart ceviri
                     entry['turkish_description'] = translate_long_text(desc)
 
-                processed.append(entry)
+                yield entry
             except Exception as e:
                 print(f"Isleme hatasi: {e}")
                 entry['turkish_title'] = entry['original_title']
                 entry['turkish_description'] = entry['original_description']
-                processed.append(entry)
-        return processed
+                yield entry
+        
 
 
 if __name__ == "__main__":

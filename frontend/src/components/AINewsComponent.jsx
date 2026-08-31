@@ -7,20 +7,22 @@ import {
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
   FaChartBar, FaCogs, FaExternalLinkAlt,
-  FaCalendarWeek, FaInfoCircle, FaServer,
-  FaBell, FaGoogle, FaCode
+  FaRobot, FaMicrochip
 } from 'react-icons/fa'
-import { sreApi } from '../services/api'
+import { aiApi } from '../services/api'
 
 const sources = [
-  { id: 'sre_source1', name: 'SRE Weekly', value: 'SRE Weekly', icon: FaCalendarWeek, color: '#e74c3c' },
-  { id: 'sre_source2', name: 'InfoQ SRE', value: 'InfoQ SRE', icon: FaInfoCircle, color: '#2ecc71' },
-  { id: 'sre_source3', name: 'PagerDuty Eng', value: 'PagerDuty Eng', icon: FaBell, color: '#e67e22' },
-  { id: 'sre_source4', name: 'Google Cloud SRE', value: 'Google Cloud SRE', icon: FaGoogle, color: '#4285f4' },
-  { id: 'sre_source5', name: 'DZone DevOps', value: 'DZone DevOps', icon: FaCode, color: '#9b59b6' },
+  { id: 'ai_source1', name: 'Hugging Face', value: 'Hugging Face', icon: FaRobot, color: '#ffb300' },
+  { id: 'ai_source2', name: 'AI News', value: 'AI News', icon: FaMicrochip, color: '#0052cc' },
+  { id: 'ai_source3', name: 'MarkTechPost', value: 'MarkTechPost', icon: FaMicrochip, color: '#e74c3c' },
+  { id: 'ai_source4', name: 'AWS ML Blog', value: 'AWS ML Blog', icon: FaRobot, color: '#f39c12' },
+  { id: 'ai_source5', name: 'TechCrunch AI', value: 'TechCrunch AI', icon: FaMicrochip, color: '#00a562' },
+  { id: 'ai_source6', name: 'Google DeepMind', value: 'Google DeepMind', icon: FaRobot, color: '#4285f4' },
+  { id: 'ai_source7', name: 'KDnuggets', value: 'KDnuggets', icon: FaMicrochip, color: '#f1c40f' },
+  { id: 'ai_source8', name: 'OpenAI Blog', value: 'OpenAI Blog', icon: FaRobot, color: '#10a37f' },
 ]
 
-function SREComponent() {
+function AINewsComponent() {
   const [entries, setEntries] = useState([])
   const [selectedEntry, setSelectedEntry] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -31,7 +33,7 @@ function SREComponent() {
     by_source: {},
     last_update: null
   })
-  const [days, setDays] = useState(7)
+  const [days, setDays] = useState(30)
   const [selectedSources, setSelectedSources] = useState(
     sources.reduce((acc, s) => ({ ...acc, [s.value]: true }), {})
   )
@@ -52,12 +54,12 @@ function SREComponent() {
   const loadEntries = async (silent = false) => {
     try {
       if (!silent) setLoading(true)
-      const response = await sreApi.getSRE()
+      const response = await aiApi.getAINews()
       if (response.data.success) {
         setEntries(response.data.data)
       }
     } catch (err) {
-      if (!silent) setError('SRE haberleri yüklenirken hata oluştu')
+      if (!silent) setError('AI güncellemeleri yüklenirken hata oluştu')
       console.error(err)
     } finally {
       if (!silent) setLoading(false)
@@ -66,7 +68,7 @@ function SREComponent() {
 
   const loadStats = async () => {
     try {
-      const response = await sreApi.getStats()
+      const response = await aiApi.getStats()
       if (response.data.success) {
         setStats(response.data)
       }
@@ -75,7 +77,7 @@ function SREComponent() {
     }
   }
 
-  const handleFetchSRE = async () => {
+  const handleFetchAINews = async () => {
     const activeSources = sources
       .filter(s => selectedSources[s.value])
       .map(s => s.value)
@@ -89,8 +91,7 @@ function SREComponent() {
       setFetching(true)
       setError(null)
 
-
-      const response = await sreApi.fetchSRE({
+      const response = await aiApi.fetchAINews({
         days: parseInt(days),
         sources: activeSources
       })
@@ -103,17 +104,17 @@ function SREComponent() {
         setError(response.data.message)
       }
     } catch (err) {
-      setError('SRE haberleri getirilirken hata oluştu: ' + err.message)
+      setError('AI haberleri getirilirken hata oluştu: ' + err.message)
     } finally {
       setFetching(false)
     }
   }
 
   const handleClearCache = async () => {
-    if (!window.confirm('Tüm SRE haberleri silinecek ve sıfırlanacak. Emin misiniz?')) return
+    if (!window.confirm('Tüm AI güncellemeleri silinecek ve sıfırlanacak. Emin misiniz?')) return
 
     try {
-      await sreApi.clearCache()
+      await aiApi.clearCache()
       setEntries([])
       setSelectedEntry(null)
       loadStats()
@@ -125,7 +126,7 @@ function SREComponent() {
 
   const handleExport = async () => {
     try {
-      const response = await sreApi.exportSRE()
+      const response = await aiApi.exportAINews()
       if (response.data.success) {
         const items = response.data.data
         const date = new Date().toLocaleDateString('tr-TR')
@@ -133,39 +134,38 @@ function SREComponent() {
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<title>SRE Raporu - ${date}</title>
+<title>Yapay Zeka (AI) Raporu - ${date}</title>
 <style>
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0a0f; color: #e0e0e0; max-width: 960px; margin: 0 auto; padding: 2rem; }
-  h1 { color: #5b86a7; border-bottom: 2px solid #1a1a24; padding-bottom: 0.5rem; }
+  h1 { color: #8e44ad; border-bottom: 2px solid #1a1a24; padding-bottom: 0.5rem; }
   .meta { color: #888; font-size: 0.85rem; margin-bottom: 2rem; }
   .article { background: #111118; border: 1px solid #1a1a24; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
   .article h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #e0e0e0; }
-  .article .source { display: inline-block; background: #5b86a7; color: #fff; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; margin-right: 0.5rem; }
+  .article .source { display: inline-block; background: #8e44ad; color: #fff; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; margin-right: 0.5rem; }
   .article .date { color: #888; font-size: 0.8rem; }
   .article .content { margin-top: 0.75rem; line-height: 1.7; color: #ccc; }
-  .article a { color: #5b86a7; text-decoration: none; }
+  .article a { color: #8e44ad; text-decoration: none; }
   .article a:hover { text-decoration: underline; }
-  @media print { body { background: #fff; color: #000; } .article { border-color: #ddd; background: #f9f9f9; } .article h3, .article .content { color: #000; } h1 { color: #333; } }
 </style>
 </head>
 <body>
-<h1>SRE Haberleri Raporu</h1>
-<p class="meta">${date} tarihinde oluşturuldu &mdash; ${items.length} haber</p>
+<h1>Yapay Zeka Güncellemeleri Raporu</h1>
+<p class="meta">${date} tarihinde oluşturuldu &mdash; ${items.length} güncelleme</p>
 ${items.map(item => {
-          const content = (item.turkish_description || item.original_description || '').replace(/\n/g, '<br>')
+          const content = (item.turkish_description || item.original_description || '').replace(/\\n/g, '<br>')
           return `<div class="article">
   <span class="source">${item.source || ''}</span><span class="date">${item.published_date || ''}</span>
   <h3>${item.turkish_title || item.original_title || ''}</h3>
   <div class="content">${content}</div>
   <a href="${item.link || ''}" target="_blank">Kaynağa Git &rarr;</a>
 </div>`
-        }).join('\n')}
+        }).join('\\n')}
 </body></html>`
         const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `sre_raporu_${new Date().toISOString().split('T')[0]}.html`
+        a.download = `ai_haberleri_raporu_${new Date().toISOString().split('T')[0]}.html`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -189,12 +189,12 @@ ${items.map(item => {
       const IconComp = found.icon
       return <IconComp className="me-1" size={12} />
     }
-    return null
+    return <FaRobot className="me-1" size={12} />
   }
 
   const getSourceColor = (sourceName) => {
     const found = sources.find(s => s.value === sourceName)
-    return found ? found.color : '#95a5a6'
+    return found ? found.color : '#8e44ad'
   }
 
   return (
@@ -211,7 +211,7 @@ ${items.map(item => {
                 <Form.Label className="fw-bold">Kaç Günlük Haber?</Form.Label>
                 <Form.Range
                   min={1}
-                  max={15}
+                  max={60}
                   value={days}
                   onChange={(e) => setDays(e.target.value)}
                 />
@@ -221,7 +221,7 @@ ${items.map(item => {
               </Form.Group>
 
               <Form.Group className="mb-4">
-                <Form.Label className="fw-bold">Haber Kaynakları</Form.Label>
+                <Form.Label className="fw-bold">Yapay Zeka Kaynakları</Form.Label>
                 {sources.map(source => {
                   const IconComp = source.icon
                   return (
@@ -245,13 +245,13 @@ ${items.map(item => {
               <Button
                 variant="primary"
                 className="w-100 mb-2"
-                onClick={handleFetchSRE}
+                onClick={handleFetchAINews}
                 disabled={fetching}
               >
                 {fetching ? (
                   <><Spinner size="sm" className="me-2" />Getiriliyor...</>
                 ) : (
-                  <><FaDownload className="me-2" />SRE Haberlerini Getir</>
+                  <><FaDownload className="me-2" />Haberleri Getir</>
                 )}
               </Button>
 
@@ -270,7 +270,7 @@ ${items.map(item => {
                   className="flex-fill"
                   size="sm"
                   onClick={handleClearCache}
-                  title="Tüm SRE haberlerini sil ve sıfırla"
+                  title="Tüm AI haberlerini sil ve sıfırla"
                 >
                   <FaTrash className="me-1" />Sıfırla
                 </Button>
@@ -280,7 +280,7 @@ ${items.map(item => {
                   className="flex-fill"
                   size="sm"
                   onClick={handleExport}
-                  title="SRE haberlerini HTML rapor olarak indir"
+                  title="AI haberlerini HTML rapor olarak indir"
                 >
                   <FaFileExport className="me-1" />İndir
                 </Button>
@@ -293,7 +293,7 @@ ${items.map(item => {
               <h5 className="card-title"><FaChartBar className="me-2" />İstatistikler</h5>
               <div className="mt-3">
                 <div className="d-flex justify-content-between mb-2">
-                  <span>Toplam Haber:</span>
+                  <span>Toplam Güncelleme:</span>
                   <span className="fw-bold fs-5">{stats.total}</span>
                 </div>
                 <div className="d-flex justify-content-between mb-2">
@@ -318,23 +318,23 @@ ${items.map(item => {
           </Card>
         </Col>
 
-        {/* Orta Panel - Haber Listesi */}
+        {/* Orta Panel - Güncelleme Listesi */}
         <Col md={5}>
           <Card className="panel-card" style={{ height: 'calc(100vh - 150px)' }}>
             <Card.Header className="bg-info text-white d-flex justify-content-between align-items-center">
-              <h5 className="mb-0"><FaServer className="me-2" />SRE Haberleri</h5>
+              <h5 className="mb-0"><FaRobot className="me-2" />Yapay Zeka (AI) Gelişmeleri</h5>
               <Badge bg="light" text="dark">{entries.length} haber</Badge>
             </Card.Header>
             <Card.Body className="p-0">
               {loading ? (
                 <div className="text-center p-5">
                   <Spinner animation="border" />
-                  <p className="mt-3">SRE haberleri yükleniyor...</p>
+                  <p className="mt-3">AI gelişmeleri yükleniyor...</p>
                 </div>
               ) : entries.length === 0 ? (
                 <div className="text-center p-5 text-muted">
-                  <FaServer size={48} className="mb-3" />
-                  <p>Haber listesi boş.<br />"SRE Haberlerini Getir" butonuna basın.</p>
+                  <FaRobot size={48} className="mb-3" />
+                  <p>Liste boş.<br />"Haberleri Getir" butonuna basın.</p>
                 </div>
               ) : (
                 <div className="list-group list-group-flush">
@@ -345,12 +345,14 @@ ${items.map(item => {
                       onClick={() => setSelectedEntry(item)}
                     >
                       <div className="d-flex w-100 justify-content-between mb-2">
-                        <span
-                          className="badge rounded-pill text-white"
-                          style={{ backgroundColor: getSourceColor(item.source) }}
-                        >
-                          {getSourceIcon(item.source)}{item.source}
-                        </span>
+                        <div className="d-flex align-items-center gap-1">
+                          <span
+                            className="badge rounded-pill text-white"
+                            style={{ backgroundColor: getSourceColor(item.source) }}
+                          >
+                            {getSourceIcon(item.source)}{item.source}
+                          </span>
+                        </div>
                         <small className="text-muted">{item.published_date}</small>
                       </div>
                       <h6 className="mb-1 fw-bold">
@@ -366,16 +368,16 @@ ${items.map(item => {
           </Card>
         </Col>
 
-        {/* Sag Panel - Haber Detaylari */}
+        {/* Sag Panel - Detaylar */}
         <Col md={4}>
           <Card className="panel-card" style={{ height: 'calc(100vh - 150px)' }}>
             <Card.Header className="bg-secondary text-white">
-              <h5 className="mb-0"><FaServer className="me-2" />SRE Detayları</h5>
+              <h5 className="mb-0"><FaRobot className="me-2" />Gelişme Detayları</h5>
             </Card.Header>
             <Card.Body>
               {!selectedEntry ? (
                 <div className="text-center p-5 text-muted">
-                  <FaServer size={48} className="mb-3" />
+                  <FaRobot size={48} className="mb-3" />
                   <p>Detayları görmek için<br />listeden bir haber seçin.</p>
                 </div>
               ) : (
@@ -384,7 +386,7 @@ ${items.map(item => {
                     className="p-2 text-white mb-3 rounded d-flex justify-content-between align-items-center"
                     style={{ backgroundColor: getSourceColor(selectedEntry.source) }}
                   >
-                    <small><FaServer className="me-2" />{selectedEntry.source}</small>
+                    <small><FaRobot className="me-2" />{selectedEntry.source}</small>
                     <small>{selectedEntry.published_date}</small>
                   </div>
 
@@ -394,7 +396,7 @@ ${items.map(item => {
 
                   <div className="mb-3 article-content p-3 bg-light rounded">
                     {selectedEntry.turkish_description ? (
-                      selectedEntry.turkish_description.split('\n\n').map((paragraph, idx) => (
+                      selectedEntry.turkish_description.split('\\n\\n').map((paragraph, idx) => (
                         <p key={idx} className="mb-2" style={{ lineHeight: '1.7', textAlign: 'justify' }}>
                           {paragraph}
                         </p>
@@ -423,8 +425,8 @@ ${items.map(item => {
       <Modal show={fetching} backdrop="static" keyboard={false} centered>
         <Modal.Body className="text-center p-5">
           <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
-          <h5 className="mt-3">SRE Haberleri Getiriliyor...</h5>
-          <p className="text-muted mb-0">Lütfen bekleyin, bu işlem biraz zaman alabilir.</p>
+          <h5 className="mt-3">Yapay Zeka (AI) Gelişmeleri Getiriliyor...</h5>
+          <p className="text-muted mb-0">Lütfen bekleyin, API/Scraping ve çeviri süreci biraz zaman alabilir.</p>
         </Modal.Body>
       </Modal>
 
@@ -444,4 +446,4 @@ ${items.map(item => {
   )
 }
 
-export default SREComponent
+export default AINewsComponent

@@ -54,4 +54,13 @@ export const devtoolsApi = {
   exportDevTools: () => api.get('/devtools/export/'),
 }
 
+// AI API
+export const aiApi = {
+  getAINews: () => api.get('/ai/'),
+  fetchAINews: (data) => api.post('/ai/fetch/', data),
+  clearCache: () => api.post('/ai/clear/'),
+  getStats: () => api.get('/ai/stats/'),
+  exportAINews: () => api.get('/ai/export/'),
+}
+
 export default api

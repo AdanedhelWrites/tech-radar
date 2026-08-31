@@ -18,9 +18,10 @@ import time
 from email.utils import parsedate_to_datetime
 
 from news.translation_utils import translate_text, translate_long_text
+from news.base_scraper import BaseRSSScraper
 
 
-class SREScraper:
+class SREScraper(BaseRSSScraper):
     """SRE Scraper temel sinifi"""
 
     def __init__(self):
@@ -29,52 +30,6 @@ class SREScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         })
-
-    def _parse_rss_date(self, date_str: str) -> Optional[datetime]:
-        """RFC 2822 tarih parse (RSS pubDate formati)"""
-        if not date_str:
-            return None
-        try:
-            return parsedate_to_datetime(date_str)
-        except Exception:
-            pass
-        # Fallback formatlar
-        formats = ['%B %d, %Y', '%b %d, %Y', '%Y-%m-%d', '%Y-%m-%dT%H:%M:%S']
-        for fmt in formats:
-            try:
-                return datetime.strptime(date_str.strip(), fmt)
-            except:
-                continue
-        return None
-
-    def _html_to_text(self, html_content: str) -> str:
-        """HTML iceriginden temiz metin cikarir"""
-        if not html_content:
-            return ""
-        soup = BeautifulSoup(html_content, 'html.parser')
-        # Sponsorlu icerikleri kaldir
-        for sponsor in soup.select('.sreweekly-sponsor-message'):
-            sponsor.decompose()
-        # email_only linkleri kaldir
-        for email_only in soup.select('.email_only'):
-            email_only.decompose()
-        # Script ve style kaldir
-        for tag in soup.find_all(['script', 'style']):
-            tag.decompose()
-        text = soup.get_text(separator=' ', strip=True)
-        # Fazla bosluklari temizle
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text
-
-
-# ============================================================
-# 1. SRE Weekly — RSS Feed
-# ============================================================
-class SREWeeklyScraper(SREScraper):
-    """SRE Weekly (sreweekly.com) RSS scraper — haftalik kuratoryel SRE haberleri"""
-
-    FEED_URL = "https://sreweekly.com/feed/"
-
     def fetch_entries(self, days: int = 30) -> List[Dict]:
         """SRE Weekly RSS'ten bireysel makaleleri ceker"""
         print(f"[SRE Weekly] Son {days} gunun haberleri cekiliyor (RSS)...")
@@ -150,8 +105,7 @@ class SREWeeklyScraper(SREScraper):
                                 'link': link,
                                 'date': date_str,
                                 'source': 'SRE Weekly',
-                            })
-
+                })
                         except Exception as e:
                             print(f"  [SRE Weekly] Makale isleme hatasi: {e}")
                             continue
@@ -225,8 +179,7 @@ class InfoQSREScraper(SREScraper):
                         'link': link,
                         'date': pub_date.strftime('%Y-%m-%d'),
                         'source': 'InfoQ SRE',
-                    })
-
+                })
                 except Exception as e:
                     print(f"  [InfoQ SRE] Kart isleme hatasi: {e}")
                     continue
@@ -304,8 +257,7 @@ class PagerDutyEngScraper(SREScraper):
                         'link': link,
                         'date': date_str,
                         'source': 'PagerDuty Eng',
-                    })
-
+                })
                 except Exception as e:
                     print(f"  [PagerDuty Eng] Makale isleme hatasi: {e}")
                     continue
@@ -457,8 +409,7 @@ class DZoneDevOpsScraper(SREScraper):
                         'link': link,
                         'date': date_str,
                         'source': 'DZone DevOps',
-                    })
-
+                })
                 except Exception as e:
                     print(f"  [DZone DevOps] Makale isleme hatasi: {e}")
                     continue
@@ -540,7 +491,6 @@ class MultiSREScraper(SREScraper):
 
     def process_entries(self, entries: List[Dict]) -> List[Dict]:
         """SRE haberlerini Turkceye cevirir"""
-        processed = []
         total = len(entries)
 
         print(f"\nSRE haberleri cevriliyor ({total} adet)...")
@@ -559,7 +509,7 @@ class MultiSREScraper(SREScraper):
                 # Icerik cevirisi
                 translated_desc = translate_long_text(entry['description'])
 
-                processed.append({
+                yield {
                     'original_title': entry['title'],
                     'turkish_title': translated_title,
                     'original_description': entry['description'],
@@ -567,11 +517,10 @@ class MultiSREScraper(SREScraper):
                     'link': entry['link'],
                     'published_date': entry['date'],
                     'source': entry['source'],
-                })
-
+                }
             except Exception as e:
                 print(f"  SRE haber isleme hatasi: {e}")
-                processed.append({
+                yield {
                     'original_title': entry['title'],
                     'turkish_title': entry['title'],
                     'original_description': entry['description'],
@@ -579,10 +528,8 @@ class MultiSREScraper(SREScraper):
                     'link': entry['link'],
                     'published_date': entry['date'],
                     'source': entry['source'],
-                })
-
-        print(f"Ceviri tamamlandi: {len(processed)} SRE haberi islendi")
-        return processed
+                }
+        
 
 
 if __name__ == "__main__":

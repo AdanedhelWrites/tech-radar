@@ -125,3 +125,23 @@ class DevToolsEntry(models.Model):
 
     def __str__(self):
         return f"[{self.source}] {self.turkish_title[:60] if self.turkish_title else self.original_title[:60]}"
+
+
+class AINewsEntry(models.Model):
+    """Yapay Zeka (AI) haber ve benchmark modeli"""
+    source = models.CharField(max_length=100, verbose_name='Kaynak')
+    original_title = models.TextField(verbose_name='Orijinal Baslik')
+    turkish_title = models.TextField(verbose_name='Turkce Baslik', blank=True)
+    original_description = models.TextField(verbose_name='Orijinal Aciklama')
+    turkish_description = models.TextField(verbose_name='Turkce Aciklama', blank=True)
+    link = models.URLField(verbose_name='Link', max_length=500, unique=True)
+    published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
+
+    class Meta:
+        verbose_name = 'AI Haberi'
+        verbose_name_plural = 'AI Haberleri'
+        ordering = ['-published_date', '-created_at']
+
+    def __str__(self):
+        return self.turkish_title[:100] if self.turkish_title else self.original_title[:100]
