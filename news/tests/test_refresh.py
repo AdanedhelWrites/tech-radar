@@ -156,3 +156,33 @@ class TriggerTests(RefreshTestMixin, SimpleTestCase):
     def test_bolum_listesi_url_yollariyla_ayni(self):
         self.assertEqual(refresh.SECTIONS, ('news', 'cve', 'kubernetes', 'sre', 'devtools', 'ai'))
         self.assertEqual(set(refresh.section_tasks()), set(refresh.SECTIONS))
+
+
+from celery.signals import task_postrun
+
+
+class KilitBirakmaSinyaliTests(RefreshTestMixin, SimpleTestCase):
+    """Worker isi bitirince kilit birakilmali; soguma ise devam etmeli."""
+
+    def _is_bitti(self, task_id):
+        task_postrun.send(sender=None, task_id=task_id, task=None, args=(), kwargs={},
+                          retval=None, state='SUCCESS')
+
+    def test_is_bitince_kilit_birakilir(self):
+        sonuc = refresh.trigger('cve')
+        self._is_bitti(sonuc.job_id)
+        self.assertIsNone(self.gate.running_job('cve'))
+
+    def test_is_bitince_soguma_devam_eder(self):
+        sonuc = refresh.trigger('cve')
+        self._is_bitti(sonuc.job_id)
+        self.assertGreater(self.gate.cooldown_remaining('cve'), 0)
+
+    def test_beat_isi_manuel_kilide_dokunmaz(self):
+        sonuc = refresh.trigger('cve')
+        self._is_bitti('beat-tarafindan-baslatilmis-is')
+        self.assertEqual(self.gate.running_job('cve'), sonuc.job_id)
+
+    def test_news_uygulama_yapilandirmasi_yuklu(self):
+        from django.apps import apps
+        self.assertEqual(type(apps.get_app_config('news')).__name__, 'NewsConfig')
