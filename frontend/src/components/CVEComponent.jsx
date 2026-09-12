@@ -114,7 +114,9 @@ function CVEComponent() {
       loadStats()
       toast.success("Veriler başarıyla temizlendi", { icon: "🗑️" })
     } catch (err) {
-      setError('Sıfırlama sırasında hata oluştu')
+      setError(err.response?.status === 403
+        ? 'Sıfırlama için yönetici girişi gerekli: önce Django admin (/admin) üzerinden oturum açın.'
+        : 'Sıfırlama sırasında hata oluştu')
     }
   }
 

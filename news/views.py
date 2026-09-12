@@ -1,6 +1,6 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from django.core.cache import cache
 from datetime import datetime
@@ -89,7 +89,7 @@ def fetch_news(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsAdminUser])
 def clear_cache(request):
     """Cache ve database'i temizle"""
     try:
@@ -216,7 +216,7 @@ def fetch_cves(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsAdminUser])
 def clear_cve_cache(request):
     """CVE cache ve database'i temizle"""
     try:
@@ -352,7 +352,7 @@ def fetch_k8s(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsAdminUser])
 def clear_k8s_cache(request):
     """Kubernetes cache ve database'i temizle"""
     try:
@@ -483,7 +483,7 @@ def fetch_sre(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsAdminUser])
 def clear_sre_cache(request):
     """SRE cache ve database'i temizle"""
     try:
@@ -607,7 +607,7 @@ def fetch_devtools(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsAdminUser])
 def clear_devtools_cache(request):
     """DevTools cache ve database'i temizle"""
     try:
@@ -735,7 +735,7 @@ def fetch_ai_news(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsAdminUser])
 def clear_ai_cache(request):
     """AI cache ve database'i temizle"""
     try:

@@ -7,6 +7,9 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Django admin oturumu acikken POST isteklerinde CSRF token'i gonder
+  xsrfCookieName: 'csrftoken',
+  xsrfHeaderName: 'X-CSRFToken',
 })
 
 // News API
