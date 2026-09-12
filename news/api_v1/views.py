@@ -17,6 +17,9 @@ from news.models import (
 )
 
 from .cursor import InvalidCursor, apply_cursor, decode_cursor, encode_cursor
+from .filters import (
+    min_severity_tr_listesi, ortak_filtreler, parse_csv, severity_tr_listesi,
+)
 from .serializers import (
     AINewsEntryV1Serializer, CVEEntryV1Serializer, DevToolsEntryV1Serializer,
     KubernetesEntryV1Serializer, NewsArticleV1Serializer, SREEntryV1Serializer,
@@ -71,8 +74,8 @@ class DeltaListAPIView(V1APIView):
         return self.model.objects.all()
 
     def apply_filters(self, queryset, params):
-        """Bolume ozel filtreler. Task 7'de doldurulacak; simdilik degistirmez."""
-        return queryset
+        """Alti bolumde ortak filtreler. Alt siniflar super() cagirip genisletir."""
+        return ortak_filtreler(queryset, params)
 
     def _limit_coz(self, ham):
         if ham is None:
@@ -145,10 +148,25 @@ class CVEDeltaView(DeltaListAPIView):
     model = CVEEntry
     serializer_class = CVEEntryV1Serializer
 
+    def apply_filters(self, queryset, params):
+        queryset = super().apply_filters(queryset, params)
+        if params.get('min_severity'):
+            queryset = queryset.filter(severity__in=min_severity_tr_listesi(params['min_severity']))
+        if params.get('severity'):
+            queryset = queryset.filter(severity__in=severity_tr_listesi(params['severity']))
+        return queryset
+
 
 class KubernetesDeltaView(DeltaListAPIView):
     model = KubernetesEntry
     serializer_class = KubernetesEntryV1Serializer
+
+    def apply_filters(self, queryset, params):
+        queryset = super().apply_filters(queryset, params)
+        kategoriler = parse_csv(params.get('category'))
+        if kategoriler:
+            queryset = queryset.filter(category__in=kategoriler)
+        return queryset
 
 
 class SREDeltaView(DeltaListAPIView):
@@ -159,6 +177,13 @@ class SREDeltaView(DeltaListAPIView):
 class DevToolsDeltaView(DeltaListAPIView):
     model = DevToolsEntry
     serializer_class = DevToolsEntryV1Serializer
+
+    def apply_filters(self, queryset, params):
+        queryset = super().apply_filters(queryset, params)
+        turler = parse_csv(params.get('entry_type'))
+        if turler:
+            queryset = queryset.filter(entry_type__in=turler)
+        return queryset
 
 
 class AIDeltaView(DeltaListAPIView):

@@ -58,3 +58,82 @@ class SerializerBicimTests(TestCase):
         )
         veri = CVEEntryV1Serializer(cve).data
         self.assertEqual(veri['severity'], {'code': None, 'label': 'Bilinmiyor'})
+
+
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
+
+from news.models import DevToolsEntry, KubernetesEntry
+
+
+class FiltreTests(TestCase):
+    """Filtreler tuketicinin gereksiz veri cekmesini onler."""
+
+    def setUp(self):
+        kullanici = User.objects.create_user('filtre-test', password='parola-yok-test')
+        self.baslik = {'HTTP_AUTHORIZATION': f'Token {Token.objects.create(user=kullanici).key}'}
+        for i, (siddet, kaynak) in enumerate([
+            ('Kritik', 'NVD'), ('Yüksek', 'NVD'), ('Orta', 'CISA'),
+            ('Düşük', 'CISA'), ('Bilinmiyor', 'NVD'),
+        ], start=1):
+            CVEEntry.objects.create(
+                cve_id=f'CVE-2026-20{i:02d}', source=kaynak, original_title='X',
+                original_description='Body', severity=siddet,
+                published_date=date(2026, 9, 12), link=f'https://ornek.test/cve/20{i:02d}',
+            )
+
+    def _kodlar(self, sorgu):
+        govde = self.client.get(f'/api/v1/cve/?{sorgu}', **self.baslik).json()
+        return sorted(k['severity']['code'] or 'none' for k in govde['results'])
+
+    def test_min_severity_high_kritik_ve_yuksek_getirir(self):
+        self.assertEqual(self._kodlar('min_severity=high'), ['critical', 'high'])
+
+    def test_min_severity_low_bilinmeyeni_disarida_birakir(self):
+        """Bilinmeyen siddet siralamaya girmez; sessizce dahil edilmemeli."""
+        self.assertEqual(self._kodlar('min_severity=low'), ['critical', 'high', 'low', 'medium'])
+
+    def test_severity_tam_liste(self):
+        self.assertEqual(self._kodlar('severity=critical,low'), ['critical', 'low'])
+
+    def test_gecersiz_severity_400(self):
+        yanit = self.client.get('/api/v1/cve/?min_severity=cok-kotu', **self.baslik)
+        self.assertEqual(yanit.status_code, 400)
+        self.assertEqual(yanit.json()['error']['code'], 'invalid_parameter')
+
+    def test_source_filtresi(self):
+        govde = self.client.get('/api/v1/cve/?source=CISA', **self.baslik).json()
+        self.assertEqual({k['source'] for k in govde['results']}, {'CISA'})
+
+    def test_needs_translation_filtresi(self):
+        CVEEntry.objects.filter(cve_id='CVE-2026-2001').update(needs_translation=True)
+        govde = self.client.get('/api/v1/cve/?needs_translation=true', **self.baslik).json()
+        self.assertEqual([k['cve_id'] for k in govde['results']], ['CVE-2026-2001'])
+
+    def test_limit_tavani_uygulanir(self):
+        govde = self.client.get('/api/v1/cve/?limit=9999', **self.baslik).json()
+        self.assertLessEqual(govde['count'], 500)
+
+    def test_gecersiz_limit_400(self):
+        yanit = self.client.get('/api/v1/cve/?limit=sifir', **self.baslik)
+        self.assertEqual(yanit.status_code, 400)
+
+    def test_kubernetes_kategori_filtresi(self):
+        for i, kategori in enumerate(['security', 'release', 'blog'], start=1):
+            KubernetesEntry.objects.create(
+                source='Kubernetes Blog', original_title='X', original_description='B',
+                link=f'https://ornek.test/k8s/{i}', published_date=date(2026, 9, 12),
+                category=kategori,
+            )
+        govde = self.client.get('/api/v1/kubernetes/?category=security', **self.baslik).json()
+        self.assertEqual([k['category'] for k in govde['results']], ['security'])
+
+    def test_devtools_entry_type_filtresi(self):
+        for i, tur in enumerate(['release', 'blog'], start=1):
+            DevToolsEntry.objects.create(
+                source='Terraform', original_title='X', original_description='B',
+                link=f'https://ornek.test/dt/{i}', published_date=date(2026, 9, 12),
+                entry_type=tur,
+            )
+        govde = self.client.get('/api/v1/devtools/?entry_type=release', **self.baslik).json()
+        self.assertEqual([k['entry_type'] for k in govde['results']], ['release'])
