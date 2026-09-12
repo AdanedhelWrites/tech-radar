@@ -153,6 +153,20 @@ PROTECTED_TERMS = _unique_terms
 # cunku bilinmeyen bir harf dizisi. Sayisal kisim benzersizlik saglar.
 # ============================================================
 
+_PLACEHOLDER_RE = re.compile(r'XTRM\d{4}X')
+# Google yer tutucuyu bosluklu veya kucuk harfli dondurebilir: 'xtrm 0001x', 'X TRM0001 X'
+_BROKEN_PLACEHOLDER_RE = re.compile(r'[Xx]\s*[Tt]\s*[Rr]\s*[Mm]\s*(\d{4})\s*[Xx]')
+
+
+def _repair_placeholders(text: str) -> str:
+    """Google'in bozdugu yer tutuculari standart bicime getirir.
+
+    Geri koymadan ONCE cagrilmalidir; sonra cagrilirsa onarilan kod artik hic
+    geri konamaz ve ceviride ham 'XTRM0001X' kalir.
+    """
+    return _BROKEN_PLACEHOLDER_RE.sub(r'XTRM\1X', text)
+
+
 def _protect_terms(text: str) -> Tuple[str, Dict[str, str]]:
     """
     Teknik terimleri placeholder ile degistirir.
@@ -212,10 +226,15 @@ def _protect_terms(text: str) -> Tuple[str, Dict[str, str]]:
 
 
 def _restore_terms(text: str, replacements: Dict[str, str]) -> str:
-    """Placeholder'lari orijinal terimlerle geri degistirir."""
+    """Placeholder'lari orijinal terimlerle geri degistirir.
+
+    Sira onemlidir: bir yer tutucunun degeri yalnizca kendisinden ONCE
+    olusturulmus yer tutuculari icerebilir (orn. URL deseni onceden korunmus bir
+    kod parcasinin kodunu yutar). Bu yuzden en son olusturulandan ilkine dogru
+    geri konur; boylece ic ice kodlar da acilir.
+    """
     result = text
-    # Uzun placeholder'lardan kisa olanlara — ic ice gelme onlemi
-    for ph in sorted(replacements.keys(), key=len, reverse=True):
+    for ph in sorted(replacements, key=lambda kod: int(kod[4:8]), reverse=True):
         result = result.replace(ph, replacements[ph])
     return result
 
@@ -359,6 +378,8 @@ def translate_text(text: str) -> str:
             _failure_count += 1
             return text
 
+        # Google yer tutucuyu 'xtrm 0001x' gibi bozabilir; geri koymadan ONCE onarilmali
+        translated = _repair_placeholders(translated)
         restored = _restore_terms(translated, replacements)
         return turkish_post_process(restored)
     except Exception as e:
