@@ -16,7 +16,7 @@ Neden tek modul?
 import os
 import re
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from deep_translator import GoogleTranslator
 
@@ -259,6 +259,48 @@ RETRY_DELAYS = (5, 15)
 ERROR_KEYWORDS = ["Error 500 (Server Error)", "That’s an error.", "Please try again later",
                   "That's all we know", "Error 429"]
 
+# Dogrulama esikleri (spec 9.2, A3 plani netlestirme 3-7).
+# Google yanit verdi ama sonuc guvenilmezse metin orijinal kalir ve kayit
+# needs_translation ile isaretlenir. Erisim hatasindan farkli olarak yeniden
+# deneme ve devre kesici UYGULANMAZ: sorun icerik, ayni metni tekrar gondermek
+# kotayi yakar.
+MIN_RATIO = float(os.environ.get('TRANSLATE_MIN_RATIO', '0.4'))
+# 'Kubernetes 1.31', 'CVE-2026-1234' gibi kisa metinler mesru olarak ayni kalir
+ECHO_MIN_WORDS = 4
+# Kisa metinlerin Turkce karsiligi mesru olarak cok kisa olabilir
+TRUNCATION_MIN_CHARS = 80
+
+
+def _normalize_for_echo(text: str) -> str:
+    return re.sub(r'\s+', ' ', text).strip().casefold()
+
+
+def _translatable_word_count(protected: str) -> int:
+    """Yer tutucular cikarildiktan sonra kalan, en az iki harfli kelime sayisi."""
+    return len(re.findall(r'[^\W\d_]{2,}', _PLACEHOLDER_RE.sub(' ', protected)))
+
+
+def verify_translation(protected: str, translated: str,
+                       placeholders: Iterable[str]) -> Optional[str]:
+    """Google cevabinin guvenilir olup olmadigini soyler.
+
+    protected: Google'a gonderilen, terimleri korunmus metin.
+    translated: Onarilmis ama henuz geri konmamis Google cevabi.
+    placeholders: Bu cagrinin urettigi kodlar. Metinde bunlarin disinda kod
+    olabilir (k8s_scraper dis katmani); onlar burada denetlenmez.
+
+    Sorun yoksa None, varsa kisa bir sebep dondurur.
+    """
+    eksik = [kod for kod in placeholders if kod not in translated]
+    if eksik:
+        return f'eksik yer tutucu ({len(eksik)})'
+    if (_normalize_for_echo(translated) == _normalize_for_echo(protected)
+            and _translatable_word_count(protected) >= ECHO_MIN_WORDS):
+        return 'yanki'
+    if len(protected) >= TRUNCATION_MIN_CHARS and len(translated) < MIN_RATIO * len(protected):
+        return 'kirpilma'
+    return None
+
 
 class _LocalGate:
     """Tek process icin hiz siniri + cooldown (Redis/Django yoksa kullanilir)."""
@@ -366,6 +408,7 @@ def translate_text(text: str) -> str:
     Tek bir metin parcasini Turkce'ye cevirir.
     Terim koruma uygulanir. Cevrilemezse orijinal metin doner ve
     basarisizlik sayaci artar (bkz. consume_translation_failures).
+    Google cevabi dogrulanamazsa da (bkz. verify_translation) orijinal metin doner.
     """
     global _failure_count
     if not text or len(text.strip()) == 0:
@@ -380,7 +423,16 @@ def translate_text(text: str) -> str:
 
         # Google yer tutucuyu 'xtrm 0001x' gibi bozabilir; geri koymadan ONCE onarilmali
         translated = _repair_placeholders(translated)
-        restored = _restore_terms(translated, replacements)
+        sorun = verify_translation(protected, translated, replacements)
+        if sorun is None:
+            restored = _restore_terms(translated, replacements)
+            if any(kod in restored for kod in replacements):
+                sorun = 'yer tutucu kalintisi'
+        if sorun:
+            print(f"  [Ceviri] Dogrulama basarisiz ({sorun}); metin orijinal haliyle birakildi.")
+            _failure_count += 1
+            return text
+
         return turkish_post_process(restored)
     except Exception as e:
         print(f"  [Ceviri] Hata: {e}")
