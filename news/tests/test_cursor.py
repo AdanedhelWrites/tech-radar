@@ -166,6 +166,13 @@ class DeltaAkisiTests(TestCase):
         govde = self.client.get(f'/api/v1/ai/?since={yarin}', **self.baslik).json()
         self.assertEqual(govde['results'], [])
 
+    def test_gecersiz_takvim_gunu_400_doner(self):
+        """since deseni tutar ama takvimde olmayan bir gunu adlandirirsa parse_date ValueError firlatir."""
+        yanit = self.client.get('/api/v1/ai/?since=2026-02-30', **self.baslik)
+        self.assertEqual(yanit.status_code, 400)
+        govde = yanit.json()
+        self.assertEqual(govde['error']['code'], 'invalid_parameter')
+
     def test_since_cursor_since_parametresini_ezer(self):
         """Ikisi birden verilirse since_cursor kazanir (spec 4.1)."""
         from datetime import timedelta

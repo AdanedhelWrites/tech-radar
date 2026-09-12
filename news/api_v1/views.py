@@ -56,7 +56,11 @@ class V1APIView(APIView):
         Bu yalnizca v1 view'larini etkiler; mevcut /api/* uc noktalari kendi
         bicimlerini korur.
         """
-        yanit = super().handle_exception(exc)
+        try:
+            yanit = super().handle_exception(exc)
+        except Exception:
+            return _hata('internal', 'Beklenmeyen bir sunucu hatasi olustu.',
+                         status.HTTP_500_INTERNAL_SERVER_ERROR)
         kod = DRF_DURUM_KODLARI.get(yanit.status_code, 'internal')
 
         ayrinti = yanit.data
@@ -137,7 +141,10 @@ class DeltaListAPIView(V1APIView):
                 return _hata('invalid_cursor', str(hata), status.HTTP_400_BAD_REQUEST)
             sorgu = apply_cursor(sorgu, moment, pk)
         elif params.get('since'):
-            gun = parse_date(params['since'])
+            try:
+                gun = parse_date(params['since'])
+            except ValueError:
+                gun = None
             if gun is None:
                 return _hata('invalid_parameter',
                              'since YYYY-MM-DD biciminde olmali.',

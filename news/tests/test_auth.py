@@ -68,3 +68,13 @@ class HataBicimiTests(TestCase):
         yanit = self.client.get('/api/v1/health/')
         self.assertEqual(yanit.status_code, 200)
         self.assertNotIn('error', yanit.json())
+
+    def test_beklenmeyen_hata_500_tek_bicimde_doner(self):
+        """DRF'in taniyamadigi genel bir hata bile sozlesmedeki zarfa girmeli."""
+        with mock.patch('news.api_v1.views.AIDeltaView.get_queryset',
+                        side_effect=Exception('test')):
+            yanit = self.client.get('/api/v1/ai/', **self.baslik)
+        self.assertEqual(yanit.status_code, 500)
+        govde = yanit.json()
+        self.assertEqual(govde['error']['code'], 'internal')
+        self.assertIn('message', govde['error'])
