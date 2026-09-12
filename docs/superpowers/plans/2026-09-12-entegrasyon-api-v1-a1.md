@@ -34,7 +34,7 @@
 | Worker / scheduler | `teknoloji-worker`, `teknoloji-scheduler` |
 | Veritabani | Canlida SQLite (`/app/db.sqlite3`); `DATABASE_URL` set edilirse PostgreSQL |
 | Redis | cache `redis://...:6379/0`, Celery broker `.../1` |
-| Konteynerlar kodu bind mount ile okur (`./:/app`) | Dosya degisikligi icin rebuild gerekmez; `runserver` otomatik yeniden yukler |
+| Konteynerlar kodu bind mount ile okur (`./:/app`) | Rebuild gerekmez, **ama yeniden yukleme de yok**: API gunicorn ile calisir, worker/scheduler Celery'dir; kod veya migration degisikliginden sonra `docker compose restart teknoloji-api teknoloji-worker teknoloji-scheduler` gerekir (2026-09-12'de bu atlandigi icin bir CVE cekimi `NOT NULL` hatasiyla patladi) |
 | Mevcut test sayisi | 12 (hepsi gecmeli) |
 | Mevcut migration | `0007_needs_translation` |
 

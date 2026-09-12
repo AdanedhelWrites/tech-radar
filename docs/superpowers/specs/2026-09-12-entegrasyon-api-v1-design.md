@@ -246,7 +246,9 @@ Son iki katman ayri ayri gereklidir: throttle tek istemciyi sinirlar, soguma dis
 
 ### 8.3 Is durumu
 
-`GET /api/v1/jobs/{job_id}/` — `CELERY_RESULT_BACKEND` zaten Redis'e (db 0) bagli oldugu icin ek altyapi gerektirmez.
+`GET /api/v1/jobs/{job_id}/` — `CELERY_RESULT_BACKEND` ayari Redis'e (db 0) bagli.
+
+> **Duzeltme (2026-09-12, A1 sonrasi):** "ek altyapi gerektirmez" varsayimi yanlisti. `cybernews/__init__.py` Celery uygulamasini yuklemedigi icin API surecinde sonuc backend'i `DisabledBackend` idi; ayrica `CELERY_TASK_TRACK_STARTED` tanimsizdi. Ikisi A2 planinin Task 1'inde duzeltilir. A2 planindaki "Spec'e Gore Netlestirmeler" bolumu (already_running govdesi, toplu refresh'in her zaman 202 donmesi, task icinde yakalanan hatanin failure sayilmasi) bu bolumun uzerine gecer.
 
 | Durum | Anlam |
 |---|---|
