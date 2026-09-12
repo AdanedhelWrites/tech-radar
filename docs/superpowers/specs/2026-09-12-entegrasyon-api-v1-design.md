@@ -280,6 +280,8 @@ Django admin bir tetikleyici **degildir**; yalnizca veri goruntuleme ve elle duz
 
 ### 9.2 Eklenecek dogrulamalar
 
+> **Duzeltme (2026-09-12, A2 sonrasi):** Yer tutucu formati `__TERM_n__` degil `XTRM0001X`'tir. Planlama sirasinda canli veride 19 CVE kaydinda ham yer tutucu kaldigi ve bunun iki ayri hatadan (ic ice yer tutucu geri koyma sirasi, bozuk yer tutucunun geri koymadan sonra onarilmasi) kaynaklandigi bulundu. Bu bolum ve 9.3 / 10. bolumdeki esikler, siralama, batch, Beat saati ve C1/C3/C4 ayrintilari `docs/superpowers/plans/2026-09-12-entegrasyon-api-v1-a3.md` icindeki "Spec'e Gore Netlestirmeler" bolumuyle gecersiz kilinmistir; celiskide plan gecerlidir.
+
 | Kontrol | Kural | Gerekce |
 |---|---|---|
 | Yanki | Cikti, girdiyle (bosluk/buyuk-kucuk normalize edilerek) ayniysa **ve** metin >= 4 kelimeyse basarisizlik sayilir | Google bazen girdiyi aynen dondurur; su an bu "basarili" sayilip kayit yanlislikla cevrilmis isaretleniyor |
