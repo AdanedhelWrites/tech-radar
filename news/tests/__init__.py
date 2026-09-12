@@ -1,0 +1,1 @@
+"""news uygulamasinin test paketi."""
