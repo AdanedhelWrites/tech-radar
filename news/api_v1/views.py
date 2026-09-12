@@ -25,6 +25,9 @@ from .serializers import (
     KubernetesEntryV1Serializer, NewsArticleV1Serializer, SREEntryV1Serializer,
 )
 from . import refresh
+from celery.result import AsyncResult
+
+from cybernews.celery import app as celery_app
 
 
 def _hata(kod: str, mesaj: str, http_durum: int):
@@ -285,3 +288,46 @@ class RefreshAllView(V1APIView):
             else:
                 govde[sonuc.status].append(_is_govdesi(sonuc))
         return Response(govde, status=status.HTTP_202_ACCEPTED)
+
+
+# Celery durumlari -> sozlesmedeki durumlar
+CELERY_DURUMLARI = {
+    'PENDING': 'pending',
+    'RECEIVED': 'pending',
+    'STARTED': 'started',
+    'RETRY': 'started',
+    'SUCCESS': 'success',
+    'FAILURE': 'failure',
+    'REVOKED': 'failure',
+}
+
+
+class JobView(V1APIView):
+    """Manuel tetiklenen bir isin durumunu dondurur.
+
+    Celery bilinmeyen bir id icin de PENDING dondurdugu icin once job kaydina
+    bakilir; kaydi olmayan (hic verilmemis veya 1 gunden eski) kimlik 404'tur.
+    """
+
+    def get(self, request, job_id):
+        section = refresh.get_gate().job_section(job_id)
+        if section is None:
+            return _hata('not_found', 'Bilinmeyen veya suresi dolmus is kimligi.',
+                         status.HTTP_404_NOT_FOUND)
+
+        sonuc = AsyncResult(job_id, app=celery_app)
+        govde = {'job_id': job_id, 'section': section,
+                 'status': CELERY_DURUMLARI.get(sonuc.state, 'pending')}
+
+        if govde['status'] == 'success':
+            deger = sonuc.result if isinstance(sonuc.result, dict) else {}
+            if deger.get('success') is False and deger.get('error'):
+                # Task istisnayi yakalayip dondurdu: Celery icin basarili, tuketici icin degil
+                govde['status'] = 'failure'
+                govde['error'] = str(deger['error'])
+            else:
+                govde['count'] = deger.get('count', 0)
+        elif govde['status'] == 'failure':
+            govde['error'] = str(sonuc.result)
+
+        return Response(govde)

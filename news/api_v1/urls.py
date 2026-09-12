@@ -13,4 +13,5 @@ urlpatterns = [
     path('devtools/', views.DevToolsDeltaView.as_view(), name='v1-devtools'),
     path('ai/', views.AIDeltaView.as_view(), name='v1-ai'),
     path('<str:section>/refresh/', views.RefreshView.as_view(), name='v1-refresh'),
+    path('jobs/<str:job_id>/', views.JobView.as_view(), name='v1-job'),
 ]
