@@ -4,11 +4,13 @@ Redis gercek kullanilir (benzersiz onekle). Celery task'lari hicbir zaman
 gercekten kuyruga atilmaz: canli worker ayni broker'i dinliyor.
 """
 import uuid
+from unittest import mock
 
 from django.test import SimpleTestCase
 
+from news.api_v1 import refresh
 from news.api_v1.refresh import RefreshGate
-from news.tests.base import test_redis_client
+from news.tests.base import RefreshTestMixin, test_redis_client
 
 
 class RedisOnekliTestMixin:
@@ -82,3 +84,75 @@ class RefreshGateTests(RedisOnekliTestMixin, SimpleTestCase):
         self.assertIsNone(self.gate.running_job('cve'))
         self.assertEqual(self.gate.cooldown_remaining('cve'), 0)
         self.assertIsNone(self.gate.job_section('is-1'))
+
+
+class TriggerTests(RefreshTestMixin, SimpleTestCase):
+    """Kontrol sirasi: once kilit, sonra soguma, sonra kuyruga atma."""
+
+    def test_ilk_tetikleme_baslar(self):
+        sonuc = refresh.trigger('cve')
+        self.assertEqual(sonuc.status, 'started')
+        self.assertEqual(sonuc.section, 'cve')
+        uuid.UUID(sonuc.job_id)  # gecerli bir uuid olmali
+        self.gorevler['cve'].assert_called_once_with(
+            kwargs={'skip_existing': True}, task_id=sonuc.job_id)
+        self.assertEqual(self.gate.running_job('cve'), sonuc.job_id)
+        self.assertEqual(self.gate.job_section(sonuc.job_id), 'cve')
+        self.assertGreater(self.gate.cooldown_remaining('cve'), 0)
+
+    def test_varsayilan_soguma_15_dakika(self):
+        refresh.trigger('cve')
+        self.assertGreater(self.gate.cooldown_remaining('cve'), 890)
+        self.assertLessEqual(self.gate.cooldown_remaining('cve'), refresh.REFRESH_COOLDOWN)
+
+    def test_calisirken_ikinci_tetikleme_ayni_isi_doner(self):
+        ilk = refresh.trigger('cve')
+        ikinci = refresh.trigger('cve')
+        self.assertEqual(ikinci.status, 'already_running')
+        self.assertEqual(ikinci.job_id, ilk.job_id)
+        self.gorevler['cve'].assert_called_once()
+
+    def test_is_bittikten_sonra_soguma_devam_eder(self):
+        ilk = refresh.trigger('cve')
+        self.gate.release('cve', ilk.job_id)
+        sonuc = refresh.trigger('cve')
+        self.assertEqual(sonuc.status, 'cooldown')
+        self.assertGreater(sonuc.retry_after, 0)
+        self.assertIsNone(sonuc.job_id)
+        self.gorevler['cve'].assert_called_once()
+
+    def test_soguma_bitince_yeniden_baslar(self):
+        ilk = refresh.trigger('cve', cooldown=0)
+        self.gate.release('cve', ilk.job_id)
+        ikinci = refresh.trigger('cve', cooldown=0)
+        self.assertEqual(ikinci.status, 'started')
+        self.assertNotEqual(ikinci.job_id, ilk.job_id)
+        self.assertEqual(self.gorevler['cve'].call_count, 2)
+
+    def test_bir_bolumun_sogumasi_digerini_etkilemez(self):
+        refresh.trigger('cve')
+        self.assertEqual(refresh.trigger('ai').status, 'started')
+
+    def test_kuyruga_atma_basarisizsa_iz_birakmaz(self):
+        self.gorevler['cve'].side_effect = ConnectionError('broker yok')
+        with self.assertRaises(ConnectionError):
+            refresh.trigger('cve')
+        self.assertIsNone(self.gate.running_job('cve'))
+        self.assertEqual(self.gate.cooldown_remaining('cve'), 0)
+
+    def test_yarisi_kaybeden_kazananin_isini_doner(self):
+        """Iki istek ayni anda kilidin bos oldugunu gorurse yalnizca biri kuyruga atar."""
+        self.gate.acquire('cve', 'kazanan-is', 60)
+        with mock.patch.object(self.gate, 'running_job', side_effect=[None, 'kazanan-is']):
+            sonuc = refresh.trigger('cve')
+        self.assertEqual(sonuc.status, 'already_running')
+        self.assertEqual(sonuc.job_id, 'kazanan-is')
+        self.gorevler['cve'].assert_not_called()
+
+    def test_bilinmeyen_bolum_reddedilir(self):
+        with self.assertRaises(ValueError):
+            refresh.trigger('olmayan-bolum')
+
+    def test_bolum_listesi_url_yollariyla_ayni(self):
+        self.assertEqual(refresh.SECTIONS, ('news', 'cve', 'kubernetes', 'sre', 'devtools', 'ai'))
+        self.assertEqual(set(refresh.section_tasks()), set(refresh.SECTIONS))

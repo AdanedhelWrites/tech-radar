@@ -48,3 +48,47 @@ class V1TestCase(TestCase):
         kullanici = User.objects.create_user(f'test-{uuid.uuid4().hex[:10]}')
         token = Token.objects.create(user=kullanici)
         return {'HTTP_AUTHORIZATION': f'Token {token.key}'}
+
+
+from unittest import mock
+
+
+class RefreshTestMixin:
+    """Tetikleme testleri icin guvenli ortam.
+
+    - get_gate() benzersiz onekli bir gate dondurur; test sonunda anahtarlari silinir.
+    - Alti task'in apply_async'i mock'lanir: hicbir test gercek bir cekim isini
+      canli worker'in kuyruguna atamaz.
+    """
+
+    GOREV_ADLARI = {
+        'news': 'fetch_news_task',
+        'cve': 'fetch_cve_task',
+        'kubernetes': 'fetch_k8s_task',
+        'sre': 'fetch_sre_task',
+        'devtools': 'fetch_devtools_task',
+        'ai': 'fetch_ai_news_task',
+    }
+
+    def setUp(self):
+        super().setUp()
+        from news import tasks
+        from news.api_v1.refresh import RefreshGate
+
+        self.redis = test_redis_client()
+        self.gate = RefreshGate(self.redis, prefix=f'test-refresh-{uuid.uuid4().hex}')
+        self.addCleanup(self._refresh_anahtarlarini_sil)
+
+        yama = mock.patch('news.api_v1.refresh.get_gate', return_value=self.gate)
+        yama.start()
+        self.addCleanup(yama.stop)
+
+        self.gorevler = {}
+        for bolum, ad in self.GOREV_ADLARI.items():
+            yama = mock.patch.object(getattr(tasks, ad), 'apply_async')
+            self.gorevler[bolum] = yama.start()
+            self.addCleanup(yama.stop)
+
+    def _refresh_anahtarlarini_sil(self):
+        for anahtar in self.redis.scan_iter(f'{self.gate.prefix}:*'):
+            self.redis.delete(anahtar)

@@ -15,6 +15,8 @@ calismasiyla cakisabilir; task'lar update_or_create ve skip_existing ile
 idempotent oldugu icin veri bozulmaz, yalnizca kaynak sitelere cift istek gider.
 """
 import os
+import uuid
+from dataclasses import dataclass
 from typing import Optional
 
 REFRESH_COOLDOWN = int(os.environ.get('REFRESH_COOLDOWN', '900'))
@@ -81,3 +83,70 @@ class RefreshGate:
         """Kuyruga atma basarisiz olursa tetiklemenin tum izlerini siler."""
         self.release(section, job_id)
         self.client.delete(self._anahtar('cooldown', section), self._anahtar('job', job_id))
+
+
+SECTIONS = ('news', 'cve', 'kubernetes', 'sre', 'devtools', 'ai')
+
+
+def section_tasks():
+    """Bolum adi -> Celery task'i. Dongusel import olmasin diye gec import edilir."""
+    from news import tasks
+    return {
+        'news': tasks.fetch_news_task,
+        'cve': tasks.fetch_cve_task,
+        'kubernetes': tasks.fetch_k8s_task,
+        'sre': tasks.fetch_sre_task,
+        'devtools': tasks.fetch_devtools_task,
+        'ai': tasks.fetch_ai_news_task,
+    }
+
+
+@dataclass
+class TriggerResult:
+    section: str
+    status: str  # 'started' | 'already_running' | 'cooldown'
+    job_id: Optional[str] = None
+    retry_after: int = 0
+
+
+def get_gate() -> RefreshGate:
+    """Canli Redis'e bagli gate. Testler bu fonksiyonu patch'ler."""
+    from django_redis import get_redis_connection
+    return RefreshGate(get_redis_connection('default'))
+
+
+def trigger(section: str, gate: Optional[RefreshGate] = None,
+            cooldown: Optional[int] = None, lock_ttl: Optional[int] = None) -> TriggerResult:
+    """Bir bolum icin manuel cekimi baslatir.
+
+    Kontrol sirasi onemlidir: once kilit, sonra soguma. Soguma tetikleme aninda
+    baslar; sira ters olsaydi calisan her is icin 'already_running' yerine
+    'cooldown' donerdi ve tuketici isi izleyemezdi.
+    """
+    if section not in SECTIONS:
+        raise ValueError(f'Bilinmeyen bolum: {section}')
+    gate = gate or get_gate()
+    cooldown = REFRESH_COOLDOWN if cooldown is None else cooldown
+    lock_ttl = REFRESH_LOCK_TTL if lock_ttl is None else lock_ttl
+
+    calisan = gate.running_job(section)
+    if calisan:
+        return TriggerResult(section, 'already_running', job_id=calisan)
+
+    kalan = gate.cooldown_remaining(section)
+    if kalan > 0:
+        return TriggerResult(section, 'cooldown', retry_after=kalan)
+
+    job_id = str(uuid.uuid4())
+    if not gate.acquire(section, job_id, lock_ttl):
+        # Yaris: baska bir istek kilidi bizden once aldi; onun isini dondur
+        return TriggerResult(section, 'already_running', job_id=gate.running_job(section))
+
+    gate.record_job(job_id, section)
+    gate.start_cooldown(section, cooldown)
+    try:
+        section_tasks()[section].apply_async(kwargs={'skip_existing': True}, task_id=job_id)
+    except Exception:
+        gate.rollback(section, job_id)
+        raise
+    return TriggerResult(section, 'started', job_id=job_id)
