@@ -26,13 +26,49 @@ from .serializers import (
 )
 
 
+def _hata(kod: str, mesaj: str, http_durum: int):
+    """Tek bicim hata yaniti uretir."""
+    return Response({'error': {'code': kod, 'message': mesaj}}, status=http_durum)
+
+
+# DRF istisnalarini sozlesmedeki hata kodlarina esler.
+DRF_DURUM_KODLARI = {
+    400: 'invalid_parameter',
+    401: 'unauthorized',
+    403: 'forbidden',
+    404: 'not_found',
+    405: 'method_not_allowed',
+    429: 'throttled',
+}
+
+
 class V1APIView(APIView):
-    """v1 uc noktalarinin ortak tabani: token dogrulamasi ve hiz siniri."""
+    """v1 uc noktalarinin ortak tabani: token dogrulamasi, hiz siniri, hata bicimi."""
 
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'v1_read'
+
+    def handle_exception(self, exc):
+        """DRF'in kendi hata bicimini sozlesmedeki tek bicime cevirir.
+
+        Bu yalnizca v1 view'larini etkiler; mevcut /api/* uc noktalari kendi
+        bicimlerini korur.
+        """
+        yanit = super().handle_exception(exc)
+        kod = DRF_DURUM_KODLARI.get(yanit.status_code, 'internal')
+
+        ayrinti = yanit.data
+        if isinstance(ayrinti, dict):
+            mesaj = str(ayrinti.get('detail', ayrinti))
+        elif isinstance(ayrinti, list):
+            mesaj = '; '.join(str(oge) for oge in ayrinti)
+        else:
+            mesaj = str(ayrinti)
+
+        yanit.data = {'error': {'code': kod, 'message': mesaj}}
+        return yanit
 
 
 class HealthView(APIView):
@@ -48,11 +84,6 @@ class HealthView(APIView):
 
     def get(self, request):
         return Response({'status': 'ok', 'version': 'v1'})
-
-
-def _hata(kod: str, mesaj: str, http_durum: int):
-    """Tek bicim hata yaniti uretir."""
-    return Response({'error': {'code': kod, 'message': mesaj}}, status=http_durum)
 
 
 class DeltaListAPIView(V1APIView):

@@ -31,3 +31,40 @@ class TokenAuthTests(TestCase):
     def test_gecerli_token_200(self):
         yanit = self.client.get('/api/v1/ai/', HTTP_AUTHORIZATION=f'Token {self.token.key}')
         self.assertEqual(yanit.status_code, 200)
+
+
+from unittest import mock
+
+
+class HataBicimiTests(TestCase):
+    """Tum v1 hatalari tek bicimde donmeli; tuketici tek bir ayristirici yazsin."""
+
+    def setUp(self):
+        kullanici = User.objects.create_user('hata-test', password='parola-yok-test')
+        self.baslik = {'HTTP_AUTHORIZATION': f'Token {Token.objects.create(user=kullanici).key}'}
+
+    def test_401_tek_bicimde_doner(self):
+        govde = self.client.get('/api/v1/ai/').json()
+        self.assertEqual(govde['error']['code'], 'unauthorized')
+        self.assertIn('message', govde['error'])
+
+    def test_405_tek_bicimde_doner(self):
+        yanit = self.client.post('/api/v1/ai/', **self.baslik)
+        self.assertEqual(yanit.status_code, 405)
+        self.assertEqual(yanit.json()['error']['code'], 'method_not_allowed')
+
+    def test_429_retry_after_basligi_tasir(self):
+        """Hiz siniri asildiginda tuketici ne kadar bekleyecegini bilmeli."""
+        with mock.patch('rest_framework.throttling.ScopedRateThrottle.allow_request',
+                        return_value=False), \
+             mock.patch('rest_framework.throttling.ScopedRateThrottle.wait',
+                        return_value=42):
+            yanit = self.client.get('/api/v1/ai/', **self.baslik)
+        self.assertEqual(yanit.status_code, 429)
+        self.assertEqual(yanit.json()['error']['code'], 'throttled')
+        self.assertEqual(yanit['Retry-After'], '42')
+
+    def test_health_hata_bicimine_karismaz(self):
+        yanit = self.client.get('/api/v1/health/')
+        self.assertEqual(yanit.status_code, 200)
+        self.assertNotIn('error', yanit.json())
