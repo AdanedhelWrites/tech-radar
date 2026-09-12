@@ -11,13 +11,14 @@ class NewsArticle(models.Model):
     link = models.URLField(verbose_name='Link')
     date = models.DateField(verbose_name='Tarih')
     original_date = models.CharField(max_length=100, verbose_name='Orijinal Tarih')
+    needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
-    
+
     class Meta:
         verbose_name = 'Haber'
         verbose_name_plural = 'Haberler'
         ordering = ['-date', '-created_at']
-    
+
     def __str__(self):
         return self.turkish_title[:100]
 
@@ -38,13 +39,14 @@ class CVEEntry(models.Model):
     cwe_ids = models.JSONField(default=list, blank=True, verbose_name='CWE IDleri')
     references = models.JSONField(default=list, blank=True, verbose_name='Referanslar')
     affected_products = models.TextField(blank=True, verbose_name='Etkilenen Urunler')
+    needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
-    
+
     class Meta:
         verbose_name = 'CVE Kaydi'
         verbose_name_plural = 'CVE Kayitlari'
         ordering = ['-published_date', '-created_at']
-    
+
     def __str__(self):
         return f"{self.cve_id} - {self.turkish_title[:50] if self.turkish_title else self.original_title[:50]}"
 
@@ -68,6 +70,7 @@ class KubernetesEntry(models.Model):
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='blog', verbose_name='Kategori')
     version = models.CharField(max_length=30, blank=True, verbose_name='Surum')
+    needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:
@@ -88,6 +91,7 @@ class SREEntry(models.Model):
     turkish_description = models.TextField(verbose_name='Turkce Aciklama', blank=True)
     link = models.URLField(verbose_name='Link', max_length=500, unique=True)
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
+    needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:
@@ -116,6 +120,7 @@ class DevToolsEntry(models.Model):
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     version = models.CharField(max_length=100, blank=True, verbose_name='Surum')
     entry_type = models.CharField(max_length=20, choices=ENTRY_TYPE_CHOICES, default='release', verbose_name='Tur')
+    needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:
@@ -136,6 +141,7 @@ class AINewsEntry(models.Model):
     turkish_description = models.TextField(verbose_name='Turkce Aciklama', blank=True)
     link = models.URLField(verbose_name='Link', max_length=500, unique=True)
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
+    needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:

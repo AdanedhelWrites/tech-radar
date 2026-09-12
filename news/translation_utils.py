@@ -13,9 +13,10 @@ Neden tek modul?
     - Post-processing hicbirinde yoktu
 """
 
+import os
 import re
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from deep_translator import GoogleTranslator
 
@@ -101,7 +102,7 @@ PROTECTED_TERMS = [
     'IaC', 'Infrastructure as Code',
 
     # --- AI / Yapay Zeka ---
-    'LLM', 'AI', 'AGI', 'RAG', 'LoRA', 'Transformers', 'GenAI', 
+    'LLM', 'AI', 'AGI', 'RAG', 'LoRA', 'Transformers', 'Transformer', 'GenAI', 
     'Prompt', 'Token', 'Fine-tuning', 'Embeddings', 'LangChain', 
     'LlamaIndex', 'Hugging Face', 'PyTorch', 'TensorFlow', 'OpenAI',
     'Anthropic', 'Claude', 'GPT-4', 'Gemini', 'Midjourney', 'Stable Diffusion',
@@ -220,36 +221,149 @@ def _restore_terms(text: str, replacements: Dict[str, str]) -> str:
 
 
 # ============================================================
-# 3. GOOGLE TRANSLATE CEVIRI
+# 3. GOOGLE TRANSLATE CEVIRI — HIZ SINIRI + DEVRE KESICI
 # ============================================================
+# Ucretsiz Google Translate ucu IP bazli kisitlama uygular (Error 500 / 429).
+# Engeli uzatmamak icin tum worker process'leri Redis uzerinden ortak kurala uyar:
+#   - Iki Google istegi arasinda en az MIN_INTERVAL saniye
+#   - Hata sayfasi / istisna gelirse RETRY_DELAYS kadar bekleyip yeniden dene
+#   - Denemeler tukenirse COOLDOWN_SECONDS boyunca Google'a hic gidilmez
+# Cevrilemeyen metin orijinal haliyle doner ve basarisizlik sayaci artar;
+# task'lar bu sayaci okuyup kaydi `needs_translation` olarak isaretler,
+# boylece kayit sonraki cekimde yeniden cevrilir.
+# ============================================================
+
+MIN_INTERVAL = float(os.environ.get('TRANSLATE_MIN_INTERVAL', '2.0'))
+COOLDOWN_SECONDS = int(os.environ.get('TRANSLATE_COOLDOWN', '1200'))
+RETRY_DELAYS = (5, 15)
+
+ERROR_KEYWORDS = ["Error 500 (Server Error)", "That’s an error.", "Please try again later",
+                  "That's all we know", "Error 429"]
+
+
+class _LocalGate:
+    """Tek process icin hiz siniri + cooldown (Redis/Django yoksa kullanilir)."""
+
+    def __init__(self):
+        self._next_slot = 0.0
+        self._cooldown_until = 0.0
+
+    def wait_for_slot(self, interval: float) -> None:
+        wait = self._next_slot - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        self._next_slot = time.monotonic() + interval
+
+    def cooldown_active(self) -> bool:
+        return time.monotonic() < self._cooldown_until
+
+    def start_cooldown(self, seconds: float) -> None:
+        self._cooldown_until = time.monotonic() + seconds
+
+
+class _RedisGate:
+    """Tum worker process'lerinin paylastigi hiz siniri + cooldown."""
+
+    def __init__(self, client, prefix: str = 'translate'):
+        self.client = client
+        self.slot_key = f'{prefix}:slot'
+        self.cooldown_key = f'{prefix}:cooldown'
+
+    def wait_for_slot(self, interval: float) -> None:
+        interval_ms = max(int(interval * 1000), 1)
+        # Anahtar duruyorsa baska bir process az once istek yapti; suresi dolana kadar bekle
+        while not self.client.set(self.slot_key, 1, nx=True, px=interval_ms):
+            time.sleep(max(self.client.pttl(self.slot_key), 50) / 1000)
+
+    def cooldown_active(self) -> bool:
+        return bool(self.client.exists(self.cooldown_key))
+
+    def start_cooldown(self, seconds: float) -> None:
+        if seconds > 0:
+            self.client.set(self.cooldown_key, 1, px=int(seconds * 1000))
+        else:
+            self.client.delete(self.cooldown_key)
+
+
+_gate = None
+
+
+def _get_gate():
+    """Django/Redis ortaminda paylasimli gate, degilse process ici gate."""
+    global _gate
+    if _gate is None:
+        try:
+            from django_redis import get_redis_connection
+            client = get_redis_connection('default')
+            client.ping()
+            _gate = _RedisGate(client)
+        except Exception:
+            _gate = _LocalGate()
+    return _gate
+
+
+def _make_translator():
+    return GoogleTranslator(source='auto', target='tr')
+
+
+_failure_count = 0
+
+
+def consume_translation_failures() -> int:
+    """
+    Son cagridan beri cevrilemeyen parca sayisini dondurur ve sayaci sifirlar.
+    Task'lar her kayittan sonra cagirir; > 0 ise kayit `needs_translation` olur.
+    """
+    global _failure_count
+    count, _failure_count = _failure_count, 0
+    return count
+
+
+def _translate_via_google(protected: str) -> Optional[str]:
+    """Hiz siniri ve devre kesici altinda Google'a gider; cevrilemezse None."""
+    gate = _get_gate()
+    for delay in (0,) + tuple(RETRY_DELAYS):
+        if gate.cooldown_active():
+            return None
+        if delay:
+            time.sleep(delay)
+        gate.wait_for_slot(MIN_INTERVAL)
+        try:
+            translated = _make_translator().translate(protected)
+        except Exception as e:
+            print(f"  [Ceviri] Hata: {e}")
+            continue
+        if translated and not any(keyword in translated for keyword in ERROR_KEYWORDS):
+            return translated
+        print("  [Ceviri] Google Translate hata sayfasi / bos yanit dondurdu.")
+
+    print(f"  [Ceviri] Google erisilemiyor; {COOLDOWN_SECONDS} sn boyunca ceviri durduruldu.")
+    gate.start_cooldown(COOLDOWN_SECONDS)
+    return None
+
 
 def translate_text(text: str) -> str:
     """
     Tek bir metin parcasini Turkce'ye cevirir.
-    Terim koruma uygulanir.
+    Terim koruma uygulanir. Cevrilemezse orijinal metin doner ve
+    basarisizlik sayaci artar (bkz. consume_translation_failures).
     """
+    global _failure_count
     if not text or len(text.strip()) == 0:
         return ""
 
     try:
         protected, replacements = _protect_terms(text)
-        translator = GoogleTranslator(source='auto', target='tr')
-        translated = translator.translate(protected)
-        if not translated:
+        translated = _translate_via_google(protected)
+        if translated is None:
+            _failure_count += 1
             return text
-            
-        # HATA KONTROLU: Google Translate rate-limit veya 500 error aldiginda error html text'ini dondurebilir
-        error_keywords = ["Error 500 (Server Error)", "That’s an error.", "Please try again later", "That's all we know", "Error 429"]
-        if any(keyword in translated for keyword in error_keywords):
-            print("  [Ceviri] Google Translate hata sayfasi dondurdu, orijinal metin kullanilacak.")
-            return text
-            
+
         restored = _restore_terms(translated, replacements)
-        time.sleep(0.4)
         return turkish_post_process(restored)
     except Exception as e:
         print(f"  [Ceviri] Hata: {e}")
-        time.sleep(0.4)
+        _failure_count += 1
         return text
 
 
@@ -299,7 +413,6 @@ def translate_long_text(text: str, chunk_size: int = 4500) -> str:
         try:
             translated = translate_text(chunk)
             translated_parts.append(translated)
-            time.sleep(0.3)  # Rate limiting
         except Exception as e:
             print(f"  [Ceviri] Chunk {i+1}/{len(chunks)} hatasi: {e}")
             translated_parts.append(chunk)
@@ -486,7 +599,6 @@ def translate_structured_changelog(text: str) -> str:
             try:
                 translated_item = translate_text(item_text)
                 translated_lines.append(f'{bullet} {translated_item}')
-                time.sleep(0.2)
             except Exception:
                 translated_lines.append(stripped)
             continue
@@ -494,7 +606,6 @@ def translate_structured_changelog(text: str) -> str:
         # Diger satirlar — normal cevir
         try:
             translated_lines.append(translate_text(stripped))
-            time.sleep(0.2)
         except Exception:
             translated_lines.append(stripped)
 
