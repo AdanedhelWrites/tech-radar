@@ -3,8 +3,10 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.authtoken.models import Token
 
+from news.tests.base import V1TestCase
 
-class HealthEndpointTests(TestCase):
+
+class HealthEndpointTests(V1TestCase):
     """health probe'lar icin acik olmali: token istemez, throttle uygulanmaz."""
 
     def test_tokensiz_erisilebilir(self):
@@ -13,10 +15,11 @@ class HealthEndpointTests(TestCase):
         self.assertEqual(yanit.json()['status'], 'ok')
 
 
-class TokenAuthTests(TestCase):
+class TokenAuthTests(V1TestCase):
     """v1 okuma uc noktalari token ister."""
 
     def setUp(self):
+        super().setUp()
         self.kullanici = User.objects.create_user('entegrasyon', password='parola-yok-test')
         self.token = Token.objects.create(user=self.kullanici)
 
@@ -36,10 +39,11 @@ class TokenAuthTests(TestCase):
 from unittest import mock
 
 
-class HataBicimiTests(TestCase):
+class HataBicimiTests(V1TestCase):
     """Tum v1 hatalari tek bicimde donmeli; tuketici tek bir ayristirici yazsin."""
 
     def setUp(self):
+        super().setUp()
         kullanici = User.objects.create_user('hata-test', password='parola-yok-test')
         self.baslik = {'HTTP_AUTHORIZATION': f'Token {Token.objects.create(user=kullanici).key}'}
 

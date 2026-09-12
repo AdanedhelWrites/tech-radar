@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from news.api_v1.cursor import InvalidCursor, apply_cursor, decode_cursor, encode_cursor
 from news.models import AINewsEntry, CVEEntry
+from news.tests.base import V1TestCase
 
 
 class UpdatedAtFieldTests(TestCase):
@@ -90,10 +91,11 @@ from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 
 
-class DeltaAkisiTests(TestCase):
+class DeltaAkisiTests(V1TestCase):
     """Delta akisi hicbir kaydi atlamamali ve tekrar etmemeli."""
 
     def setUp(self):
+        super().setUp()
         kullanici = User.objects.create_user('delta-test', password='parola-yok-test')
         self.baslik = {'HTTP_AUTHORIZATION': f'Token {Token.objects.create(user=kullanici).key}'}
         for i in range(1, 8):

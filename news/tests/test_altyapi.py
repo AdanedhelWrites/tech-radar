@@ -20,3 +20,35 @@ class CeleryUygulamasiTests(SimpleTestCase):
     def test_started_durumu_izleniyor(self):
         from news.tasks import fetch_cve_task
         self.assertTrue(fetch_cve_task.app.conf.task_track_started)
+
+
+from django.conf import settings
+from django.core.cache import caches
+
+
+class TestIzolasyonuTests(SimpleTestCase):
+    """View testleri canli Redis'e yazmamali ve WhiteNoise yuklememeli."""
+
+    databases = {'default'}
+
+    def test_v1_test_tabani_canli_redisi_kullanmaz(self):
+        from news.tests.base import V1TestCase
+
+        class Ornek(V1TestCase):
+            def test_bos(self):
+                pass
+
+        # override_settings class decorator'i setUpClass icinde etkinlesir;
+        # instance'in kendi _pre_setup'i degil, once sinifin setUpClass'ini
+        # cagirmak gerekir.
+        Ornek.setUpClass()
+        try:
+            ornek = Ornek('test_bos')
+            ornek._pre_setup()
+            try:
+                self.assertEqual(type(caches['default']).__name__, 'LocMemCache')
+                self.assertFalse(any('whitenoise' in m.lower() for m in settings.MIDDLEWARE))
+            finally:
+                ornek._post_teardown()
+        finally:
+            Ornek.tearDownClass()
