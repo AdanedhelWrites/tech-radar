@@ -3,7 +3,7 @@
 - **Tarih:** 2026-09-12
 - **Durum:** Onaylandi (uygulama bekliyor)
 - **Kapsam:** Faz A — dis tuketici uygulamalar icin `/api/v1/` entegrasyon katmani
-- **Kapsam disi:** Faz B — PostgreSQL gecisi ve Kubernetes'e tasima (ayri dokuman)
+- **Kapsam disi:** Faz B — PostgreSQL gecisi ve Kubernetes'e tasima (mevcut Helm chart'inin dogrulanmasi; ayri dokuman)
 
 ## 1. Amac
 
@@ -90,13 +90,16 @@ POST /api/v1/refresh/             alti bolum birden
 GET  /api/v1/jobs/{job_id}/       is durumu
 ```
 
-### 4.3 Saglik
+### 4.3 Saglik ve durum
 
 ```
 GET /api/v1/health/               kimlik dogrulama istemez
+GET /api/v1/status/               token ister
 ```
 
-Faz B'de Kubernetes liveness/readiness probe'lari icin kullanilacak. Simdi yazilmasinin maliyeti yok.
+`health` yalnizca "servis ayakta mi" sorusunu yanitlar; Kubernetes liveness/readiness probe'lari icin kullanilir (mevcut Helm chart'inda bu probe'lar tanimli).
+
+`status` veri tazeligini raporlar — ayrinti icin bkz. bolum 11.
 
 ## 5. Yanit Semasi
 
@@ -307,7 +310,74 @@ H2'yi (asili kalan ceviriler) kapatir. Feed'e hic bakmaz; dogrudan veritabaninda
 | C4 | Kismi liste sizmasi kapanir (C1'in dogal sonucu) | Su an view cache'i siliyor, task dongu icinde dolduruyor; cekim surerken okuyan yarim liste goruyor. C1 sonrasi ya eski tam liste ya yeni tam liste doner |
 | C5 | 100 kayit siniri belgelenir | Cache ilk 100 kaydi tutar, veritabaninda 524 CVE var. Frontend zaten 100 gosteriyor; bilincli bir sinir oldugu kayda gecsin, ileride "kayip" sanilmasin |
 
-## 11. Hata Sozlesmesi
+## 11. Gorunurluk ve Teshis
+
+### 11.1 Problem
+
+Bugun tek gorunurluk, worker loglarindaki `print()` satirlaridir: ucucu, aranabilir degil, container yeniden baslayinca kaybolur. "CVE kaynagi uc turdur bos donuyor" gibi bir durumu fark etmenin hicbir yolu yok. 2026-09-11'de Dark Reading ve Krebs kaynaklarinin bozuldugunu fark etmek saatler aldi; bu bolum tam olarak onu onlemek icindir.
+
+### 11.2 `FetchRun` modeli
+
+Her cekim calistirmasi bir satir birakir.
+
+| Alan | Icerik |
+|---|---|
+| `section` | `cve`, `kubernetes`, `news`, `sre`, `devtools`, `ai` |
+| `trigger` | `beat`, `api`, `admin` |
+| `started_at`, `finished_at` | Sure hesabi icin |
+| `fetched_count` | Kaynaktan donen kayit sayisi |
+| `saved_count` | Veritabanina yazilan kayit sayisi |
+| `translation_failures` | Basarisiz ceviri sayisi |
+| `status` | `running`, `success`, `failure` |
+| `error` | Basarisizlikta hata ozeti |
+
+Alti `fetch_*` task'i basta bir `FetchRun` acar, bitiste kapatir. `retranslate_pending_task` da kendi satirini yazar (`section='retranslate'`).
+
+Teshis edilebilecek durumlar:
+
+| Belirti | Anlami |
+|---|---|
+| `fetched_count` birkac turdur 0 | Kaynak bozulmus (feed URL'i olmus, 403 donuyor, format degismis) |
+| `translation_failures` surekli yuksek | Google engeli devam ediyor |
+| `status = failure` | Kod hatasi; `error` alaninda sebebi |
+| `finished_at` bos ve `started_at` cok eski | Task asili kalmis veya worker olmus |
+
+**Saklama:** `FetchRun` kayitlari 30 gunden eskiyse silinir; temizlik `retranslate_pending_task` ile ayni Beat turunda yapilir.
+
+### 11.3 `GET /api/v1/status/`
+
+Makine okunur veri tazeligi raporu. Tuketici bunu "veri bayat mi" kontrolu icin de kullanabilir.
+
+```json
+{
+  "sections": {
+    "cve": {
+      "last_success_at": "2026-09-12T18:10:00Z",
+      "last_fetched_count": 42,
+      "last_saved_count": 7,
+      "pending_translation": 275,
+      "total": 524,
+      "last_status": "success"
+    }
+  },
+  "translation": { "circuit_open": true, "cooldown_remaining_seconds": 840 }
+}
+```
+
+### 11.4 Django admin
+
+| Degisiklik | Gerekce |
+|---|---|
+| `FetchRun` admin'e kaydedilir (salt okunur, bolum/durum/tarih filtreli) | En hizli bakis yeri |
+| `DevToolsEntry` ve `AINewsEntry` admin'e kaydedilir | Su an hic gorunmuyorlar |
+| Alti modelde `needs_translation` `list_filter`'a eklenir | "Ceviri bekleyenleri goster" tek tik olur |
+| Liste ve detay goruntusunde orijinal ve Turkce metin yan yana | Yanlis cevirinin gozle gorulup elle duzeltilebilmesi icin |
+
+### 11.5 Kabul edilen sinir
+
+Yanki, kirpilma ve yer tutucu kalintisi **mekanik** hatalardir; bolum 9'daki kontrollerle otomatik yakalanir. Ancak "ceviri olmus ama anlam kaymis" durumu hicbir otomatik kontrolle yakalanamaz. Bu yuzden admin'de orijinal ile Turkce metnin yan yana gorunmesi ve elle duzeltme yolu acik tutulur; otomatik dogrulama bunun yerine gecmez.
+
+## 12. Hata Sozlesmesi
 
 Tek bicim:
 
@@ -324,14 +394,14 @@ Tek bicim:
 | `cooldown` | 429 | Bolum sogumada (`Retry-After`) |
 | `internal` | 500 | Beklenmeyen hata |
 
-## 12. Dokumantasyon
+## 13. Dokumantasyon
 
 - **`drf-spectacular`** (MIT) eklenir. `/api/v1/schema/` OpenAPI dosyasi, `/api/v1/docs/` gezilebilir arayuz.
 - Ozel zarf (`results`/`next_cursor`/`has_more`) `DeltaListAPIView` uzerinde bir kez tanimlanir; her uc noktada tekrar isaretleme gerekmez.
 - **Ornek istemci script'i** yazilir: delta dongusunu bastan sona yapan, ~40 satirlik calisan bir Python dosyasi. Sema bunun yerine gecmez; karsi ekip cogu zaman once bunu kullanir.
 - README'ye entegrasyon bolumu ve yeni ADR eklenir.
 
-## 13. Test Plani
+## 14. Test Plani
 
 TDD ile yazilir. Mevcut `news/tests.py` (12 test) bir pakete bolunur: `news/tests/`.
 
@@ -345,32 +415,46 @@ TDD ile yazilir. Mevcut `news/tests.py` (12 test) bir pakete bolunur: `news/test
 | `test_translation_verify.py` | Yanki yakalanir, kirpilma yakalanir, kisa metin yanlis alarm vermez, yer tutucu kalintisi yakalanir |
 | `test_retranslate.py` | Bekleyen kayit feed'e bakilmadan cevrilir, basarida bayrak duser, devre kesici acikken Google'a gidilmez, batch siniri uygulanir |
 | `test_cache.py` | Dongu basina tek yazim, v1 cache'e bakmaz, surumlu anahtar |
+| `test_fetchrun.py` | Her cekim bir satir birakir, basarisizlikta `status=failure` ve `error` dolar, 30 gunden eski kayitlar temizlenir |
+| `test_status.py` | `status` bolum basina son basarili cekimi ve bekleyen ceviri sayisini dogru raporlar, devre kesici durumu yansir |
 
 Disaridaki tek mock, ceviri saglayicisidir. Redis ve veritabani gercek kullanilir (mevcut test kaliyla ayni).
 
-## 14. Uygulama Sirasi
+## 15. Uygulama Sirasi
 
 | Adim | Icerik | Bagimlilik |
 |---|---|---|
 | **A1** | `updated_at` + migration 0008 + index; `DeltaListAPIView`; alti okuma uc noktasi; token auth; filtreler; imlec; hata sozlesmesi; throttle; `health` | — |
 | **A2** | `refresh` (tekli + toplu), `jobs`, bolum kilidi ve sogumasi | A1 |
 | **A3** | Ceviri dogrulama (yanki/kirpilma/kalinti), `retranslate_pending_task`, cache duzeltmeleri C1–C5 | Bagimsiz; A1 sonrasi |
-| **A4** | drf-spectacular semasi, ornek istemci script'i, README + ADR | A1–A3 |
+| **A4** | `FetchRun` modeli ve migration, `GET /api/v1/status/`, `health` detaylandirmasi, admin duzeltmeleri (bolum 11) | A3 (ceviri sayaclarini `FetchRun`'a yazabilmek icin) |
+| **A5** | drf-spectacular semasi, ornek istemci script'i, README + ADR | A1–A4 |
 
-A1 once gelir; `updated_at` olmadan diger adimlar anlamsizdir.
+A1 once gelir; `updated_at` olmadan diger adimlar anlamsizdir. A4, A3'ten sonra gelir cunku `translation_failures` sayacini ancak ceviri dogrulamasi yerine oturduktan sonra anlamli sekilde kaydedebiliriz.
 
-## 15. Kapsam Disi
+## 16. Kapsam Disi
 
-**Faz B — PostgreSQL ve Kubernetes.** Imaja kod gomme (su an `./:/app` bind mount ile calisiyor, imaj kod icermiyor), SQLite'tan PostgreSQL'e gecis ve veri tasima, Redis, Deployment/Service/Secret, probe'lar, kaynak limitleri, worker ve beat pod'lari. Ayri bir tasarim turu olarak ele alinacak.
+**Faz B — PostgreSQL ve Kubernetes.**
 
-**Bu is sirasinda fark edilen, ayrica ele alinacak eksikler:**
+Onemli duzeltme: bu is **sifirdan degil**. Depoda zaten bir Helm chart (`helm/tech-radar/`: `postgresql.yaml`, `redis.yaml`, `backend.yaml`, `frontend.yaml`, `celery.yaml`, `ingress.yaml`, `migration-job.yaml`, `secret.yaml`, `configmap.yaml`) ve ham `k8s/` manifest'leri mevcut (commit `d453887`). Dolayisiyla Faz B, yazma degil **dogrulama ve guncelleme** isidir:
 
-1. `news/admin.py`'de yalnizca 4 model kayitli — `DevToolsEntry` ve `AINewsEntry` admin'de hic gorunmuyor.
-2. `django_celery_beat` kurulu oldugu icin admin'de "Periodic tasks" ekrani cikiyor, ancak zamanlayici dosya tabanli `PersistentScheduler` + `settings.CELERY_BEAT_SCHEDULE` kullaniyor. O ekrandan yapilan degisikligin hicbir etkisi yok; yaniltici. Ya `DatabaseScheduler`'a gecilmeli ya da ekran gizlenmeli.
-3. Webhook ile push bildirimi (kritik CVE dustugunde karsi tarafa POST). Delta cekme yeterli goruldugu icin ertelendi.
-4. Silinen kayitlar icin tombstone mekanizmasi (bkz. S3).
+- Chart'in guncel kodla calistigini dogrulamak (hic deploy edilip edilmedigi bilinmiyor)
+- Imaja kod gomme — compose su an `./:/app` bind mount ile calisiyor, yani imaj kod icermiyor olabilir; chart bunu varsayiyorsa uyusmazlik vardir
+- SQLite'tan PostgreSQL'e gecis ve mevcut verinin tasinmasi
+- Bu tasarimla gelen yeni env degiskenlerinin (`REFRESH_COOLDOWN`, `TRANSLATE_MIN_RATIO`, `RETRANSLATE_BATCH`) configmap/secret'a eklenmesi
+- `/api/v1/health/` uc noktasinin probe'lara baglanmasi
 
-## 16. Alinan Kararlar Ozeti
+Ayri bir tasarim turu olarak ele alinacak.
+
+**Ertelenen maddeler:**
+
+1. `django_celery_beat` kurulu oldugu icin admin'de "Periodic tasks" ekrani cikiyor, ancak zamanlayici dosya tabanli `PersistentScheduler` + `settings.CELERY_BEAT_SCHEDULE` kullaniyor. O ekrandan yapilan degisikligin hicbir etkisi yok; yaniltici. Ya `DatabaseScheduler`'a gecilmeli ya da ekran gizlenmeli. (A4'te ele alinmiyor; ayri karar gerektiriyor.)
+2. Webhook ile push bildirimi (kritik CVE dustugunde karsi tarafa POST). Delta cekme yeterli goruldugu icin ertelendi.
+3. Silinen kayitlar icin tombstone mekanizmasi (bkz. S3).
+
+Not: `DevToolsEntry` ve `AINewsEntry`'nin admin'e kaydedilmesi artik kapsam **icindedir** (bkz. bolum 11.4).
+
+## 17. Alinan Kararlar Ozeti
 
 | Karar | Secim |
 |---|---|
@@ -383,5 +467,6 @@ A1 once gelir; `updated_at` olmadan diger adimlar anlamsizdir.
 | Severity | `critical/high/medium/low` + Turkce etiket |
 | Soguma | 15 dakika |
 | Is durumu uc noktasi | Kapsamda |
+| Gorunurluk | `FetchRun` tablosu + `/api/v1/status/` + admin duzeltmeleri; ayri adim (A4) |
 | Dokumantasyon | `drf-spectacular` + ornek istemci |
-| Sira | A1 → A2 → A3 → A4 |
+| Sira | A1 → A2 → A3 → A4 → A5 |
