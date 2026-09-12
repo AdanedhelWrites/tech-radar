@@ -84,3 +84,104 @@ class ApplyCursorTests(TestCase):
         son = self.kayitlar[-1]
         sonuc = apply_cursor(AINewsEntry.objects.all(), self.moment, son.id)
         self.assertEqual(list(sonuc), [])
+
+
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
+
+
+class DeltaAkisiTests(TestCase):
+    """Delta akisi hicbir kaydi atlamamali ve tekrar etmemeli."""
+
+    def setUp(self):
+        kullanici = User.objects.create_user('delta-test', password='parola-yok-test')
+        self.baslik = {'HTTP_AUTHORIZATION': f'Token {Token.objects.create(user=kullanici).key}'}
+        for i in range(1, 8):
+            AINewsEntry.objects.create(
+                source='Test', original_title=f'Baslik {i}', original_description='X',
+                link=f'https://ornek.test/delta/{i}', published_date=date(2026, 9, 12),
+            )
+
+    def _sayfala(self, limit):
+        """Imleci takip ederek tum sayfalari gezer, gorulen id listesini dondurur."""
+        gorulen, imlec = [], None
+        for _ in range(20):  # sonsuz donguye karsi emniyet
+            yol = f'/api/v1/ai/?limit={limit}'
+            if imlec:
+                yol += f'&since_cursor={imlec}'
+            govde = self.client.get(yol, **self.baslik).json()
+            gorulen += [k['id'] for k in govde['results']]
+            imlec = govde['next_cursor']
+            if not govde['has_more']:
+                return gorulen
+        self.fail('Sayfalama bitmedi')
+
+    def test_tum_kayitlar_tam_bir_kez_gelir(self):
+        gorulen = self._sayfala(limit=3)
+        beklenen = list(AINewsEntry.objects.order_by('updated_at', 'id').values_list('id', flat=True))
+        self.assertEqual(gorulen, beklenen)
+        self.assertEqual(len(gorulen), len(set(gorulen)), 'Ayni kayit birden fazla geldi')
+
+    def test_sayfalama_sirasinda_eklenen_kayit_atlanmaz(self):
+        """Beat sayfalama ortasinda yazarsa yeni kayit akisin sonuna eklenir."""
+        ilk = self.client.get('/api/v1/ai/?limit=3', **self.baslik).json()
+        AINewsEntry.objects.create(
+            source='Test', original_title='Sonradan', original_description='X',
+            link='https://ornek.test/delta/sonradan', published_date=date(2026, 9, 12),
+        )
+        gorulen = [k['id'] for k in ilk['results']]
+        imlec = ilk['next_cursor']
+        while True:
+            govde = self.client.get(f'/api/v1/ai/?limit=3&since_cursor={imlec}', **self.baslik).json()
+            gorulen += [k['id'] for k in govde['results']]
+            imlec = govde['next_cursor']
+            if not govde['has_more']:
+                break
+        self.assertEqual(len(gorulen), 8)
+        self.assertEqual(len(gorulen), len(set(gorulen)))
+
+    def test_bos_sayfada_imlec_geri_doner(self):
+        """Sonuc bos olsa bile tuketicinin saklayacak bir degeri olmali."""
+        tumu = self.client.get('/api/v1/ai/?limit=100', **self.baslik).json()
+        imlec = tumu['next_cursor']
+        bos = self.client.get(f'/api/v1/ai/?since_cursor={imlec}', **self.baslik).json()
+        self.assertEqual(bos['results'], [])
+        self.assertFalse(bos['has_more'])
+        self.assertEqual(bos['next_cursor'], imlec)
+
+    def test_count_sayfadaki_kayit_sayisidir(self):
+        govde = self.client.get('/api/v1/ai/?limit=3', **self.baslik).json()
+        self.assertEqual(govde['count'], 3)
+        self.assertEqual(len(govde['results']), 3)
+
+    def test_bozuk_imlec_400_doner(self):
+        yanit = self.client.get('/api/v1/ai/?since_cursor=bozuk!!', **self.baslik)
+        self.assertEqual(yanit.status_code, 400)
+
+    def test_since_ile_baslangic(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+        yarin = (timezone.now() + timedelta(days=1)).date().isoformat()
+        govde = self.client.get(f'/api/v1/ai/?since={yarin}', **self.baslik).json()
+        self.assertEqual(govde['results'], [])
+
+    def test_since_cursor_since_parametresini_ezer(self):
+        """Ikisi birden verilirse since_cursor kazanir (spec 4.1)."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+        tumu = self.client.get('/api/v1/ai/?limit=100', **self.baslik).json()
+        imlec = tumu['next_cursor']
+        dun = (timezone.now() - timedelta(days=1)).date().isoformat()
+        govde = self.client.get(
+            f'/api/v1/ai/?since_cursor={imlec}&since={dun}', **self.baslik).json()
+        self.assertEqual(govde['results'], [],
+                         'since_cursor yok sayilip since uygulanmis')
+
+    def test_alti_bolum_de_yanit_verir(self):
+        for bolum in ['news', 'cve', 'kubernetes', 'sre', 'devtools', 'ai']:
+            with self.subTest(bolum=bolum):
+                yanit = self.client.get(f'/api/v1/{bolum}/', **self.baslik)
+                self.assertEqual(yanit.status_code, 200)
+                self.assertIn('next_cursor', yanit.json())
