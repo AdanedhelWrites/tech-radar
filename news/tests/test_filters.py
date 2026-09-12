@@ -5,6 +5,7 @@ from django.test import TestCase
 
 from news.api_v1.serializers import AINewsEntryV1Serializer, CVEEntryV1Serializer
 from news.models import AINewsEntry, CVEEntry
+from news.tests.base import V1TestCase
 
 
 class SerializerBicimTests(TestCase):
@@ -66,10 +67,11 @@ from rest_framework.authtoken.models import Token
 from news.models import DevToolsEntry, KubernetesEntry
 
 
-class FiltreTests(TestCase):
+class FiltreTests(V1TestCase):
     """Filtreler tuketicinin gereksiz veri cekmesini onler."""
 
     def setUp(self):
+        super().setUp()
         kullanici = User.objects.create_user('filtre-test', password='parola-yok-test')
         self.baslik = {'HTTP_AUTHORIZATION': f'Token {Token.objects.create(user=kullanici).key}'}
         for i, (siddet, kaynak) in enumerate([

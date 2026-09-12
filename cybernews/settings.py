@@ -172,6 +172,10 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Europe/Istanbul'
 
+# Worker isi aldiginda durum STARTED olur; aksi halde is bitene kadar PENDING gorunur.
+# /api/v1/jobs/<id>/ uc noktasinin 'started' durumunu gosterebilmesi icin gerekli.
+CELERY_TASK_TRACK_STARTED = True
+
 # Celery Beat — tum bolumler 6 saatte bir otomatik cekilir.
 # Bolumler worker ve ceviri yukunu dagitmak icin 10 dk arayla kaydirilir.
 # skip_existing=True: sadece yeni kayitlar cevrilir (Google Translate kotasi korunur).
