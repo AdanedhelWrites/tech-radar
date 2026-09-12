@@ -24,6 +24,7 @@ from .serializers import (
     AINewsEntryV1Serializer, CVEEntryV1Serializer, DevToolsEntryV1Serializer,
     KubernetesEntryV1Serializer, NewsArticleV1Serializer, SREEntryV1Serializer,
 )
+from . import refresh
 
 
 def _hata(kod: str, mesaj: str, http_durum: int):
@@ -227,3 +228,39 @@ class DevToolsDeltaView(DeltaListAPIView):
 class AIDeltaView(DeltaListAPIView):
     model = AINewsEntry
     serializer_class = AINewsEntryV1Serializer
+
+
+def _is_govdesi(sonuc):
+    """Baslatilan veya zaten calisan bir is icin tuketiciye donen govde."""
+    return {
+        'job_id': sonuc.job_id,
+        'section': sonuc.section,
+        'status': sonuc.status,
+        'status_url': f'/api/v1/jobs/{sonuc.job_id}/' if sonuc.job_id else None,
+    }
+
+
+class RefreshView(V1APIView):
+    """Tek bir bolum icin manuel cekim tetikler (spec bolum 8).
+
+    Uc katman korur: bolum kilidi (cift kazima olmaz), 15 dk bolum sogumasi
+    (kaynak sitelere yuk binmez) ve token basina v1_refresh hiz siniri.
+    """
+
+    throttle_scope = 'v1_refresh'
+
+    def post(self, request, section):
+        if section not in refresh.SECTIONS:
+            return _hata('not_found', f"Bilinmeyen bolum: '{section}'.",
+                         status.HTTP_404_NOT_FOUND)
+
+        sonuc = refresh.trigger(section)
+        if sonuc.status == 'cooldown':
+            yanit = _hata('cooldown',
+                          f"'{section}' bolumu yakin zamanda yenilendi; "
+                          f"{sonuc.retry_after} sn sonra tekrar deneyin.",
+                          status.HTTP_429_TOO_MANY_REQUESTS)
+            yanit['Retry-After'] = str(sonuc.retry_after)
+            return yanit
+
+        return Response(_is_govdesi(sonuc), status=status.HTTP_202_ACCEPTED)

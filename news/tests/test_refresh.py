@@ -7,10 +7,11 @@ import uuid
 from unittest import mock
 
 from django.test import SimpleTestCase
+from rest_framework.throttling import ScopedRateThrottle
 
 from news.api_v1 import refresh
 from news.api_v1.refresh import RefreshGate
-from news.tests.base import RefreshTestMixin, test_redis_client
+from news.tests.base import RefreshTestMixin, V1TestCase, test_redis_client
 
 
 class RedisOnekliTestMixin:
@@ -186,3 +187,72 @@ class KilitBirakmaSinyaliTests(RefreshTestMixin, SimpleTestCase):
     def test_news_uygulama_yapilandirmasi_yuklu(self):
         from django.apps import apps
         self.assertEqual(type(apps.get_app_config('news')).__name__, 'NewsConfig')
+
+
+class RefreshUcNoktasiTests(RefreshTestMixin, V1TestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.baslik = self.token_basligi()
+
+    def _tetikle(self, bolum='cve'):
+        return self.client.post(f'/api/v1/{bolum}/refresh/', **self.baslik)
+
+    def test_tokensiz_401(self):
+        yanit = self.client.post('/api/v1/cve/refresh/')
+        self.assertEqual(yanit.status_code, 401)
+        self.assertEqual(yanit.json()['error']['code'], 'unauthorized')
+        self.gorevler['cve'].assert_not_called()
+
+    def test_baslatir_202(self):
+        yanit = self._tetikle()
+        self.assertEqual(yanit.status_code, 202)
+        govde = yanit.json()
+        self.assertEqual(govde['status'], 'started')
+        self.assertEqual(govde['section'], 'cve')
+        self.assertEqual(govde['status_url'], f"/api/v1/jobs/{govde['job_id']}/")
+        self.gorevler['cve'].assert_called_once()
+
+    def test_calisirken_ayni_isi_doner_202(self):
+        ilk = self._tetikle().json()
+        yanit = self._tetikle()
+        self.assertEqual(yanit.status_code, 202)
+        self.assertEqual(yanit.json()['status'], 'already_running')
+        self.assertEqual(yanit.json()['job_id'], ilk['job_id'])
+        self.assertEqual(yanit.json()['status_url'], ilk['status_url'])
+
+    def test_sogumada_429_ve_retry_after(self):
+        ilk = self._tetikle().json()
+        self.gate.release('cve', ilk['job_id'])
+        yanit = self._tetikle()
+        self.assertEqual(yanit.status_code, 429)
+        self.assertEqual(yanit.json()['error']['code'], 'cooldown')
+        self.assertGreater(int(yanit['Retry-After']), 0)
+
+    def test_bilinmeyen_bolum_404(self):
+        yanit = self._tetikle('olmayan')
+        self.assertEqual(yanit.status_code, 404)
+        self.assertEqual(yanit.json()['error']['code'], 'not_found')
+
+    def test_get_405(self):
+        yanit = self.client.get('/api/v1/cve/refresh/', **self.baslik)
+        self.assertEqual(yanit.status_code, 405)
+
+    def test_alti_bolum_de_tetiklenebilir(self):
+        for bolum in ('news', 'cve', 'kubernetes', 'sre', 'devtools', 'ai'):
+            with self.subTest(bolum=bolum):
+                self.assertEqual(self._tetikle(bolum).status_code, 202)
+                self.gorevler[bolum].assert_called_once()
+
+    def test_token_basina_hiz_siniri_ayri_scope(self):
+        """Refresh, okuma sinirindan bagimsiz ve cok daha siki sinirlanir."""
+        oranlar = {'v1_read': '120/min', 'v1_refresh': '2/hour'}
+        with mock.patch.object(ScopedRateThrottle, 'THROTTLE_RATES', oranlar):
+            self.assertEqual(self._tetikle('cve').status_code, 202)
+            self.assertEqual(self._tetikle('sre').status_code, 202)
+            ucuncu = self._tetikle('ai')
+            okuma = self.client.get('/api/v1/ai/', **self.baslik)
+        self.assertEqual(ucuncu.status_code, 429)
+        self.assertEqual(ucuncu.json()['error']['code'], 'throttled')
+        self.gorevler['ai'].assert_not_called()
+        self.assertEqual(okuma.status_code, 200)

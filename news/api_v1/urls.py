@@ -11,4 +11,5 @@ urlpatterns = [
     path('sre/', views.SREDeltaView.as_view(), name='v1-sre'),
     path('devtools/', views.DevToolsDeltaView.as_view(), name='v1-devtools'),
     path('ai/', views.AIDeltaView.as_view(), name='v1-ai'),
+    path('<str:section>/refresh/', views.RefreshView.as_view(), name='v1-refresh'),
 ]
