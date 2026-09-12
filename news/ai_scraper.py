@@ -15,7 +15,7 @@ class MultiAINewsScraper:
     def __init__(self):
         self.scrapers = {
             'Hugging Face': AINewsScraper('https://huggingface.co/blog/feed.xml', 'Hugging Face'),
-            'AI News': AINewsScraper('https://artificialintelligence-news.com/feed/', 'AI News'),
+            'MIT Tech Review AI': AINewsScraper('https://www.technologyreview.com/topic/artificial-intelligence/feed', 'MIT Tech Review AI'),
             'MarkTechPost': AINewsScraper('https://www.marktechpost.com/feed/', 'MarkTechPost'),
             'AWS ML Blog': AINewsScraper('https://aws.amazon.com/blogs/machine-learning/feed/', 'AWS ML Blog'),
             'TechCrunch AI': AINewsScraper('https://techcrunch.com/category/artificial-intelligence/feed/', 'TechCrunch AI'),

@@ -13,7 +13,7 @@ import { aiApi } from '../services/api'
 
 const sources = [
   { id: 'ai_source1', name: 'Hugging Face', value: 'Hugging Face', icon: FaRobot, color: '#ffb300' },
-  { id: 'ai_source2', name: 'AI News', value: 'AI News', icon: FaMicrochip, color: '#0052cc' },
+  { id: 'ai_source2', name: 'MIT Tech Review AI', value: 'MIT Tech Review AI', icon: FaMicrochip, color: '#0052cc' },
   { id: 'ai_source3', name: 'MarkTechPost', value: 'MarkTechPost', icon: FaMicrochip, color: '#e74c3c' },
   { id: 'ai_source4', name: 'AWS ML Blog', value: 'AWS ML Blog', icon: FaRobot, color: '#f39c12' },
   { id: 'ai_source5', name: 'TechCrunch AI', value: 'TechCrunch AI', icon: FaMicrochip, color: '#00a562' },
@@ -120,7 +120,9 @@ function AINewsComponent() {
       loadStats()
       toast.success("Veriler başarıyla temizlendi", { icon: "🗑️" })
     } catch (err) {
-      setError('Sıfırlama sırasında hata oluştu')
+      setError(err.response?.status === 403
+        ? 'Sıfırlama için yönetici girişi gerekli: önce Django admin (/admin) üzerinden oturum açın.'
+        : 'Sıfırlama sırasında hata oluştu')
     }
   }
 
