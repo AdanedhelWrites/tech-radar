@@ -12,12 +12,14 @@ class NewsArticle(models.Model):
     date = models.DateField(verbose_name='Tarih')
     original_date = models.CharField(max_length=100, verbose_name='Orijinal Tarih')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:
         verbose_name = 'Haber'
         verbose_name_plural = 'Haberler'
         ordering = ['-date', '-created_at']
+        indexes = [models.Index(fields=['updated_at', 'id'])]
 
     def __str__(self):
         return self.turkish_title[:100]
@@ -40,12 +42,14 @@ class CVEEntry(models.Model):
     references = models.JSONField(default=list, blank=True, verbose_name='Referanslar')
     affected_products = models.TextField(blank=True, verbose_name='Etkilenen Urunler')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:
         verbose_name = 'CVE Kaydi'
         verbose_name_plural = 'CVE Kayitlari'
         ordering = ['-published_date', '-created_at']
+        indexes = [models.Index(fields=['updated_at', 'id'])]
 
     def __str__(self):
         return f"{self.cve_id} - {self.turkish_title[:50] if self.turkish_title else self.original_title[:50]}"
@@ -71,12 +75,14 @@ class KubernetesEntry(models.Model):
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='blog', verbose_name='Kategori')
     version = models.CharField(max_length=30, blank=True, verbose_name='Surum')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:
         verbose_name = 'Kubernetes Haberi'
         verbose_name_plural = 'Kubernetes Haberleri'
         ordering = ['-published_date', '-created_at']
+        indexes = [models.Index(fields=['updated_at', 'id'])]
 
     def __str__(self):
         return f"[{self.category}] {self.turkish_title[:60] if self.turkish_title else self.original_title[:60]}"
@@ -92,12 +98,14 @@ class SREEntry(models.Model):
     link = models.URLField(verbose_name='Link', max_length=500, unique=True)
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:
         verbose_name = 'SRE Haberi'
         verbose_name_plural = 'SRE Haberleri'
         ordering = ['-published_date', '-created_at']
+        indexes = [models.Index(fields=['updated_at', 'id'])]
 
     def __str__(self):
         return self.turkish_title[:100] if self.turkish_title else self.original_title[:100]
@@ -121,12 +129,14 @@ class DevToolsEntry(models.Model):
     version = models.CharField(max_length=100, blank=True, verbose_name='Surum')
     entry_type = models.CharField(max_length=20, choices=ENTRY_TYPE_CHOICES, default='release', verbose_name='Tur')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:
         verbose_name = 'DevTools Guncellemesi'
         verbose_name_plural = 'DevTools Guncellemeleri'
         ordering = ['-published_date', '-created_at']
+        indexes = [models.Index(fields=['updated_at', 'id'])]
 
     def __str__(self):
         return f"[{self.source}] {self.turkish_title[:60] if self.turkish_title else self.original_title[:60]}"
@@ -142,12 +152,14 @@ class AINewsEntry(models.Model):
     link = models.URLField(verbose_name='Link', max_length=500, unique=True)
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
     class Meta:
         verbose_name = 'AI Haberi'
         verbose_name_plural = 'AI Haberleri'
         ordering = ['-published_date', '-created_at']
+        indexes = [models.Index(fields=['updated_at', 'id'])]
 
     def __str__(self):
         return self.turkish_title[:100] if self.turkish_title else self.original_title[:100]
