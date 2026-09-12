@@ -52,6 +52,11 @@ CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins.split(',') if
 
 CORS_ALLOW_CREDENTIALS = True
 
+# CSRF — Vite dev proxy (changeOrigin) Host basligini degistirdigi icin
+# frontend origin'i acikca guvenilir sayilmali (admin oturumuyla yapilan POST'lar icin)
+_csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000')
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in _csrf_origins.split(',') if origin.strip()]
+
 # DRF settings
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
@@ -158,6 +163,45 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Europe/Istanbul'
+
+# Celery Beat — tum bolumler 6 saatte bir otomatik cekilir.
+# Bolumler worker ve ceviri yukunu dagitmak icin 10 dk arayla kaydirilir.
+# skip_existing=True: sadece yeni kayitlar cevrilir (Google Translate kotasi korunur).
+# Gun araligi task varsayilanidir (manuel "Getir" ile ayni davranis).
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'fetch-news-every-6h': {
+        'task': 'news.tasks.fetch_news_task',
+        'schedule': crontab(minute=0, hour='*/6'),
+        'kwargs': {'skip_existing': True},
+    },
+    'fetch-cve-every-6h': {
+        'task': 'news.tasks.fetch_cve_task',
+        'schedule': crontab(minute=10, hour='*/6'),
+        'kwargs': {'skip_existing': True},
+    },
+    'fetch-k8s-every-6h': {
+        'task': 'news.tasks.fetch_k8s_task',
+        'schedule': crontab(minute=20, hour='*/6'),
+        'kwargs': {'skip_existing': True},
+    },
+    'fetch-sre-every-6h': {
+        'task': 'news.tasks.fetch_sre_task',
+        'schedule': crontab(minute=30, hour='*/6'),
+        'kwargs': {'skip_existing': True},
+    },
+    'fetch-devtools-every-6h': {
+        'task': 'news.tasks.fetch_devtools_task',
+        'schedule': crontab(minute=40, hour='*/6'),
+        'kwargs': {'skip_existing': True},
+    },
+    'fetch-ai-news-every-6h': {
+        'task': 'news.tasks.fetch_ai_news_task',
+        'schedule': crontab(minute=50, hour='*/6'),
+        'kwargs': {'skip_existing': True},
+    },
+}
 
 # Cache timeout
 CACHE_TIMEOUT = 3600  # 1 saat
