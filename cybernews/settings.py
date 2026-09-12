@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
     'news',
     'django_celery_beat',
@@ -64,6 +65,13 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    # v1 entegrasyon katmani throttle oranlari. Siniflar view uzerinde tanimli;
+    # buradaki oranlar ScopedRateThrottle tarafindan okunur. Mevcut /api/* uc
+    # noktalari etkilenmez.
+    'DEFAULT_THROTTLE_RATES': {
+        'v1_read': '120/min',
+        'v1_refresh': '12/hour',
+    },
 }
 
 ROOT_URLCONF = 'cybernews.urls'
