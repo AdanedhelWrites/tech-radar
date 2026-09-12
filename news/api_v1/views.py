@@ -264,3 +264,24 @@ class RefreshView(V1APIView):
             return yanit
 
         return Response(_is_govdesi(sonuc), status=status.HTTP_202_ACCEPTED)
+
+
+class RefreshAllView(V1APIView):
+    """Alti bolumu birden tetikler. Her bolum kendi kilidine ve sogumasina tabidir.
+
+    Her zaman 202 doner; tuketici hangi bolumlerin baslatildigini, zaten
+    calistigini veya sogumada oldugu icin atlandigini listelerden okur.
+    """
+
+    throttle_scope = 'v1_refresh'
+
+    def post(self, request):
+        gate = refresh.get_gate()
+        govde = {'started': [], 'already_running': [], 'skipped': []}
+        for section in refresh.SECTIONS:
+            sonuc = refresh.trigger(section, gate=gate)
+            if sonuc.status == 'cooldown':
+                govde['skipped'].append({'section': section, 'retry_after': sonuc.retry_after})
+            else:
+                govde[sonuc.status].append(_is_govdesi(sonuc))
+        return Response(govde, status=status.HTTP_202_ACCEPTED)

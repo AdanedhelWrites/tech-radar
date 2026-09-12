@@ -256,3 +256,63 @@ class RefreshUcNoktasiTests(RefreshTestMixin, V1TestCase):
         self.assertEqual(ucuncu.json()['error']['code'], 'throttled')
         self.gorevler['ai'].assert_not_called()
         self.assertEqual(okuma.status_code, 200)
+
+
+class TopluRefreshTests(RefreshTestMixin, V1TestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.baslik = self.token_basligi()
+
+    def _toplu(self):
+        return self.client.post('/api/v1/refresh/', **self.baslik)
+
+    @staticmethod
+    def _bolumler(liste):
+        return [oge['section'] for oge in liste]
+
+    def test_ilk_cagri_alti_bolumu_baslatir(self):
+        yanit = self._toplu()
+        self.assertEqual(yanit.status_code, 202)
+        govde = yanit.json()
+        self.assertEqual(self._bolumler(govde['started']),
+                         ['news', 'cve', 'kubernetes', 'sre', 'devtools', 'ai'])
+        self.assertEqual(govde['already_running'], [])
+        self.assertEqual(govde['skipped'], [])
+        for sahte in self.gorevler.values():
+            sahte.assert_called_once()
+
+    def test_ikinci_cagri_calisan_isleri_doner(self):
+        self._toplu()
+        govde = self._toplu().json()
+        self.assertEqual(govde['started'], [])
+        self.assertEqual(len(govde['already_running']), 6)
+        for sahte in self.gorevler.values():
+            sahte.assert_called_once()
+
+    def test_karisik_durum_dogru_ayrilir(self):
+        refresh.trigger('ai')                        # calisiyor
+        cve = refresh.trigger('cve')
+        self.gate.release('cve', cve.job_id)         # bitti, sogumada
+        self.gorevler['ai'].reset_mock()
+        self.gorevler['cve'].reset_mock()
+
+        govde = self._toplu().json()
+        self.assertEqual(self._bolumler(govde['started']),
+                         ['news', 'kubernetes', 'sre', 'devtools'])
+        self.assertEqual(self._bolumler(govde['already_running']), ['ai'])
+        self.assertEqual(self._bolumler(govde['skipped']), ['cve'])
+        self.assertGreater(govde['skipped'][0]['retry_after'], 0)
+        self.gorevler['ai'].assert_not_called()
+        self.gorevler['cve'].assert_not_called()
+
+    def test_hic_baslamasa_da_202(self):
+        for bolum in refresh.SECTIONS:
+            sonuc = refresh.trigger(bolum)
+            self.gate.release(bolum, sonuc.job_id)
+        yanit = self._toplu()
+        self.assertEqual(yanit.status_code, 202)
+        self.assertEqual(len(yanit.json()['skipped']), 6)
+
+    def test_tokensiz_401(self):
+        self.assertEqual(self.client.post('/api/v1/refresh/').status_code, 401)

@@ -5,6 +5,7 @@ from . import views
 
 urlpatterns = [
     path('health/', views.HealthView.as_view(), name='v1-health'),
+    path('refresh/', views.RefreshAllView.as_view(), name='v1-refresh-all'),
     path('news/', views.NewsDeltaView.as_view(), name='v1-news'),
     path('cve/', views.CVEDeltaView.as_view(), name='v1-cve'),
     path('kubernetes/', views.KubernetesDeltaView.as_view(), name='v1-kubernetes'),
