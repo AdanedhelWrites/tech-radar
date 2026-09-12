@@ -1,6 +1,6 @@
 # Teknoloji Radar
 
-Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri ve DevTools altyapi araclari guncellemelerini **27 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
+Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri, DevTools altyapi araclari guncellemeleri ve yapay zeka (AI) gelismelerini **35 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
 
 > Bu proje **Vibe Coding** yaklasimiyla, Claude Code (claude-opus-4-6) ile birlikte gelistirilmistir.
 
@@ -28,21 +28,24 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
                                           │
                               ┌───────────▼───────────┐
                                │   Harici Kaynaklar     │
-                               │   (27 kaynak)          │
+                               │   (35 kaynak)          │
                               │   + Google Translate    │
                               └─────────────────────────┘
 ```
 
 ## Ozellikler
 
-- **27 farkli kaynak** — 5 siber guvenlik, 5 CVE, 3 Kubernetes, 5 SRE, 9 DevTools
+- **35 farkli kaynak** — 5 siber guvenlik, 5 CVE, 3 Kubernetes, 5 SRE, 9 DevTools, 8 Yapay Zeka
+- **Asenkron cekim** — "Getir" istegi Celery worker'a devredilir; arayuz 5 saniyede bir yeni kayitlari otomatik yansitir
+- **Periyodik cekim** — Celery Beat tum bolumleri 6 saatte bir otomatik gunceller (sadece yeni kayitlar cevrilir)
+- **Yonetici korumali sifirlama** — Veritabanini silen `clear` endpoint'leri yalnizca Django admin oturumuyla calisir
 - **Tam makale cevirisi** — Kisaltma yok, tum icerik Turkceye cevrilir
 - **Teknik terim korumasi** — 130+ terim (Kubernetes, Docker, Elasticsearch, CVE, CVSS, vb.) ceviri sirasinda bozulmaz
 - **Turkce imla post-processing** — Cumle basi buyuk harf, noktalama duzeltme, URL/surum koruma
 - **Parca tabanli ceviri** — Uzun makaleler cumle sinirlarindan 4500 karakterlik parcalara bolunerek cevrilir
 - **Karanlik mod** — Koyu tonlarda arayuz (steel blue `#5b86a7` vurgu rengi)
 - **DevTools takibi** — MinIO, Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle release guncellemeleri
-- **Tarih filtresi** — 1-15 gun (haberler) / 1-60 gun (DevTools) slider ile filtreleme
+- **Tarih filtresi** — 1-15 gun (haberler) / 1-60 gun (DevTools, Yapay Zeka) slider ile filtreleme
 - **CVSS siddet filtresi** — Kritik / Yuksek / Orta / Dusuk (CVE sayfasi)
 - **HTML rapor disa aktarma** — Her bolumden koyu temali, yazdirilabilir HTML rapor indirilebilir
 - **Docker Compose** — Tek komutla 5 container ayaga kalkar
@@ -103,6 +106,21 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | Elasticsearch + Kibana | GitHub Releases API + elastic.co release notes | Resmi release notes sayfasindan detayli changelog |
 | Redis | Blog RSS + tam makale | Blog sayfasindan tam icerik cekilir (blockContent) |
 | Moodle | GitHub Tags API + moodledev.io | Resmi release notes sayfasindan gercek icerik |
+
+### Yapay Zeka (8 kaynak)
+
+| Kaynak | Yontem | Aciklama |
+|--------|--------|----------|
+| Hugging Face | RSS Feed | Model, dataset ve kutuphane duyurulari |
+| MIT Tech Review AI | RSS Feed | Tam makale icerigi RSS icinde gelir |
+| MarkTechPost | RSS Feed | Arastirma ve model haberleri |
+| AWS ML Blog | RSS Feed | AWS makine ogrenmesi blogu |
+| TechCrunch AI | RSS Feed | AI sektor haberleri |
+| Google DeepMind | RSS Feed | DeepMind arastirma blogu |
+| KDnuggets | RSS Feed | Veri bilimi ve ML yazilari |
+| OpenAI Blog | RSS Feed | OpenAI duyurulari |
+
+> Tum AI kaynaklari `news/base_scraper.py` icindeki ortak `BaseRSSScraper` ile okunur; RSS aciklamasi 200 karakterden kisaysa makale sayfasindan paragraf cekilir. Benchmark/leaderboard skorlari kapsam disidir (bkz. [ADR-0002](docs/ADR-0002-AI-Benchmark.md)).
 
 ---
 
@@ -175,37 +193,47 @@ docker compose exec teknoloji-api python manage.py shell
 docker compose down -v && docker compose up -d --build
 ```
 
+### Yonetici Hesabi
+
+"Sifirla" butonlari (`POST /api/{bolum}/clear/`) veritabanini sildigi icin yalnizca Django admin yetkisiyle calisir; oturum yoksa 403 doner. Ilk kurulumda bir yonetici olusturun:
+
+```bash
+docker compose exec teknoloji-api python manage.py createsuperuser
+```
+
+Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ayni tarayicidaki frontend isteklerinde de kullanilir; axios CSRF token'i `csrftoken` cerezinden otomatik ekler.
+
 ---
 
 ## Kullanim
 
 Her sayfa ayni duzeni takip eder:
 
-1. Sol panelden **gun araligini** (1-15 / DevTools icin 1-60) ve **kaynaklari** secin
+1. Sol panelden **gun araligini** (1-15 / DevTools ve Yapay Zeka icin 1-60) ve **kaynaklari** secin
 2. **"Getir"** butonuna tiklayin
-3. Haberler cekilir, Turkceye cevrilir ve orta panelde listelenir
+3. Cekim arka planda (Celery worker) baslar; cevrilen haberler orta panele birkac saniye icinde otomatik duser
 4. Bir habere tiklayarak sag panelde detayini goruntuleyin
 
 **Ek butonlar:**
 - **Yenile** — Mevcut verileri yeniden yukler
-- **Sifirla** — Tum verileri temizler
+- **Sifirla** — Tum verileri temizler (yonetici girisi gerekir, bkz. [Yonetici Hesabi](#yonetici-hesabi))
 - **Indir** — Koyu temali HTML rapor olarak disa aktarir
 
 ---
 
 ## API Endpoints
 
-Her bolum (news, cve, k8s, sre, devtools) ayni endpoint yapisini kullanir:
+Her bolum (news, cve, k8s, sre, devtools, ai) ayni endpoint yapisini kullanir:
 
 | Method | Endpoint Deseni | Aciklama |
 |--------|-----------------|----------|
 | GET | `/api/{bolum}/` | Kayitli verileri listele |
-| POST | `/api/{bolum}/fetch/` | Yeni verileri cek (body: `{"days": 7, "sources": [...]}`) |
-| POST | `/api/{bolum}/clear/` | Tum verileri sil |
+| POST | `/api/{bolum}/fetch/` | Arka planda cekim baslat — Celery task (body: `{"days": 7, "sources": [...]}`) |
+| POST | `/api/{bolum}/clear/` | Tum verileri sil (**yonetici oturumu gerekir**, aksi halde 403) |
 | GET | `/api/{bolum}/stats/` | Istatistikleri getir |
 | GET | `/api/{bolum}/export/` | HTML rapor olarak disa aktar |
 
-**Bolum isimleri:** `news` (Siber Guvenlik, fetch endpoint: `/api/fetch/`), `cve`, `k8s`, `sre`, `devtools`
+**Bolum isimleri:** `news` (Siber Guvenlik, fetch endpoint: `/api/fetch/`), `cve`, `k8s`, `sre`, `devtools`, `ai`
 
 > **Not:** Siber guvenlik bolumunun fetch, clear, stats ve export endpoint'leri `/api/news/` altinda degil, dogrudan `/api/` altindadir: `/api/fetch/`, `/api/clear/`, `/api/stats/`, `/api/export/`
 
@@ -222,11 +250,14 @@ cybersecurity_news/
 │   └── wsgi.py
 │
 ├── news/                       # Ana Django uygulamasi
-│   ├── models.py               # NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry
-│   ├── views.py                # API endpoint'leri (5 bolum x 5 endpoint = 25)
+│   ├── models.py               # NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
+│   ├── views.py                # API endpoint'leri (6 bolum x 5 endpoint = 30)
+│   ├── tasks.py                # Celery task'lari (cekim + ceviri + cache)
 │   ├── serializers.py          # DRF serializer'lari
 │   ├── urls.py                 # API URL pattern'leri
 │   ├── translation_utils.py    # Merkezi ceviri modulu (terim koruma + post-processing)
+│   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
+│   ├── ai_scraper.py           # 8 Yapay Zeka kaynagi scraper'i
 │   ├── cve_scraper.py          # 5 CVE kaynagi scraper'i
 │   ├── k8s_scraper.py          # 3 Kubernetes kaynagi scraper'i
 │   ├── sre_scraper.py          # 5 SRE kaynagi scraper'i
@@ -244,7 +275,8 @@ cybersecurity_news/
 │   │   │   ├── CVEComponent.jsx        # CVE sayfasi
 │   │   │   ├── KubernetesComponent.jsx # Kubernetes sayfasi
 │   │   │   ├── SREComponent.jsx        # SRE sayfasi
-│   │   │   └── DevToolsComponent.jsx   # DevTools sayfasi
+│   │   │   ├── DevToolsComponent.jsx   # DevTools sayfasi
+│   │   │   └── AINewsComponent.jsx     # Yapay Zeka sayfasi
 │   │   └── services/
 │   │       └── api.js          # Axios API servisleri
 │   ├── Dockerfile              # Production build: Node + Nginx
@@ -252,6 +284,8 @@ cybersecurity_news/
 │   ├── vite.config.js          # Dev proxy ayarlari
 │   ├── index.html
 │   └── package.json
+│
+├── docs/                       # Mimari karar kayitlari (ADR)
 │
 ├── k8s/                        # Kubernetes manifest'leri (kubectl apply)
 │   ├── 00-namespace.yaml
@@ -314,7 +348,7 @@ Terimler uzunluktan kisaya siralanarak islenir — kisa terimlerin kelime icinde
 
 ### 2. Parca Tabanli Ceviri
 
-Uzun metinler cumle sinirlarindan 4500 karakterlik parcalara bolunur (Google Translate 5000 karakter limiti). Her parca icin ayri terim koruma uygulanir. Parcalar arasi 0.3 saniye bekleme (rate limit).
+Uzun metinler cumle sinirlarindan 4500 karakterlik parcalara bolunur (Google Translate 5000 karakter limiti). Her parca icin ayri terim koruma uygulanir. Parcalar arasi bekleme ortak hiz siniri tarafindan yonetilir (bkz. 4. bolum).
 
 ### 3. Turkce Post-Processing
 
@@ -326,6 +360,32 @@ Ceviri sonrasi otomatik duzeltmeler:
 - Ingilizce ay isimlerinin Turkceyecevirisi
 - Bozuk Turkce karakter encoding duzeltmesi
 - K8s kisaltmasinin korunmasi
+
+### 4. Hiz Siniri ve Devre Kesici (ucretsiz Google Translate icin)
+
+Ucretsiz Google Translate ucu, kisa surede cok istek atan IP'yi bir sure kisitlar (Error 500 / 429). Engeli uzatmamak icin:
+
+- **Ortak hiz siniri** — Tum worker process'leri Redis uzerinden ayni sinira uyar: iki istek arasinda en az `TRANSLATE_MIN_INTERVAL` saniye
+- **Yeniden deneme** — Hata sayfasi veya istisna gelirse 5 ve 15 saniye bekleyerek iki kez daha denenir
+- **Devre kesici** — Denemeler tukenirse `TRANSLATE_COOLDOWN` saniye boyunca Google'a hic istek gitmez (tum worker'lar icin)
+- **Kayip yok** — Cevrilemeyen haber tam Ingilizce metniyle kaydedilir ve `needs_translation=True` isaretlenir; sonraki cekimde otomatik olarak yeniden cevrilir
+
+---
+
+## Periyodik Cekim (Celery Beat)
+
+`teknoloji-scheduler` container'i, `cybernews/settings.py` icindeki `CELERY_BEAT_SCHEDULE` ile tum bolumleri **6 saatte bir** (Europe/Istanbul 00:00, 06:00, 12:00, 18:00) otomatik gunceller. Worker ve ceviri yukunu dagitmak icin bolumler 10 dakika arayla kaydirilir:
+
+| Bolum | Task | Dakika | Gun araligi |
+|-------|------|--------|-------------|
+| Siber Guvenlik | `fetch_news_task` | :00 | 7 |
+| CVE | `fetch_cve_task` | :10 | 7 |
+| Kubernetes | `fetch_k8s_task` | :20 | 30 |
+| SRE | `fetch_sre_task` | :30 | 30 |
+| DevTools | `fetch_devtools_task` | :40 | 30 |
+| Yapay Zeka | `fetch_ai_news_task` | :50 | 30 |
+
+Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabaninda zaten cevrilmis kayitlar tekrar cevrilmez; yalnizca yeni haberler ve ceviri bekleyen (`needs_translation`) kayitlar Google Translate'e gonderilir. Gun araligi task varsayilanidir; her cekim (manuel "Getir" dahil) bu araligin disinda kalan eski kayitlari siler.
 
 ---
 
@@ -637,6 +697,9 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `DEBUG` | `False` | Django debug modu |
 | `ALLOWED_HOSTS` | `*` | Virgulle ayrilmis izinli host listesi |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,...` | Frontend origin'leri |
+| `CSRF_TRUSTED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Admin oturumuyla POST yapabilecek frontend origin'leri (Vite proxy `changeOrigin` kullandigi icin gerekli) |
+| `TRANSLATE_MIN_INTERVAL` | `2.0` | Tum worker'lar genelinde iki Google Translate istegi arasindaki minimum sure (sn) |
+| `TRANSLATE_COOLDOWN` | `1200` | Google erisilemez oldugunda cevirinin tamamen durdurulacagi sure (sn) |
 | `DATABASE_URL` | _(bos)_ | Herhangi bir deger atanirsa PostgreSQL aktif olur, bossa SQLite |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
@@ -700,12 +763,23 @@ kubectl delete namespace teknoloji-haberleri
 
 ## Bilinen Kisitlamalar
 
-- Google Translate ucretsiz API rate limit'e takilabilir — cok sayida makale cekildiginde yavaslama olabilir
+- Google Translate ucretsiz ucu IP bazli kisitlama uygular; kisitlama surerken haberler Ingilizce kaydedilir ve kisitlama kalkinca sonraki cekimde cevrilir (bkz. [Hiz Siniri ve Devre Kesici](#4-hiz-siniri-ve-devre-kesici-ucretsiz-google-translate-icin))
 - Dark Reading HTML scraping'e 403 doner, bu yuzden RSS feed kullanilir
 - Gunicorn timeout 300 saniye — cok fazla kaynak secilirse zaman asimi olabilir
 - Her fetch'te toplam makale sayisi **30 ile sinirlidir** (Gunicorn timeout'undan kacinmak icin)
 - Redis blog sayfasi JS-rendered — `blockContent` div'inden icerik cekilir, eger site yapisi degisirse guncelleme gerekebilir
 - Elastic 8.x serisi release notes farkli URL'de (`/guide/en/...`), sadece 9.x serisi icin detayli changelog cekilir
+- Yapay Zeka bolumu yalnizca haber RSS'lerini kapsar; benchmark/leaderboard skorlari ertelenmistir ([ADR-0002](docs/ADR-0002-AI-Benchmark.md))
+- `artificialintelligence-news.com` RSS'i 403 dondugu icin yerine MIT Technology Review AI kullanilir
+
+---
+
+## Mimari Kararlar (ADR)
+
+| ADR | Konu | Durum |
+|-----|------|-------|
+| [ADR-0001](docs/ADR-0001-AI-News.md) | AI News bileseni | Accepted |
+| [ADR-0002](docs/ADR-0002-AI-Benchmark.md) | AI Benchmark / Leaderboard bileseni | Proposed (ertelendi) |
 
 ---
 
