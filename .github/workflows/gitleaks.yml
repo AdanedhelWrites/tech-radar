@@ -1,0 +1,117 @@
+# gitleaks secret taramasi.
+#
+# ADR-008 dersi: eski sizintilarla yenileri ayirt et.
+#   - pull_request: yalnizca PR commit'leri taranir -> YENI secret varsa KAPI (kirmizi).
+#   - push/schedule: tum gecmis taranir -> RAPOR (Security sekmesi), hatti durdurmaz.
+# Her iki modda da taramanin kendisi zorunlu: arac hatasi veya 0 commit taranmasi kirmizidir.
+# gitleaks-action yerine checksum'i sabit binary: lisans/3. parti bagimliligi yok.
+
+name: gitleaks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "11 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout (tum gecmis)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: gitleaks kur (sabit surum + SHA256)
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/${tarball}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}" gitleaks
+          "${RUNNER_TEMP}/gitleaks" version
+
+      - name: Tara
+        id: scan
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          if [ "${EVENT}" = "pull_request" ]; then
+            mode=gate
+            log_opts="--no-merges ${BASE_SHA}..${HEAD_SHA}"
+          else
+            mode=report
+            log_opts="--all"
+          fi
+          echo "mode=${mode}" >> "${GITHUB_OUTPUT}"
+
+          # --exit-code 2: "sizinti bulundu". Diger sifir-disi kodlar arac hatasidir.
+          "${RUNNER_TEMP}/gitleaks" git . \
+            --redact --no-banner --no-color --exit-code 2 \
+            --log-opts="${log_opts}" \
+            --report-format sarif --report-path gitleaks.sarif 2>&1 | tee gitleaks.log
+          rc=${PIPESTATUS[0]}
+
+          if [ "${rc}" -ne 0 ] && [ "${rc}" -ne 2 ]; then
+            echo "::error::gitleaks arac hatasi (exit ${rc}); tarama gecerli sayilmaz."
+            exit 1
+          fi
+          commits=$(grep -oE '[0-9]+ commits scanned' gitleaks.log | grep -oE '^[0-9]+' | tail -1)
+          if [ -z "${commits}" ] || [ "${commits}" -lt 1 ]; then
+            echo "::error::gitleaks hic commit taramadi; bos tarama yesil gecmemeli."
+            exit 1
+          fi
+          if ! jq -e '.runs[0].tool.driver.name' gitleaks.sarif >/dev/null; then
+            echo "::error::gitleaks SARIF raporu gecersiz."
+            exit 1
+          fi
+          leaks=$(jq '[.runs[].results[]?] | length' gitleaks.sarif)
+          echo "leaks=${leaks}" >> "${GITHUB_OUTPUT}"
+          echo "### gitleaks (${mode}): ${commits} commit tarandi, ${leaks} bulgu" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: SARIF yukle
+        if: ${{ steps.scan.outputs.leaks != '' }}
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+      - name: Nihai hukum
+        env:
+          MODE: ${{ steps.scan.outputs.mode }}
+          LEAKS: ${{ steps.scan.outputs.leaks }}
+        run: |
+          if [ "${MODE}" = "gate" ] && [ "${LEAKS}" -gt 0 ]; then
+            echo "::error::Bu PR ${LEAKS} yeni secret iceriyor. Secret'i rotate et, commit gecmisinden temizle."
+            exit 1
+          fi
+          if [ "${LEAKS}" -gt 0 ]; then
+            echo "::warning::Gecmiste ${LEAKS} secret bulgusu var (rapor modu). Security > Code scanning altindan incele."
+          fi

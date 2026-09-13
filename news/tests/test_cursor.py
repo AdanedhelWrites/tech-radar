@@ -164,7 +164,9 @@ class DeltaAkisiTests(V1TestCase):
         from datetime import timedelta
 
         from django.utils import timezone
-        yarin = (timezone.now() + timedelta(days=1)).date().isoformat()
+        # since filtresi updated_at__date'i TIME_ZONE (Europe/Istanbul) ile karsilastirir;
+        # "yarin" da yerel tarihten hesaplanmali, yoksa 21:00-24:00 UTC arasi bugune denk gelir.
+        yarin = (timezone.localdate() + timedelta(days=1)).isoformat()
         govde = self.client.get(f'/api/v1/ai/?since={yarin}', **self.baslik).json()
         self.assertEqual(govde['results'], [])
 

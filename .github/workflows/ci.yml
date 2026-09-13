@@ -1,0 +1,146 @@
+# Proje sagligi: backend testleri, migration tutarliligi, frontend build, Helm/compose dogrulamasi.
+# Bu hat KAPI'dir: kirmiziysa merge edilmemeli.
+
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Django testleri)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DEBUG: "False"
+      REDIS_URL: redis://127.0.0.1:6379/0
+      CELERY_BROKER_URL: redis://127.0.0.1:6379/1
+      # Test suite'i bu sayinin altina duserse test kesfi bozulmus demektir
+      # (ornegin import hatasi yuzunden modul atlanmasi). Test silindiginde guncelle.
+      MIN_TESTS: "100"
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Bagimliliklar
+        run: python -m pip install -r requirements.txt
+
+      - name: Django system check
+        run: |
+          SECRET_KEY="$(openssl rand -hex 32)" python manage.py check
+
+      - name: Eksik migration var mi
+        run: |
+          SECRET_KEY="$(openssl rand -hex 32)" python manage.py makemigrations --check --dry-run
+
+      - name: Testler
+        run: |
+          set -o pipefail
+          SECRET_KEY="$(openssl rand -hex 32)" python manage.py test --noinput 2>&1 | tee test.log
+          ran=$(grep -oE '^Ran [0-9]+ test' test.log | grep -oE '[0-9]+' | tail -1)
+          ran=${ran:-0}
+          echo "### Backend: ${ran} test calisti" >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${ran}" -lt "${MIN_TESTS}" ]; then
+            echo "::error::Yalnizca ${ran} test calisti (beklenen >= ${MIN_TESTS}); test kesfi bozuk olabilir."
+            exit 1
+          fi
+
+  frontend:
+    name: Frontend (Vite build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Bagimliliklar (lockfile'a birebir)
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: |
+          npm run build
+          test -s dist/index.html || { echo "::error::dist/index.html uretilmedi"; exit 1; }
+
+  manifests:
+    name: Helm / Compose dogrulama
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: helm lint + template
+        run: |
+          set -euo pipefail
+          helm lint helm/tech-radar
+          helm template tech-radar helm/tech-radar > rendered.yaml
+          kinds=$(grep -cE '^kind:' rendered.yaml || true)
+          echo "Helm render: ${kinds} kaynak"
+          [ "${kinds}" -ge 5 ] || { echo "::error::Helm chart beklenenden az kaynak uretti (${kinds})"; exit 1; }
+
+      - name: docker compose config
+        run: docker compose -f docker-compose.yml config --quiet
