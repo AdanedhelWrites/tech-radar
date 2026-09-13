@@ -1,48 +1,192 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+# Trivy: kaynak agaci (bagimlilik CVE + secret + Dockerfile/Helm/k8s misconfig)
+# ve iki container imaji (backend, frontend) icin tarama + CycloneDX SBOM.
+#
+# Mod: RAPOR. Bulgular hatti durdurmaz, Security sekmesine SARIF olarak duser.
+# Fakat taramanin kendisi zorunlu: arac bozuksa, DB bayatsa veya tarama beklenen
+# paketleri gormediyse ("haksiz yere yesil") job kirmizi olur.
 
 name: trivy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    # The branches below must be a subset of the branches above
-    branches: [ "main" ]
+    branches: ["main"]
   schedule:
-    - cron: '39 6 * * 3'
+    - cron: "39 6 * * 3"
+  workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    permissions:
-      contents: read # for actions/checkout to fetch code
-      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
-      actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
-    name: Build
+  fs:
+    name: Kaynak agaci (vuln + secret + misconfig)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
 
-      - name: Build an image from Dockerfile
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Trivy kur
+        uses: $/.github/actions/setup-trivy
+
+      - name: Tara
         run: |
-          docker build -t docker.io/my-organization/my-app:${{ github.sha }} .
+          set -euo pipefail
+          trivy fs . \
+            --scanners vuln,secret,misconfig \
+            --severity HIGH,CRITICAL \
+            --list-all-pkgs \
+            --skip-dirs _arsiv \
+            --no-progress --skip-db-update \
+            --format json --output trivy-fs.json
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@7b7aa264d83dc58691451798b4d117d53d21edfe
-        with:
-          image-ref: 'docker.io/my-organization/my-app:${{ github.sha }}'
-          format: 'template'
-          template: '@/contrib/sarif.tpl'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+      - name: Tarama gercekten bir sey gordu mu
+        run: |
+          set -euo pipefail
+          pip=$(jq '[.Results[]? | select(.Type=="pip") | .Packages[]?] | length' trivy-fs.json)
+          npm=$(jq '[.Results[]? | select(.Type=="npm") | .Packages[]?] | length' trivy-fs.json)
+          cfg=$(jq '[.Results[]? | select(.Class=="config")] | length' trivy-fs.json)
+          echo "pip paket: ${pip} | npm paket: ${npm} | misconfig hedefi: ${cfg}"
+          fail=0
+          [ "${pip}" -ge 10 ] || { echo "::error::requirements.txt taranmamis gorunuyor (pip=${pip})"; fail=1; }
+          [ "${npm}" -ge 50 ] || { echo "::error::frontend/package-lock.json taranmamis gorunuyor (npm=${npm})"; fail=1; }
+          [ "${cfg}" -ge 1 ]  || { echo "::error::Dockerfile/Helm/k8s misconfig taramasi hedef bulamadi"; fail=1; }
+          exit "${fail}"
 
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+      - name: SARIF ve SBOM uret
+        run: |
+          set -euo pipefail
+          trivy convert --format sarif --output trivy-fs.sarif trivy-fs.json
+          trivy convert --format cyclonedx --output sbom-source.cdx.json trivy-fs.json
+          {
+            echo "### Trivy fs (HIGH/CRITICAL)"
+            echo "| Sinif | Bulgu |"
+            echo "|---|---|"
+            jq -r '
+              [.Results[]? | {c: .Class, n: ((.Vulnerabilities // []) + (.Misconfigurations // []) + (.Secrets // []) | length)}]
+              | group_by(.c)[] | "| \(.[0].c) | \(map(.n) | add) |"' trivy-fs.json
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: SARIF yukle
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+      - name: SBOM artefakti
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-source
+          path: sbom-source.cdx.json
+          retention-days: 30
+
+  image:
+    name: Imaj (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: .
+            # python:3.11-slim tabanli: debian paketleri + pip paketleri beklenir
+            min_os_pkgs: 50
+            min_lang_pkgs: 10
+          - name: frontend
+            context: frontend
+            # nginx alpine: yalnizca OS paketleri (dist statik dosya)
+            min_os_pkgs: 15
+            min_lang_pkgs: 0
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Imaji derle
+        env:
+          CONTEXT: ${{ matrix.context }}
+          NAME: ${{ matrix.name }}
+        run: docker build -t "tech-radar-${NAME}:${GITHUB_SHA}" "${CONTEXT}"
+
+      - name: Trivy kur
+        uses: $/.github/actions/setup-trivy
+
+      - name: Tara
+        env:
+          NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          trivy image "tech-radar-${NAME}:${GITHUB_SHA}" \
+            --scanners vuln,secret \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --list-all-pkgs \
+            --no-progress --skip-db-update \
+            --format json --output "trivy-${NAME}.json"
+
+      - name: Tarama gercekten bir sey gordu mu
+        env:
+          NAME: ${{ matrix.name }}
+          MIN_OS: ${{ matrix.min_os_pkgs }}
+          MIN_LANG: ${{ matrix.min_lang_pkgs }}
+        run: |
+          set -euo pipefail
+          os=$(jq '[.Results[]? | select(.Class=="os-pkgs") | .Packages[]?] | length' "trivy-${NAME}.json")
+          lang=$(jq '[.Results[]? | select(.Class=="lang-pkgs") | .Packages[]?] | length' "trivy-${NAME}.json")
+          eosl=$(jq -r '.Metadata.OS.EOSL // false' "trivy-${NAME}.json")
+          echo "OS paket: ${os} | dil paketi: ${lang} | OS EOSL: ${eosl}"
+          if [ "${eosl}" = "true" ]; then
+            echo "::warning::${NAME} imajinin taban OS'u destek disi (EOSL); CVE listesi eksik olabilir."
+          fi
+          fail=0
+          [ "${os}" -ge "${MIN_OS}" ]     || { echo "::error::OS paketleri taranmamis (os=${os} < ${MIN_OS})"; fail=1; }
+          [ "${lang}" -ge "${MIN_LANG}" ] || { echo "::error::Dil paketleri taranmamis (lang=${lang} < ${MIN_LANG})"; fail=1; }
+          exit "${fail}"
+
+      - name: SARIF ve SBOM uret
+        env:
+          NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          trivy convert --format sarif --output "trivy-${NAME}.sarif" "trivy-${NAME}.json"
+          trivy convert --format cyclonedx --output "sbom-${NAME}.cdx.json" "trivy-${NAME}.json"
+          vulns=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "trivy-${NAME}.json")
+          echo "### Trivy image ${NAME}: ${vulns} HIGH/CRITICAL (fix'i olan) zafiyet" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: SARIF yukle
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: trivy-${{ matrix.name }}.sarif
+          category: trivy-image-${{ matrix.name }}
+
+      - name: SBOM artefakti
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.name }}
+          path: sbom-${{ matrix.name }}.cdx.json
+          retention-days: 30
