@@ -20,7 +20,7 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.authtoken.models import Token
 
-LOCMEM_CACHE = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'VERSION': 2}}
+LOCMEM_CACHE = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
 TEST_MIDDLEWARE = [m for m in settings.MIDDLEWARE if 'whitenoise' not in m.lower()]
 
 

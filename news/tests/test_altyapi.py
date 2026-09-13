@@ -52,3 +52,11 @@ class TestIzolasyonuTests(SimpleTestCase):
                 ornek._post_teardown()
         finally:
             Ornek.tearDownClass()
+            # Django 4.2'de override_settings/modify_settings, setUpClass icinde
+            # addClassCleanup ile kaydedilir; bu cleanup'lar normalde test suite'i
+            # tearDownClass'tan SONRA doClassCleanups() cagirarak calistirir. Bu
+            # test suite disinda setUpClass/tearDownClass'i elle tetikledigi icin
+            # doClassCleanups() de elle cagrilmali; aksi halde CACHES/MIDDLEWARE
+            # override'i geri alinmadan process'te kalir ve sonraki testleri
+            # (ör. gercek settings.CACHES'i okuyan testler) bozar.
+            Ornek.doClassCleanups()
