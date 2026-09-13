@@ -73,11 +73,15 @@ jobs:
           echo "mode=${mode}" >> "${GITHUB_OUTPUT}"
 
           # --exit-code 2: "sizinti bulundu". Diger sifir-disi kodlar arac hatasidir.
+          # Runner bu adimi `bash -e` ile calistirir; set +e olmadan exit 2 asagidaki
+          # rapor-modu mantigina gelmeden adimi oldurur (2026-09-14'te main'de yasandi).
+          set +e
           "${RUNNER_TEMP}/gitleaks" git . \
             --redact --no-banner --no-color --exit-code 2 \
             --log-opts="${log_opts}" \
             --report-format sarif --report-path gitleaks.sarif 2>&1 | tee gitleaks.log
           rc=${PIPESTATUS[0]}
+          set -e
 
           if [ "${rc}" -ne 0 ] && [ "${rc}" -ne 2 ]; then
             echo "::error::gitleaks arac hatasi (exit ${rc}); tarama gecerli sayilmaz."

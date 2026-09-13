@@ -1,6 +1,6 @@
 # Güvenlik Hattı ve Bekleyen İşler Planı
 
-> Son güncelleme: 2026-09-14. Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
+> Son güncelleme: 2026-09-14 (P0 tamamlandı). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
 > Bir iş bitince kutusunu işaretle ve ilgili PR numarasını yanına yaz.
 
 ## 1. Hatlar ne zaman çalışır?
@@ -56,32 +56,20 @@ gh api "repos/AdanedhelWrites/tech-radar/dependabot/alerts?state=open&per_page=1
 
 ## 4. Ertelenen işler (sırayla)
 
-### P0: Açık Dependabot PR'larının triajı (2026-09-14 itibarıyla)
-`dependabot.yml` ilk merge edildiğinde Dependabot 15 sürüm güncelleme PR'ı açtı. Major sürüm atlamaları artık config'te filtreli, bundan sonra gelmezler. Mevcut PR'lar ise **kör merge edilmemeli**.
+### P0: Açık Dependabot PR'larının triajı ✅ (2026-09-14)
+`dependabot.yml` ilk merge edildiğinde 15 sürüm PR'ı açıldı. Config'e semver-major filtresi eklenince Dependabot major PR'ları (#7–#10, #14–#21) kendisi kapattı.
+- [x] #24 axios 1.13.5 → 1.20.0 + react-router-dom 6.30.3 → 6.30.6: test edildi, merge
+- [x] #11 nginx 1.25-alpine → 1.31-alpine: #24 ile birlikte test edildi, merge (frontend imajı artık EOSL değil)
+- [x] #25 python-minor-patch grubu: **kapatıldı**. Grup çelişkili: DRF 3.18.0 `django>=5.2` istiyor, grup Django'yu 4.2.30'da tutuyor → P1
+- [x] #5 Django 5.2.16: **kapatıldı** → P1
 
-| PR | Güncelleme | Tür | Ne yapılacak |
-|---|---|---|---|
-| #12 | python-minor-patch grubu (9 paket) | minor/patch | §3 akışıyla test et; yeşilse merge |
-| #13 | axios 1.13.5 → 1.20.0 (npm-minor-patch) | minor | §3 akışıyla test et; yeşilse merge (P2'nin bir kısmını kapatır) |
-| #11 | nginx 1.25-alpine → 1.31-alpine | minor | Test et; yeşilse merge (P2: EOSL imajı) |
-| #5 | Django 4.2.7 → 5.2.16 | major | Kapat → **P1** |
-| #14 | Django 4.2.7 → 6.1.1 | major | Kapat → önce P1 (5.2 LTS), 6.x ayrıca değerlendirilir |
-| #15 | gunicorn 21.2.0 → 26.2.0 | major | Kapat → P1 içinde birlikte |
-| #16 | django-redis 5.4.0 → 7.0.0 | major | Kapat → P1 içinde birlikte |
-| #18 | redis (py) 5.0.1 → 8.1.0 | major | Kapat → P1 içinde birlikte, django-redis 7 ile uyumlu sürüm seçilmeli |
-| #17, #20 | react / react-dom 18 → 19 | major | Kapat → P2 sonrası ayrı iş |
-| #19 | react-router-dom 6 → 7 | major | Kapat → P2 sonrası ayrı iş (API değişikliği var) |
-| #21 | react-icons 4 → 5 | major | Kapat → P2 sonrası ayrı iş |
-| #10 | node 18-alpine → 26-alpine | major | Kapat → P2'de `node:22-alpine` (LTS) elle |
-| #9 | redis image 7-alpine → 8-alpine | major | Kapat → Faz B Kubernetes ile birlikte |
-| #8 | python 3.11-slim → 3.14-slim | minor ama riskli | Kapat → P1 bitince ayrı iş |
-| #7 | postgres 16-alpine → 18-alpine | major | Kapat → Faz B Postgres geçişiyle birlikte (veri migrasyonu ister) |
+> Not: P1 bitene kadar Dependabot, python-minor-patch grubunu her pazartesi aynı çelişkiyle yeniden açabilir. Kırmızıysa kapat; kalıcı çözüm P1.
 
 ### P1: Django 4.2 → 5.2 yükseltmesi (mecburi, öncelikli)
 Django 4.2 LTS'nin desteği Nisan 2026'da bitti. Açık Dependabot alert'lerinin çoğu Django'ya ait (2 critical, 14 high).
 Dependabot PR #5 tek başına kırıldı, çünkü `django-celery-beat 2.5.0` `Django<5.0` istiyor.
 
-- [ ] `chore/django-5.2` branch'i aç; PR #5'i "birlikte yükseltme branch'inde yapılacak" notuyla kapat
+- [ ] `chore/django-5.2` branch'i aç (PR #5 ve #25 kapatıldı, işler burada)
 - [ ] `requirements.txt` içinde birlikte yükselt (sürümleri uygularken PyPI'dan tekrar kontrol et; 2026-09-13 itibarıyla):
   - [ ] `Django` 4.2.7 → 5.2.x
   - [ ] `django-celery-beat` 2.5.0 → 2.9.x
@@ -91,6 +79,8 @@ Dependabot PR #5 tek başına kırıldı, çünkü `django-celery-beat 2.5.0` `D
   - [ ] `celery` 5.3.4 → 5.6.x
   - [ ] `gunicorn` 21.2.0 → güncel (2 high alert)
   - [ ] `requests` 2.31.0 → güncel (3 medium alert)
+  - [ ] `djangorestframework` 3.17.2 → 3.18.x (Django 5.2 ister)
+  - [ ] `redis` (py) 5.0.1 → django-redis 7 ile uyumlu sürüm
 - [ ] `cybernews/settings.py`: `STATICFILES_STORAGE` Django 5.1'de kaldırıldı, `STORAGES`'a geç:
   ```python
   STORAGES = {
@@ -103,11 +93,12 @@ Dependabot PR #5 tek başına kırıldı, çünkü `django-celery-beat 2.5.0` `D
 - [ ] Canlıya alırken migration sonrası **api / worker / scheduler restart** (migration 0008 dersi)
 
 ### P2: Frontend bağımlılıkları ve taban imajlar
-- [ ] npm: `axios`, `vite`, `postcss`, `react-router-dom` yükselt (40'tan fazla alert) → `npm ci && npm run build`
+- [x] npm: `axios` 1.20.0, `react-router-dom` 6.30.6 (PR #24)
+- [ ] npm: kalan alert'ler için Security → Dependabot'a bak (`vite` 5.4.21, `postcss` 8.5.6 şu anki sürümler); major gerekenler (vite 6+, react 19, react-router 7) ayrı iş
 - [ ] `frontend/Dockerfile`: `node:18-alpine` (EOL) → `node:22-alpine`
-- [ ] `frontend/Dockerfile`: `nginx:1.25-alpine` (Trivy: EOSL) → güncel stable alpine
+- [x] `frontend/Dockerfile`: `nginx:1.25-alpine` → `nginx:1.31-alpine` (PR #11)
 - [ ] `docker-compose.yml`: `node:18-alpine` → `node:22-alpine`
-- [ ] `trivy` → `Imaj (frontend)` job'ında EOSL uyarısı kaybolmalı
+- [x] `trivy` → `Imaj (frontend)`: OS EOSL=false (PR #11 koşusunda doğrulandı)
 
 ### P3: Zorunlu status check'ler
 - [ ] `main-koruma` ruleset'ine (Settings → Rules) zorunlu check ekle: `Backend (Django testleri)`, `Frontend (Vite build)`, `Helm / Compose dogrulama`, `dependency-review`, `gitleaks`
@@ -119,6 +110,11 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapanacak; triaj kalanlara yap
 - [ ] CodeQL'deki 16 açık alert'i incele: düzelt ya da gerekçesiyle "dismiss" et
 - [ ] Trivy misconfig bulguları (Helm/k8s: securityContext, resource limit vb.) → Faz B Kubernetes doğrulamasıyla birlikte ele al
 - [ ] `docker-compose.yml` içindeki `SECRET_KEY=your-secret-key-here...` placeholder'ını `.env` dosyasına taşı
+- [ ] **Varsayılan SECRET_KEY ile deploy riski:** `helm/tech-radar/values.yaml`, `values.yaml`, `k8s/02-secret.yaml` ve README'de örnek (Türkçe cümle) `SECRET_KEY` değerleri var. Bunlarla deploy edilirse anahtar herkesçe bilinir (session/CSRF imzası taklit edilebilir). Çözüm:
+  - helm: `secretKey`'i boş bırak, template'te `required "secretKey zorunlu"` kullan
+  - k8s: `02-secret.yaml`'ı örnek dosyaya (`02-secret.example.yaml`) çevir
+  - `settings.py`: `DEBUG=False` iken `SECRET_KEY` yoksa ya da bilinen placeholder ise başlatmayı reddet
+  - Bu 5 örnek değer `.gitleaksignore`'da baseline olarak duruyor; değerler kaldırılınca baseline'dan da silinmeli
 
 ### P5: Görünürlük
 - [ ] ZAP sonucunu SARIF'e çevirip Security sekmesine yükle; tek kontrol yeri Security olsun
@@ -128,4 +124,6 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapanacak; triaj kalanlara yap
 ## 5. Geçmiş
 - **2026-09-13:** PR #3 ile güvenlik hattı kuruldu. SOOS DAST (bozuk, ücretli) kaldırıldı. Saat dilimine bağlı kırmızı olan test düzeltildi (`timezone.localdate()`).
 - **2026-09-13:** Dependabot alerts + security updates, private vulnerability reporting ve `main` ruleset (silme/force-push engeli) açıldı.
-- **2026-09-14:** PR #4 (`djangorestframework` 3.14.0 → 3.17.2) ve PR #6 (`lxml` 5.3.0 → 6.1.0, XXE düzeltmesi) yeni CI ile, birlikte 140/140 test yeşil doğrulanıp merge edildi. PR #5 (Django 5.2.16) açık bırakıldı; bkz. P1.
+- **2026-09-14:** PR #4 (`djangorestframework` 3.14.0 → 3.17.2) ve PR #6 (`lxml` 5.3.0 → 6.1.0, XXE düzeltmesi) yeni CI ile, birlikte 140/140 test yeşil doğrulanıp merge edildi.
+- **2026-09-14:** P0 triajı tamamlandı: #24 ve #11 merge edildi, #5 ve #25 kapatıldı → P1.
+- **2026-09-14:** gitleaks `main`'de #3'ten beri her push'ta kırmızıydı. Sebep workflow hatası: runner `bash -e` ile koştuğu için rapor modunda sızıntı bulununca adım erken ölüyordu. `set +e` ile düzeltildi. Bulunan 5 bulgunun hepsi placeholder `SECRET_KEY`; `.gitleaksignore`'a baseline olarak eklendi, deploy riski P4'te.
