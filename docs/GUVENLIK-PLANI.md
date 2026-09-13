@@ -56,6 +56,27 @@ gh api "repos/AdanedhelWrites/tech-radar/dependabot/alerts?state=open&per_page=1
 
 ## 4. Ertelenen işler (sırayla)
 
+### P0: Açık Dependabot PR'larının triajı (2026-09-14 itibarıyla)
+`dependabot.yml` ilk merge edildiğinde Dependabot 15 sürüm güncelleme PR'ı açtı. Major sürüm atlamaları artık config'te filtreli, bundan sonra gelmezler. Mevcut PR'lar ise **kör merge edilmemeli**.
+
+| PR | Güncelleme | Tür | Ne yapılacak |
+|---|---|---|---|
+| #12 | python-minor-patch grubu (9 paket) | minor/patch | §3 akışıyla test et; yeşilse merge |
+| #13 | axios 1.13.5 → 1.20.0 (npm-minor-patch) | minor | §3 akışıyla test et; yeşilse merge (P2'nin bir kısmını kapatır) |
+| #11 | nginx 1.25-alpine → 1.31-alpine | minor | Test et; yeşilse merge (P2: EOSL imajı) |
+| #5 | Django 4.2.7 → 5.2.16 | major | Kapat → **P1** |
+| #14 | Django 4.2.7 → 6.1.1 | major | Kapat → önce P1 (5.2 LTS), 6.x ayrıca değerlendirilir |
+| #15 | gunicorn 21.2.0 → 26.2.0 | major | Kapat → P1 içinde birlikte |
+| #16 | django-redis 5.4.0 → 7.0.0 | major | Kapat → P1 içinde birlikte |
+| #18 | redis (py) 5.0.1 → 8.1.0 | major | Kapat → P1 içinde birlikte, django-redis 7 ile uyumlu sürüm seçilmeli |
+| #17, #20 | react / react-dom 18 → 19 | major | Kapat → P2 sonrası ayrı iş |
+| #19 | react-router-dom 6 → 7 | major | Kapat → P2 sonrası ayrı iş (API değişikliği var) |
+| #21 | react-icons 4 → 5 | major | Kapat → P2 sonrası ayrı iş |
+| #10 | node 18-alpine → 26-alpine | major | Kapat → P2'de `node:22-alpine` (LTS) elle |
+| #9 | redis image 7-alpine → 8-alpine | major | Kapat → Faz B Kubernetes ile birlikte |
+| #8 | python 3.11-slim → 3.14-slim | minor ama riskli | Kapat → P1 bitince ayrı iş |
+| #7 | postgres 16-alpine → 18-alpine | major | Kapat → Faz B Postgres geçişiyle birlikte (veri migrasyonu ister) |
+
 ### P1: Django 4.2 → 5.2 yükseltmesi (mecburi, öncelikli)
 Django 4.2 LTS'nin desteği Nisan 2026'da bitti. Açık Dependabot alert'lerinin çoğu Django'ya ait (2 critical, 14 high).
 Dependabot PR #5 tek başına kırıldı, çünkü `django-celery-beat 2.5.0` `Django<5.0` istiyor.

@@ -1,6 +1,8 @@
 # Surum guncellemeleri. Guvenlik guncellemeleri (Dependabot security updates) bundan bagimsiz, aninda acilir.
 # cooldown: yeni cikan surumu 7 gun bekletir; ele gecirilmis bir release'in hemen hatta girmesini onler.
 # github-actions: workflow'lardaki SHA pin'lerini guncel tutar.
+# Major surum atlamalari (Django 6, node 26, postgres 18...) otomatik PR acmaz; plan dahilinde elle yapilir
+# (docs/GUVENLIK-PLANI.md). Guvenlik guncellemeleri bu ignore'lardan etkilenmez.
 
 version: 2
 updates:
@@ -27,6 +29,9 @@ updates:
       python-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: "/frontend"
@@ -40,6 +45,9 @@ updates:
       npm-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directories: ["/", "/frontend"]
@@ -48,3 +56,9 @@ updates:
       day: monday
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # Python 3.11 -> 3.14 gibi minor atlamalar da bagimlilik uyumu ister; yalnizca patch.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor"]
