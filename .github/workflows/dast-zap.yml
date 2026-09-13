@@ -1,0 +1,95 @@
+# DAST: OWASP ZAP baseline (pasif, blackbox) — SOOS DAST'in yerine, ucretsiz.
+# Uygulama CI icinde ayaga kaldirilir (backend imaji + redis), ZAP localhost'u tarar.
+#
+# Mod: RAPOR. Bulgular hatti durdurmaz; HTML/JSON/MD rapor artefakt olarak saklanir.
+# Uygulama ayaga kalkmazsa veya ZAP hedefi gormezse job kirmizidir (bos hedefe yesil tarama yok).
+
+name: DAST (ZAP baseline)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zap-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Backend imajini derle
+        run: docker build -t tech-radar-api:dast .
+
+      - name: Uygulamayi ayaga kaldir
+        run: |
+          set -euo pipefail
+          docker network create dast
+          docker run -d --name redis --network dast redis:7-alpine
+          docker run -d --name api --network dast -p 127.0.0.1:8000:8000 \
+            -e SECRET_KEY="$(openssl rand -hex 32)" \
+            -e DEBUG=False \
+            -e ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e REDIS_URL=redis://redis:6379/0 \
+            -e CELERY_BROKER_URL=redis://redis:6379/1 \
+            tech-radar-api:dast
+
+      - name: Uygulama gercekten ayakta mi
+        run: |
+          for _ in $(seq 1 45); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/ || true)
+            if [ "${code}" = "200" ]; then
+              echo "API hazir (HTTP 200)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::API 90 sn icinde HTTP 200 donmedi (son kod: ${code}); tarama yapilmadan yesil gecilmez."
+          docker logs api
+          exit 1
+
+      - name: ZAP baseline
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: http://localhost:8000/
+          cmd_options: "-a"
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: zap-baseline
+
+      - name: ZAP hedefi gercekten taradi mi
+        run: |
+          set -euo pipefail
+          test -s report_json.json || { echo "::error::ZAP JSON raporu yok"; exit 1; }
+          sites=$(jq '[.site[]? | select(."@name" | test("localhost"))] | length' report_json.json)
+          [ "${sites}" -ge 1 ] || { echo "::error::ZAP raporunda localhost hedefi yok"; exit 1; }
+          {
+            echo "### ZAP baseline"
+            echo "| Risk | Alert tipi |"
+            echo "|---|---|"
+            jq -r '[.site[].alerts[]? | .riskdesc | split(" ")[0]] | group_by(.)[] | "| \(.[0]) | \(length) |"' report_json.json
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: API loglari
+        if: ${{ always() }}
+        run: docker logs api 2>&1 | tail -n 100
