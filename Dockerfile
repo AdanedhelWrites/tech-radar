@@ -4,7 +4,7 @@
 # ============================================
 
 # --- Stage 1: Dependencies ---
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # --- Stage 2: Runtime ---
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # libpq runtime dependency for psycopg2
 RUN apt-get update && apt-get install -y --no-install-recommends \
