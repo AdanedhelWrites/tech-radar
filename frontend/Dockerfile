@@ -18,7 +18,7 @@ ENV VITE_API_URL=/api
 RUN npm run build
 
 # --- Stage 2: Serve ---
-FROM nginx:1.25-alpine
+FROM nginx:1.31-alpine
 
 # Custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
