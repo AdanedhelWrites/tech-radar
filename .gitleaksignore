@@ -1,0 +1,10 @@
+# gitleaks baseline (2026-09-14).
+# Asagidaki 5 bulgu gercek secret DEGIL: README/helm/k8s ornek dosyalarindaki Turkce placeholder
+# SECRET_KEY degerleri. Yeni bulgular bu listeye eklenmeden once gercekten placeholder oldugu dogrulanmali.
+# Risk: bu degerlerle deploy edilirse SECRET_KEY herkesce bilinir -> docs/GUVENLIK-PLANI.md P4.
+
+421e04eb54d0488f57caa61d4cb6000cd8c45496:values.yaml:generic-api-key:268
+689581f05dc4553b439d29777b8eb857baf46a9b:README.md:generic-api-key:341
+689581f05dc4553b439d29777b8eb857baf46a9b:k8s/02-secret.yaml:generic-api-key:11
+d4538871e599ef3a2c9f7d6e1d7ccfbd12f024bc:README.md:generic-api-key:483
+d4538871e599ef3a2c9f7d6e1d7ccfbd12f024bc:helm/tech-radar/values.yaml:generic-api-key:268
