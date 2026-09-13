@@ -128,6 +128,10 @@ CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0'),
+        # Cache blob sekli (serializer alanlari) degistiginde artirilir; eski
+        # surumdeki bloblar okunmaz ve 1 saat icinde kendiliginden duser.
+        # DRF throttle sayaclari da bu surume tabidir (artirinca bir kez sifirlanir).
+        "VERSION": 2,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -177,6 +181,7 @@ CELERY_TIMEZONE = 'Europe/Istanbul'
 CELERY_TASK_TRACK_STARTED = True
 
 # Celery Beat — tum bolumler 6 saatte bir otomatik cekilir.
+# Ceviri bekleyen kayitlar 2 saatte bir (tek saatlerde) yeniden cevrilir.
 # Bolumler worker ve ceviri yukunu dagitmak icin 10 dk arayla kaydirilir.
 # skip_existing=True: sadece yeni kayitlar cevrilir (Google Translate kotasi korunur).
 # Gun araligi task varsayilanidir (manuel "Getir" ile ayni davranis).
@@ -212,6 +217,12 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'news.tasks.fetch_ai_news_task',
         'schedule': crontab(minute=50, hour='*/6'),
         'kwargs': {'skip_existing': True},
+    },
+    # Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir. Tek saatlerde
+    # calisir: fetch task'lari 00/06/12/18'de calistigi icin hic cakismaz.
+    'retranslate-pending-every-2h': {
+        'task': 'news.tasks.retranslate_pending_task',
+        'schedule': crontab(minute=5, hour='1-23/2'),
     },
 }
 

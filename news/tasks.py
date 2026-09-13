@@ -1,11 +1,11 @@
 # Celery tasks
 from celery import shared_task
 from django.core.cache import cache
-from datetime import datetime, timedelta, date
+from datetime import timedelta, date
 
 from .models import NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
-from .serializers import NewsArticleSerializer, CVEEntrySerializer, KubernetesEntrySerializer, SREEntrySerializer, DevToolsEntrySerializer, AINewsEntrySerializer
 from .translation_utils import consume_translation_failures
+from .cache_utils import CACHE_YENILEME_ARALIGI, cache_yenile
 
 from scraper_multi import MultiSourceScraper
 from .cve_scraper import MultiCVEScraper
@@ -27,6 +27,9 @@ def _drop_existing(entries, model, field, key='link'):
 
 # Not: `needs_translation` degeri, generator kaydi cevirip yield ettikten sonra
 # okunur; consume_translation_failures() sayaci her kayitta sifirlar.
+#
+# Cache: her CACHE_YENILEME_ARALIGI kayitta bir ve cekim sonunda yeniden kurulur
+# (bkz. news/cache_utils.py).
 
 @shared_task
 def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_existing=True):
@@ -60,11 +63,9 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
                     }
                 )
                 saved_count += 1
-
-                all_entries = NewsArticle.objects.all().order_by('-date')[:100]
-                cached_data = NewsArticleSerializer(all_entries, many=True).data
-                cache.set('cybersecurity_news', cached_data, 3600)
-                cache.set('last_update', datetime.now().isoformat(), 3600)
+                if saved_count % CACHE_YENILEME_ARALIGI == 0:
+                    cache_yenile('news')
+            cache_yenile('news')
             return {'success': True, 'count': saved_count}
         return {'success': False, 'count': 0}
     except Exception as e:
@@ -106,11 +107,9 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
-
-                all_entries = CVEEntry.objects.all().order_by('-published_date')[:100]
-                cached_data = CVEEntrySerializer(all_entries, many=True).data
-                cache.set('cve_entries', cached_data, 3600)
-                cache.set('cve_last_update', datetime.now().isoformat(), 3600)
+                if saved_count % CACHE_YENILEME_ARALIGI == 0:
+                    cache_yenile('cve')
+            cache_yenile('cve')
             return {'success': True, 'count': saved_count}
         return {'success': False, 'count': 0}
     except Exception as e:
@@ -147,11 +146,9 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
-
-                all_entries = KubernetesEntry.objects.all().order_by('-published_date')[:100]
-                cached_data = KubernetesEntrySerializer(all_entries, many=True).data
-                cache.set('k8s_entries', cached_data, 3600)
-                cache.set('k8s_last_update', datetime.now().isoformat(), 3600)
+                if saved_count % CACHE_YENILEME_ARALIGI == 0:
+                    cache_yenile('kubernetes')
+            cache_yenile('kubernetes')
             return {'success': True, 'count': saved_count}
         return {'success': False, 'count': 0}
     except Exception as e:
@@ -186,11 +183,9 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
-
-                all_entries = SREEntry.objects.all().order_by('-published_date')[:100]
-                cached_data = SREEntrySerializer(all_entries, many=True).data
-                cache.set('sre_entries', cached_data, 3600)
-                cache.set('sre_last_update', datetime.now().isoformat(), 3600)
+                if saved_count % CACHE_YENILEME_ARALIGI == 0:
+                    cache_yenile('sre')
+            cache_yenile('sre')
             return {'success': True, 'count': saved_count}
         return {'success': False, 'count': 0}
     except Exception as e:
@@ -227,11 +222,9 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
-
-                all_entries = DevToolsEntry.objects.all().order_by('-published_date')[:100]
-                cached_data = DevToolsEntrySerializer(all_entries, many=True).data
-                cache.set('devtools_entries', cached_data, 3600)
-                cache.set('devtools_last_update', datetime.now().isoformat(), 3600)
+                if saved_count % CACHE_YENILEME_ARALIGI == 0:
+                    cache_yenile('devtools')
+            cache_yenile('devtools')
             return {'success': True, 'count': saved_count}
         return {'success': False, 'count': 0}
     except Exception as e:
@@ -266,12 +259,17 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
-
-                all_entries = AINewsEntry.objects.all().order_by('-published_date')[:100]
-                cached_data = AINewsEntrySerializer(all_entries, many=True).data
-                cache.set('ai_entries', cached_data, 3600)
-                cache.set('ai_last_update', datetime.now().isoformat(), 3600)
+                if saved_count % CACHE_YENILEME_ARALIGI == 0:
+                    cache_yenile('ai')
+            cache_yenile('ai')
             return {'success': True, 'count': saved_count}
         return {'success': False, 'count': 0}
     except Exception as e:
         return {'success': False, 'error': str(e)}
+
+
+@shared_task
+def retranslate_pending_task():
+    """Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir (bkz. news/retranslate.py)."""
+    from .retranslate import retranslate_pending
+    return retranslate_pending()
