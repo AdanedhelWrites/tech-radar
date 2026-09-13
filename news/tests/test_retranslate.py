@@ -230,3 +230,53 @@ class RetranslateGoreviTests(SimpleTestCase):
         self.assertEqual(cekim_saatleri, {0, 6, 12, 18})
         retranslate_saatleri = settings.CELERY_BEAT_SCHEDULE['retranslate-pending-every-2h']['schedule'].hour
         self.assertEqual(cekim_saatleri & retranslate_saatleri, set())
+
+
+class BozukCevirileriIsaretleTests(TestCase):
+
+    def setUp(self):
+        self.bozuk = CVEEntry.objects.create(
+            cve_id='CVE-2026-7001', source='NVD', original_title='CVE-2026-7001',
+            original_description='Uses `secret()` in code.', turkish_description='XTRM0021X kullanır.',
+            published_date=date(2026, 9, 12), link='https://ornek.test/cve/7001')
+        self.bosluklu = AINewsEntry.objects.create(
+            source='Test', original_title='T', turkish_title='xtrm 0003x modeli',
+            original_description='D', turkish_description='Gövde',
+            link='https://ornek.test/ai/7002', published_date=date(2026, 9, 12))
+        self.temiz = CVEEntry.objects.create(
+            cve_id='CVE-2026-7003', source='NVD', original_title='CVE-2026-7003',
+            original_description='Clean.', turkish_description='Temiz çeviri.',
+            published_date=date(2026, 9, 12), link='https://ornek.test/cve/7003')
+        self.zaten_bekleyen = CVEEntry.objects.create(
+            cve_id='CVE-2026-7004', source='NVD', original_title='CVE-2026-7004',
+            original_description='Pending.', turkish_description='XTRM0001X bekliyor.',
+            published_date=date(2026, 9, 12), link='https://ornek.test/cve/7004', needs_translation=True)
+
+    def _komut(self, *args):
+        cikti = StringIO()
+        call_command('bozuk_cevirileri_isaretle', *args, stdout=cikti)
+        return cikti.getvalue()
+
+    def test_varsayilan_yalnizca_raporlar(self):
+        cikti = self._komut()
+        self.assertIn('TOPLAM: 2', cikti)
+        self.bozuk.refresh_from_db()
+        self.assertFalse(self.bozuk.needs_translation)
+
+    def test_uygula_yalnizca_bozuklari_isaretler(self):
+        once = CVEEntry.objects.get(pk=self.bozuk.pk).updated_at
+
+        cikti = self._komut('--uygula')
+
+        self.assertIn('TOPLAM: 2', cikti)
+        for kayit in (self.bozuk, self.bosluklu, self.temiz):
+            kayit.refresh_from_db()
+        self.assertTrue(self.bozuk.needs_translation)
+        self.assertTrue(self.bosluklu.needs_translation, 'Bosluklu/kucuk harfli kalinti da bozuktur')
+        self.assertFalse(self.temiz.needs_translation)
+        self.assertEqual(self.bozuk.updated_at, once,
+                         'Isaretleme updated_at ilerletmemeli; duzgun ceviri yazilinca ilerleyecek')
+
+    def test_ikinci_calistirmada_bulunacak_bir_sey_kalmaz(self):
+        self._komut('--uygula')
+        self.assertIn('TOPLAM: 0', self._komut())
