@@ -166,7 +166,7 @@ redis:
   component: cache
   image:
     repository: redis
-    tag: 7-alpine
+    tag: 8-alpine
   port: 6379
   maxmemory: 256mb
   maxmemoryPolicy: allkeys-lru
