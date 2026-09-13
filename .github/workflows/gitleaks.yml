@@ -74,7 +74,7 @@ jobs:
 
           # --exit-code 2: "sizinti bulundu". Diger sifir-disi kodlar arac hatasidir.
           "${RUNNER_TEMP}/gitleaks" git . \
-            --redact --no-banner --exit-code 2 \
+            --redact --no-banner --no-color --exit-code 2 \
             --log-opts="${log_opts}" \
             --report-format sarif --report-path gitleaks.sarif 2>&1 | tee gitleaks.log
           rc=${PIPESTATUS[0]}

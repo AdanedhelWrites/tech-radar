@@ -1,5 +1,7 @@
 # DAST: OWASP ZAP baseline (pasif, blackbox) — SOOS DAST'in yerine, ucretsiz.
 # Uygulama CI icinde ayaga kaldirilir (backend imaji + redis), ZAP localhost'u tarar.
+# Hedef: backend kokunde sayfa yok (/ -> 404); HTML yuzeyi admin login. A5 OpenAPI semasi
+# hazir olunca zaproxy/action-api-scan ile /api/v1/ tamamen taranmali.
 #
 # Mod: RAPOR. Bulgular hatti durdurmaz; HTML/JSON/MD rapor artefakt olarak saklanir.
 # Uygulama ayaga kalkmazsa veya ZAP hedefi gormezse job kirmizidir (bos hedefe yesil tarama yok).
@@ -57,9 +59,9 @@ jobs:
       - name: Uygulama gercekten ayakta mi
         run: |
           for _ in $(seq 1 45); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/ || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/v1/health/ || true)
             if [ "${code}" = "200" ]; then
-              echo "API hazir (HTTP 200)"
+              echo "API hazir (/api/v1/health/ HTTP 200)"
               exit 0
             fi
             sleep 2
@@ -71,7 +73,7 @@ jobs:
       - name: ZAP baseline
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
-          target: http://localhost:8000/
+          target: http://localhost:8000/admin/login/
           cmd_options: "-a"
           fail_action: false
           allow_issue_writing: false
