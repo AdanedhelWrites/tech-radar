@@ -266,3 +266,10 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
         return {'success': False, 'count': 0}
     except Exception as e:
         return {'success': False, 'error': str(e)}
+
+
+@shared_task
+def retranslate_pending_task():
+    """Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir (bkz. news/retranslate.py)."""
+    from .retranslate import retranslate_pending
+    return retranslate_pending()

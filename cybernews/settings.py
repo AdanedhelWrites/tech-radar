@@ -181,6 +181,7 @@ CELERY_TIMEZONE = 'Europe/Istanbul'
 CELERY_TASK_TRACK_STARTED = True
 
 # Celery Beat — tum bolumler 6 saatte bir otomatik cekilir.
+# Ceviri bekleyen kayitlar 2 saatte bir (tek saatlerde) yeniden cevrilir.
 # Bolumler worker ve ceviri yukunu dagitmak icin 10 dk arayla kaydirilir.
 # skip_existing=True: sadece yeni kayitlar cevrilir (Google Translate kotasi korunur).
 # Gun araligi task varsayilanidir (manuel "Getir" ile ayni davranis).
@@ -216,6 +217,12 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'news.tasks.fetch_ai_news_task',
         'schedule': crontab(minute=50, hour='*/6'),
         'kwargs': {'skip_existing': True},
+    },
+    # Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir. Tek saatlerde
+    # calisir: fetch task'lari 00/06/12/18'de calistigi icin hic cakismaz.
+    'retranslate-pending-every-2h': {
+        'task': 'news.tasks.retranslate_pending_task',
+        'schedule': crontab(minute=5, hour='1-23/2'),
     },
 }
 

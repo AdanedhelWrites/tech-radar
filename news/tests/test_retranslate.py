@@ -204,3 +204,29 @@ class RetranslatePendingTests(RetranslateTestBase):
         self.assertEqual(k8s.turkish_description, 'YAPISAL CEVIRI')
         self.assertEqual(k8s.turkish_title, 'Kubernetes v1.32 yayımlandı')
         self.assertFalse(k8s.needs_translation)
+
+
+class RetranslateGoreviTests(SimpleTestCase):
+
+    def test_gorev_retranslate_pending_cagirir(self):
+        from news import tasks
+        with mock.patch('news.retranslate.retranslate_pending',
+                        return_value={'translated': 3}) as sahte:
+            self.assertEqual(tasks.retranslate_pending_task(), {'translated': 3})
+        sahte.assert_called_once_with()
+
+    def test_beat_takvimi_tek_saatlerde_bes_gece(self):
+        giris = settings.CELERY_BEAT_SCHEDULE['retranslate-pending-every-2h']
+        self.assertEqual(giris['task'], 'news.tasks.retranslate_pending_task')
+        self.assertEqual(giris['schedule'].minute, {5})
+        self.assertEqual(giris['schedule'].hour, set(range(1, 24, 2)))
+
+    def test_cekim_saatleriyle_cakismaz(self):
+        """Fetch task'lari 00/06/12/18'de calisir; retranslate o saatlere dusmemeli."""
+        cekim_saatleri = set()
+        for giris in settings.CELERY_BEAT_SCHEDULE.values():
+            if giris['task'].startswith('news.tasks.fetch_'):
+                cekim_saatleri |= giris['schedule'].hour
+        self.assertEqual(cekim_saatleri, {0, 6, 12, 18})
+        retranslate_saatleri = settings.CELERY_BEAT_SCHEDULE['retranslate-pending-every-2h']['schedule'].hour
+        self.assertEqual(cekim_saatleri & retranslate_saatleri, set())
