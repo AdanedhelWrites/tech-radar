@@ -130,7 +130,7 @@ postgresql:
   component: database
   image:
     repository: postgres
-    tag: 16-alpine
+    tag: 18-alpine
   port: 5432
   strategy: Recreate
   storage:
