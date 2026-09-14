@@ -140,3 +140,24 @@ class VerifyTranslationTests(SimpleTestCase):
         self.assertEqual(tu.verify_translation('a XTRM0001X b', 'a b', ['XTRM0001X']), 'eksik yer tutucu (1)')
         self.assertEqual(tu.verify_translation('one two three four', 'One two three four', []), 'yanki')
         self.assertEqual(tu.verify_translation(UZUN_METIN, 'Kısa.', []), 'kirpilma')
+
+
+class TanimlayiciKorumaTests(SimpleTestCase):
+    """LibreTranslate alt cizgiyi siliyor (parse_array -> parse array); Google da zaman zaman boluyor."""
+
+    def test_alt_cizgili_tanimlayici_korunur(self):
+        korunmus, esleme = tu._protect_terms('Exploitation requires comments on tribe_events posts.')
+        self.assertIn('tribe_events', esleme.values())
+        self.assertNotIn('tribe_events', korunmus)
+
+    def test_bos_parantezli_cagrilar_korunur_ve_geri_konur(self):
+        metin = ('It bypasses is_safe_widget_instance() and reaches '
+                 'Element_Classes::parse_array() or obj.run() directly.')
+        korunmus, esleme = tu._protect_terms(metin)
+        for tanimlayici in ('is_safe_widget_instance()', 'Element_Classes::parse_array()', 'obj.run()'):
+            self.assertIn(tanimlayici, esleme.values())
+        self.assertEqual(tu._restore_terms(korunmus, esleme), metin)
+
+    def test_siradan_metinde_yer_tutucu_uretilmez(self):
+        _, esleme = tu._protect_terms('The attacker can read files remotely.')
+        self.assertEqual(esleme, {})

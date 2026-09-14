@@ -72,7 +72,7 @@ class CacheSurumuTests(SimpleTestCase):
 
     def test_cache_anahtarlari_surumlu(self):
         """C3: serializer sekli degisince bu sayi artirilir; eski bloblar okunmaz."""
-        self.assertEqual(settings.CACHES['default'].get('VERSION'), 2)
+        self.assertEqual(settings.CACHES['default'].get('VERSION'), 3)
 
 
 class V1CacheBagimsizligiTests(V1TestCase):

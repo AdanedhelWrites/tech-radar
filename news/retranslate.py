@@ -1,22 +1,22 @@
-"""Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir (spec 9.3, H2).
+"""Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir ve LibreTranslate
+cevirilerini Google acildiginda yukseltir.
 
-Neden gerekli: fetch task'lari ceviri bekleyen bir kaydi yalnizca kaynak feed onu
-hala donduruyorsa yeniden isler. Feed penceresinden cikan kayit bir daha hic
-cevrilmezdi.
+Asama 1 — Bekleyenler (needs_translation=True), tam saglayici zinciriyle
+(Google -> LibreTranslate). A3 plani netlestirme 8'deki imlec kurallari aynen
+gecerlidir: her bolum icin Redis'te bir imlec ({prefix}:cursor:{bolum}); icerik
+yuzunden cevrilemeyen kayit sirada kalir ama imlec onu gecer; sona gelinince
+imlec silinir. Gorev yalnizca HICBIR saglayici hazir degilse durur; bu durumda
+imlec o kaydi gecmez.
 
-Siralama (A3 plani netlestirme 8): her bolum icin Redis'te bir imlec tutulur
-({prefix}:cursor:{bolum}). Her tur imlecten sonraki RETRANSLATE_BATCH bekleyen
-kaydi dener. Icerik yuzunden cevrilemeyen kayit sirada kalir ama imlec onu gecer;
-boylece hep basarisiz olan birkac kayit kuyrugun onunu kalici olarak tikamaz.
-Sona gelinince imlec silinir, bir sonraki tur bastan baslar.
+Asama 2 — Yukseltme (needs_translation=False, translation_provider='libretranslate'),
+yalnizca Google hazirsa ve yalnizca Google ile. Kaydin tum parcalari Google'la
+cevrilebildiyse yazilir (hepsi ya da hicbiri); aksi halde LibreTranslate cevirisi
+yerinde kalir. Kendi imleci vardir ({prefix}:upgrade-cursor:{bolum}).
 
 Yazma kurallari:
-  - Basarisiz denemede kayda yazilmaz: updated_at ilerlemez, tuketicinin delta
-    akisina degismemis kayit dusmez.
-  - Basarida Turkce alanlar yazilir, bayrak duser, updated_at ilerler; Turkce
-    metin delta akisindan tuketiciye kendiliginden gider.
-  - Devre kesici acikken Google'a hic gidilmez; erisim hatasinda imlec o kaydi
-    gecmez, bir sonraki tur once onu dener.
+  - Basarisiz denemede kayda yazilmaz: updated_at ilerlemez.
+  - Basarida Turkce alanlar, needs_translation=False, translation_provider ve
+    updated_at yazilir; ceviri delta akisindan tuketiciye gider.
 """
 import os
 from typing import Dict
@@ -28,8 +28,10 @@ from .models import (
     AINewsEntry, CVEEntry, DevToolsEntry, KubernetesEntry, NewsArticle, SREEntry,
 )
 
-# Bolum basina; alti bolumle tur basina en fazla 48 kayit.
-RETRANSLATE_BATCH = int(os.environ.get('RETRANSLATE_BATCH', '8'))
+# Bolum basina. LibreTranslate yerel ve hizli oldugu icin bekleyen siniri yuksek.
+RETRANSLATE_BATCH = int(os.environ.get('RETRANSLATE_BATCH', '100'))
+# Yukseltme ucretsiz Google kotasini kullanir; dusuk tutulur.
+RETRANSLATE_UPGRADE_BATCH = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH', '5'))
 
 
 def _baslik_ve_uzun_aciklama(kayit) -> Dict[str, str]:
@@ -78,64 +80,123 @@ def _canli_redis():
     return get_redis_connection('default')
 
 
-def retranslate_pending(redis_client=None, prefix: str = 'retranslate', batch: int = None) -> Dict:
+def _imlecten_sonraki(redis_client, anahtar, sorgu, sinir):
+    ham = redis_client.get(anahtar)
+    if ham:
+        try:
+            sorgu = apply_cursor(sorgu, *decode_cursor(ham.decode('utf-8')))
+        except InvalidCursor:
+            redis_client.delete(anahtar)
+    return list(sorgu[:sinir])
+
+
+def _cevir_ve_olc(cevir, kayit):
+    """Kaydi cevirir; (alanlar, basarisizlik_sayisi, kullanilan_saglayicilar) dondurur."""
+    tu.consume_translation_failures()
+    tu.consume_translation_providers()
+    alanlar = cevir(kayit)
+    return alanlar, tu.consume_translation_failures(), tu.consume_translation_providers()
+
+
+def _yaz(kayit, alanlar, saglayici):
+    for alan, deger in alanlar.items():
+        setattr(kayit, alan, deger)
+    kayit.needs_translation = False
+    kayit.translation_provider = saglayici
+    kayit.save(update_fields=[*alanlar, 'needs_translation', 'translation_provider', 'updated_at'])
+
+
+def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
+    """Asama 1. Donus: (cevrilen, basarisiz, durdu)."""
+    anahtar = f'{prefix}:cursor:{ad}'
+    sorgu = model.objects.filter(needs_translation=True).order_by('updated_at', 'id')
+    kayitlar = _imlecten_sonraki(redis_client, anahtar, sorgu, sinir)
+
+    cevrilen = basarisiz = 0
+    durdu = False
+    for kayit in kayitlar:
+        if not tu.herhangi_saglayici_hazir():
+            durdu = True
+            break
+        deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
+        alanlar, hata, kullanilan = _cevir_ve_olc(cevir, kayit)
+
+        if hata:
+            if not tu.herhangi_saglayici_hazir():
+                # Erisim sorunu: imleci ilerletme, bir sonraki tur once bu kaydi denesin
+                durdu = True
+                break
+            basarisiz += 1  # icerik hatasi: imlec gecer, kayit sirada kalir
+        else:
+            saglayici = tu.kayit_saglayicisi(kullanilan)
+            _yaz(kayit, alanlar, saglayici)
+            cevrilen += 1
+            if saglayici:
+                sonuc['by_provider'][saglayici] += 1
+        redis_client.set(anahtar, deneme_oncesi)
+
+    if not durdu and len(kayitlar) < sinir:
+        redis_client.delete(anahtar)  # sona gelindi; bir sonraki tur bastan
+    return cevrilen, basarisiz, durdu
+
+
+def _yukselt(ad, model, cevir, redis_client, prefix, sinir):
+    """Asama 2. Yalnizca Google. Donus: yukseltilen kayit sayisi."""
+    anahtar = f'{prefix}:upgrade-cursor:{ad}'
+    yukseltilen = 0
+    with tu.yalnizca_saglayicilar('google'):
+        if not tu.herhangi_saglayici_hazir():
+            return 0
+        sorgu = (model.objects.filter(needs_translation=False, translation_provider='libretranslate')
+                 .order_by('updated_at', 'id'))
+        kayitlar = _imlecten_sonraki(redis_client, anahtar, sorgu, sinir)
+
+        durdu = False
+        for kayit in kayitlar:
+            if not tu.herhangi_saglayici_hazir():
+                durdu = True
+                break
+            deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
+            alanlar, hata, kullanilan = _cevir_ve_olc(cevir, kayit)
+
+            if not hata and kullanilan == {'google'}:
+                _yaz(kayit, alanlar, 'google')
+                yukseltilen += 1
+            elif not tu.herhangi_saglayici_hazir():
+                durdu = True  # Google asama ortasinda kapandi; imleci ilerletme
+                break
+            redis_client.set(anahtar, deneme_oncesi)
+
+        if not durdu and len(kayitlar) < sinir:
+            redis_client.delete(anahtar)
+    return yukseltilen
+
+
+def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
+                        batch: int = None, upgrade_batch: int = None) -> Dict:
     redis_client = redis_client or _canli_redis()
     batch = RETRANSLATE_BATCH if batch is None else batch
-    kapi = tu._get_gate()
-    sonuc = {'translated': 0, 'failed': 0, 'stopped_by_cooldown': False, 'sections': {}}
+    upgrade_batch = RETRANSLATE_UPGRADE_BATCH if upgrade_batch is None else upgrade_batch
+    sonuc = {'translated': 0, 'failed': 0, 'upgraded': 0, 'stopped': False,
+             'by_provider': {'google': 0, 'libretranslate': 0}, 'sections': {}}
 
     for ad, model, cevir in BOLUMLER:
-        if kapi.cooldown_active():
-            sonuc['stopped_by_cooldown'] = True
+        if not tu.herhangi_saglayici_hazir():
+            sonuc['stopped'] = True
             break
 
-        imlec_anahtari = f'{prefix}:cursor:{ad}'
-        sorgu = model.objects.filter(needs_translation=True).order_by('updated_at', 'id')
-        ham_imlec = redis_client.get(imlec_anahtari)
-        if ham_imlec:
-            try:
-                sorgu = apply_cursor(sorgu, *decode_cursor(ham_imlec.decode('utf-8')))
-            except InvalidCursor:
-                redis_client.delete(imlec_anahtari)
-        kayitlar = list(sorgu[:batch])
+        cevrilen, basarisiz, durdu = _bekleyenler(ad, model, cevir, redis_client, prefix, batch, sonuc)
+        yukseltilen = 0 if durdu else _yukselt(ad, model, cevir, redis_client, prefix, upgrade_batch)
 
-        cevrilen = basarisiz = 0
-        yarida_kaldi = False
-        for kayit in kayitlar:
-            if kapi.cooldown_active():
-                yarida_kaldi = True
-                break
-
-            deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
-            tu.consume_translation_failures()
-            alanlar = cevir(kayit)
-
-            if tu.consume_translation_failures() > 0:
-                if kapi.cooldown_active():
-                    # Erisim hatasi: imleci ilerletme, bir sonraki tur once bu kaydi denesin
-                    yarida_kaldi = True
-                    break
-                basarisiz += 1  # icerik hatasi (dogrulama): imlec gecer, kayit sirada kalir
-            else:
-                for alan, deger in alanlar.items():
-                    setattr(kayit, alan, deger)
-                kayit.needs_translation = False
-                kayit.save(update_fields=[*alanlar, 'needs_translation', 'updated_at'])
-                cevrilen += 1
-            redis_client.set(imlec_anahtari, deneme_oncesi)
-
-        if yarida_kaldi:
-            sonuc['stopped_by_cooldown'] = True
-        elif len(kayitlar) < batch:
-            redis_client.delete(imlec_anahtari)  # sona gelindi; bir sonraki tur bastan
-
-        if cevrilen:
+        if cevrilen or yukseltilen:
             cache_yenile(ad)
-        sonuc['sections'][ad] = {'translated': cevrilen, 'failed': basarisiz}
+        sonuc['sections'][ad] = {'translated': cevrilen, 'failed': basarisiz, 'upgraded': yukseltilen}
         sonuc['translated'] += cevrilen
         sonuc['failed'] += basarisiz
+        sonuc['upgraded'] += yukseltilen
 
-        if yarida_kaldi:
+        if durdu:
+            sonuc['stopped'] = True
             break
 
     return sonuc

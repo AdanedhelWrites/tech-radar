@@ -12,6 +12,7 @@ services:
       - SECRET_KEY=your-secret-key-here-change-in-production
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
+      - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
     depends_on:
       - teknoloji-redis
     volumes:
@@ -34,6 +35,30 @@ services:
       - VITE_API_URL=http://localhost:8000/api
     depends_on:
       - teknoloji-api
+    restart: unless-stopped
+    networks:
+      - teknoloji-network
+
+  # LibreTranslate (yedek ceviri saglayicisi; Google kapaliyken devreye girer)
+  teknoloji-translate:
+    image: libretranslate/libretranslate:v1.9.6
+    container_name: teknoloji-translate
+    environment:
+      - LT_LOAD_ONLY=en,tr
+      - LT_UPDATE_MODELS=false
+    volumes:
+      # Modeller imajda yok, ilk acilista iner (258 MB). Volume olmazsa her
+      # yeniden olusturmada tekrar iner ve internet yoksa servis acilmaz.
+      - teknoloji-translate-models:/home/libretranslate/.local
+    # Denemede yuk altinda 12 cekirdegin tamamini doyurdu; diger servisleri ac birakmasin
+    cpus: '4'
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/languages', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     restart: unless-stopped
     networks:
       - teknoloji-network
@@ -62,6 +87,7 @@ services:
       - SECRET_KEY=your-secret-key-here-change-in-production
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
+      - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
     depends_on:
       - teknoloji-redis
       - teknoloji-api
@@ -94,6 +120,7 @@ services:
 
 volumes:
   teknoloji-redis-data:
+  teknoloji-translate-models:
 
 networks:
   teknoloji-network:

@@ -131,7 +131,7 @@ CACHES = {
         # Cache blob sekli (serializer alanlari) degistiginde artirilir; eski
         # surumdeki bloblar okunmaz ve 1 saat icinde kendiliginden duser.
         # DRF throttle sayaclari da bu surume tabidir (artirinca bir kez sifirlanir).
-        "VERSION": 2,
+        "VERSION": 3,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -167,6 +167,13 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Yerel LibreTranslate servisi: Google kapaliyken devreye giren yedek ceviri
+# saglayicisi. Bos ise hic denenmez (bkz. news/translation_providers.py).
+LIBRETRANSLATE_URL = os.environ.get('LIBRETRANSLATE_URL', '')
+
+# Testler canli LibreTranslate'e ve canli ceviri devre kesicisine dokunmaz.
+TEST_RUNNER = 'news.test_runner.GuvenliTestRunner'
 
 # Celery Configuration
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/1')
