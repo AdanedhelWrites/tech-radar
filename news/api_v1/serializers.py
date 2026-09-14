@@ -34,10 +34,11 @@ class BaseEntrySerializer(serializers.ModelSerializer):
     type = serializers.SerializerMethodField()
     title = serializers.SerializerMethodField()
     description = serializers.SerializerMethodField()
+    translation_provider = serializers.SerializerMethodField()
 
     ORTAK_ALANLAR = [
         'id', 'type', 'source', 'title', 'description', 'link',
-        'published_date', 'needs_translation', 'updated_at',
+        'published_date', 'needs_translation', 'updated_at', 'translation_provider',
     ]
 
     def get_type(self, obj):
@@ -48,6 +49,11 @@ class BaseEntrySerializer(serializers.ModelSerializer):
 
     def get_description(self, obj):
         return {'original': obj.original_description, 'tr': obj.turkish_description}
+
+    def get_translation_provider(self, obj):
+        # 'google', 'libretranslate' veya ceviri yoksa null. Tuketici
+        # 'libretranslate' icin "makine cevirisi" etiketi gosterebilir.
+        return obj.translation_provider or None
 
 
 class NewsArticleV1Serializer(BaseEntrySerializer):

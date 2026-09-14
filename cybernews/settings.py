@@ -131,7 +131,7 @@ CACHES = {
         # Cache blob sekli (serializer alanlari) degistiginde artirilir; eski
         # surumdeki bloblar okunmaz ve 1 saat icinde kendiliginden duser.
         # DRF throttle sayaclari da bu surume tabidir (artirinca bir kez sifirlanir).
-        "VERSION": 2,
+        "VERSION": 3,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }

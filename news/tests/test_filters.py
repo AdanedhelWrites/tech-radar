@@ -21,11 +21,32 @@ class SerializerBicimTests(TestCase):
         veri = AINewsEntryV1Serializer(entry).data
         self.assertEqual(set(veri.keys()), {
             'id', 'type', 'source', 'title', 'description', 'link',
-            'published_date', 'needs_translation', 'updated_at',
+            'published_date', 'needs_translation', 'updated_at', 'translation_provider',
         })
         self.assertEqual(veri['type'], 'ai')
         self.assertEqual(veri['title'], {'original': 'Model released', 'tr': 'Model yayinlandi'})
         self.assertEqual(veri['description'], {'original': 'Long text', 'tr': 'Uzun metin'})
+
+    def test_saglayici_bos_ise_null(self):
+        entry = AINewsEntry.objects.create(
+            source='Test', original_title='T', original_description='D',
+            link='https://ornek.test/ai/saglayici-bos', published_date=date(2026, 9, 14))
+        self.assertIsNone(AINewsEntryV1Serializer(entry).data['translation_provider'])
+
+    def test_saglayici_degeri_doner(self):
+        entry = AINewsEntry.objects.create(
+            source='Test', original_title='T', original_description='D',
+            link='https://ornek.test/ai/saglayici-lt', published_date=date(2026, 9, 14),
+            translation_provider='libretranslate')
+        self.assertEqual(AINewsEntryV1Serializer(entry).data['translation_provider'], 'libretranslate')
+
+    def test_eski_api_serializeri_alani_icerir(self):
+        from news.serializers import AINewsEntrySerializer
+        entry = AINewsEntry.objects.create(
+            source='Test', original_title='T', original_description='D',
+            link='https://ornek.test/ai/eski-api', published_date=date(2026, 9, 14),
+            translation_provider='google')
+        self.assertEqual(AINewsEntrySerializer(entry).data['translation_provider'], 'google')
 
     def test_ceviri_bekleyende_tr_bos_gelir(self):
         """Tuketici title.tr || title.original ile Ingilizceye dusebilmeli."""
