@@ -4,7 +4,9 @@ from django.core.cache import cache
 from datetime import timedelta, date
 
 from .models import NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
-from .translation_utils import consume_translation_failures
+from .translation_utils import (
+    consume_translation_failures, consume_translation_providers, kayit_saglayicisi,
+)
 from .cache_utils import CACHE_YENILEME_ARALIGI, cache_yenile
 
 from scraper_multi import MultiSourceScraper
@@ -27,6 +29,8 @@ def _drop_existing(entries, model, field, key='link'):
 
 # Not: `needs_translation` degeri, generator kaydi cevirip yield ettikten sonra
 # okunur; consume_translation_failures() sayaci her kayitta sifirlar.
+# translation_provider ayni anda okunur: kaydin cevirisinde kullanilan
+# saglayicilarin en dusuk kalitelisi (bkz. translation_utils.kayit_saglayicisi).
 #
 # Cache: her CACHE_YENILEME_ARALIGI kayitta bir ve cekim sonunda yeniden kurulur
 # (bkz. news/cache_utils.py).
@@ -47,6 +51,7 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
         if articles:
             saved_count = 0
             consume_translation_failures()
+            consume_translation_providers()
             for article in scraper.process_news(articles):
                 NewsArticle.objects.update_or_create(
                     link=article['link'],
@@ -60,6 +65,7 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
                         'date': article['date'],
                         'original_date': article.get('original_date', ''),
                         'needs_translation': consume_translation_failures() > 0,
+                        'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
                 saved_count += 1
@@ -86,6 +92,7 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
         if cves:
             saved_count = 0
             consume_translation_failures()
+            consume_translation_providers()
             for cve in scraper.process_cves(cves):
                 CVEEntry.objects.update_or_create(
                     cve_id=cve['cve_id'],
@@ -104,6 +111,7 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
                         'references': cve.get('references', []),
                         'affected_products': cve.get('affected_products', ''),
                         'needs_translation': consume_translation_failures() > 0,
+                        'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
                 saved_count += 1
@@ -130,6 +138,7 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
         if entries:
             saved_count = 0
             consume_translation_failures()
+            consume_translation_providers()
             for entry in scraper.process_entries(entries):
                 KubernetesEntry.objects.update_or_create(
                     link=entry['link'],
@@ -143,6 +152,7 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
                         'version': entry.get('version', ''),
                         'published_date': entry['published_date'],
                         'needs_translation': consume_translation_failures() > 0,
+                        'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
                 saved_count += 1
@@ -169,6 +179,7 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
         if entries:
             saved_count = 0
             consume_translation_failures()
+            consume_translation_providers()
             for entry in scraper.process_entries(entries):
                 SREEntry.objects.update_or_create(
                     link=entry['link'],
@@ -180,6 +191,7 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
                         'turkish_description': entry.get('turkish_description', ''),
                         'published_date': entry['published_date'],
                         'needs_translation': consume_translation_failures() > 0,
+                        'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
                 saved_count += 1
@@ -206,6 +218,7 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
         if entries:
             saved_count = 0
             consume_translation_failures()
+            consume_translation_providers()
             for entry in scraper.process_entries(entries):
                 DevToolsEntry.objects.update_or_create(
                     link=entry['link'],
@@ -219,6 +232,7 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
                         'entry_type': entry.get('entry_type', 'release'),
                         'published_date': entry['published_date'],
                         'needs_translation': consume_translation_failures() > 0,
+                        'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
                 saved_count += 1
@@ -245,6 +259,7 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
         if entries:
             saved_count = 0
             consume_translation_failures()
+            consume_translation_providers()
             for entry in scraper.process_entries(entries):
                 AINewsEntry.objects.update_or_create(
                     link=entry['link'],
@@ -256,6 +271,7 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
                         'turkish_description': entry.get('turkish_description', ''),
                         'published_date': entry.get('published_date') or entry.get('date'),
                         'needs_translation': consume_translation_failures() > 0,
+                        'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
                 saved_count += 1

@@ -115,3 +115,63 @@ class KayitSaglayicisiTests(SimpleTestCase):
         self.assertEqual(tu.kayit_saglayicisi({'libretranslate'}), 'libretranslate')
         self.assertEqual(tu.kayit_saglayicisi({'google'}), 'google')
         self.assertEqual(tu.kayit_saglayicisi(set()), '')
+
+
+from unittest import mock
+
+from django.core.cache import cache
+from django.test import TestCase, override_settings
+
+from news import tasks
+from news.models import AINewsEntry
+from news.tests.base import LOCMEM_CACHE
+from news.tests.test_translation import TranslationGateMixin
+
+
+def _ham_ai(baslik, govde, slug):
+    return {'title': baslik, 'description': govde, 'link': f'https://ornek.test/zincir/{slug}',
+            'date': '2026-09-14', 'source': 'MIT Tech Review AI'}
+
+
+@override_settings(CACHES=LOCMEM_CACHE)
+class FetchTaskSaglayiciTests(SaglayiciZinciriMixin, TranslationGateMixin, TestCase):
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+        tu.consume_translation_providers()
+
+    def _cek(self, girdiler):
+        with mock.patch.object(tasks.MultiAINewsScraper, 'fetch_all', return_value=girdiler):
+            return tasks.fetch_ai_news_task(days=30)
+
+    def test_task_kayit_saglayicisini_yazar(self):
+        self.saglayicilari_ayarla(
+            SahteSaglayici('google', {
+                'Only google title': 'Yalnızca google başlığı',
+                'Google body text for this story.': 'Bu haberin google gövde metni.',
+                'Mixed story title': 'Karışık haber başlığı',
+            }),
+            SahteSaglayici('libretranslate', libre_eki))
+
+        self._cek([
+            _ham_ai('Only google title', 'Google body text for this story.', 'google'),
+            _ham_ai('Mixed story title', 'Body text that only libre translates.', 'karisik'),
+        ])
+
+        google = AINewsEntry.objects.get(link='https://ornek.test/zincir/google')
+        karisik = AINewsEntry.objects.get(link='https://ornek.test/zincir/karisik')
+        self.assertEqual(google.translation_provider, 'google')
+        self.assertFalse(google.needs_translation)
+        self.assertEqual(karisik.translation_provider, 'libretranslate')
+        self.assertFalse(karisik.needs_translation)
+
+    def test_hicbir_saglayici_yoksa_bos_ve_bekleyen(self):
+        self.saglayicilari_ayarla(
+            SahteSaglayici('google', hazir=False), SahteSaglayici('libretranslate', hazir=False))
+
+        self._cek([_ham_ai('Nothing translates this title', 'Nothing translates this body.', 'yok')])
+
+        kayit = AINewsEntry.objects.get(link='https://ornek.test/zincir/yok')
+        self.assertEqual(kayit.translation_provider, '')
+        self.assertTrue(kayit.needs_translation)
