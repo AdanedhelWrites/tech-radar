@@ -203,6 +203,16 @@ def _protect_terms(text: str) -> Tuple[str, Dict[str, str]]:
     result = re.sub(r'https?://\S+', _replace_match, result)
     result = re.sub(r'github\.com/[\w./-]+', _replace_match, result)
 
+    # 4b) Bos parantezli cagrilar: parse_array(), Element_Classes::parse_array(), obj.run()
+    result = re.sub(
+        r'\b[A-Za-z_][A-Za-z0-9_]*(?:(?:::|\.)[A-Za-z_][A-Za-z0-9_]*)*\(\)',
+        _replace_match, result
+    )
+
+    # 4c) Alt cizgili tanimlayicilar: tribe_events, pg_stat_lock
+    # LibreTranslate alt cizgiyi siler; Google da zaman zaman kelimelere boler.
+    result = re.sub(r'\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b', _replace_match, result)
+
     # 5) Surum numaralari: v1.2.3, 9.3.1, 2025.2
     result = re.sub(r'\bv?\d+\.\d+(?:\.\d+)*(?:-[\w.]+)?\b', _replace_match, result)
 
