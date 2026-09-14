@@ -16,7 +16,8 @@ Neden tek modul?
 import os
 import re
 import time
-from typing import Dict, Iterable, List, Optional, Tuple
+from contextlib import contextmanager
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from deep_translator import GoogleTranslator
 
@@ -261,6 +262,8 @@ def _restore_terms(text: str, replacements: Dict[str, str]) -> str:
 # task'lar bu sayaci okuyup kaydi `needs_translation` olarak isaretler,
 # boylece kayit sonraki cekimde yeniden cevrilir.
 # ============================================================
+# Google bu zincirin ilk saglayicisidir; LibreTranslate yedektir
+# (bkz. news/translation_providers.py ve saglayicilar()).
 
 MIN_INTERVAL = float(os.environ.get('TRANSLATE_MIN_INTERVAL', '2.0'))
 COOLDOWN_SECONDS = int(os.environ.get('TRANSLATE_COOLDOWN', '1200'))
@@ -390,6 +393,56 @@ def consume_translation_failures() -> int:
     return count
 
 
+# ------------------------------------------------------------
+# Saglayici zinciri (spec 2026-09-14-ceviri-saglayici-zinciri)
+# ------------------------------------------------------------
+# translate_text saglayicilari translation_providers.SAGLAYICILAR sirasiyla
+# dener: Google -> LibreTranslate -> orijinal metin.
+
+_used_providers: Set[str] = set()
+_saglayici_kisiti = None
+
+
+def consume_translation_providers() -> Set[str]:
+    """Son cagridan beri basariyla kullanilan saglayici adlarini dondurur ve sifirlar."""
+    global _used_providers
+    kullanilan, _used_providers = _used_providers, set()
+    return kullanilan
+
+
+def kayit_saglayicisi(kullanilanlar: Iterable[str]) -> str:
+    """Kaydin saglayicisi: en dusuk kaliteli parca belirleyicidir."""
+    kullanilanlar = set(kullanilanlar)
+    if 'libretranslate' in kullanilanlar:
+        return 'libretranslate'
+    if 'google' in kullanilanlar:
+        return 'google'
+    return ''
+
+
+@contextmanager
+def yalnizca_saglayicilar(*adlar):
+    """Blok icinde yalnizca bu adlardaki saglayicilar denenir (orn. yukseltme: 'google')."""
+    global _saglayici_kisiti
+    onceki = _saglayici_kisiti
+    _saglayici_kisiti = set(adlar)
+    try:
+        yield
+    finally:
+        _saglayici_kisiti = onceki
+
+
+def saglayicilar() -> list:
+    from . import translation_providers as tp
+    if _saglayici_kisiti is None:
+        return list(tp.SAGLAYICILAR)
+    return [s for s in tp.SAGLAYICILAR if s.name in _saglayici_kisiti]
+
+
+def herhangi_saglayici_hazir() -> bool:
+    return any(s.available() for s in saglayicilar())
+
+
 def _translate_via_google(protected: str) -> Optional[str]:
     """Hiz siniri ve devre kesici altinda Google'a gider; cevrilemezse None."""
     gate = _get_gate()
@@ -416,9 +469,11 @@ def _translate_via_google(protected: str) -> Optional[str]:
 def translate_text(text: str) -> str:
     """
     Tek bir metin parcasini Turkce'ye cevirir.
-    Terim koruma uygulanir. Cevrilemezse orijinal metin doner ve
-    basarisizlik sayaci artar (bkz. consume_translation_failures).
-    Google cevabi dogrulanamazsa da (bkz. verify_translation) orijinal metin doner.
+    Terim koruma uygulanir. Saglayicilar sirayla denenir (bkz. saglayicilar());
+    her denemenin cevabi onarilir, dogrulanir (verify_translation) ve geri konur.
+    Guvenilir ceviri ureten ilk saglayicinin sonucu doner ve adi
+    consume_translation_providers ile okunur. Hicbiri basarili olmazsa orijinal
+    metin doner ve basarisizlik sayaci artar (bkz. consume_translation_failures).
     """
     global _failure_count
     if not text or len(text.strip()) == 0:
@@ -426,28 +481,37 @@ def translate_text(text: str) -> str:
 
     try:
         protected, replacements = _protect_terms(text)
-        translated = _translate_via_google(protected)
-        if translated is None:
-            _failure_count += 1
-            return text
-
-        # Google yer tutucuyu 'xtrm 0001x' gibi bozabilir; geri koymadan ONCE onarilmali
-        translated = _repair_placeholders(translated)
-        sorun = verify_translation(protected, translated, replacements)
-        if sorun is None:
-            restored = _restore_terms(translated, replacements)
-            if any(kod in restored for kod in replacements):
-                sorun = 'yer tutucu kalintisi'
-        if sorun:
-            print(f"  [Ceviri] Dogrulama basarisiz ({sorun}); metin orijinal haliyle birakildi.")
-            _failure_count += 1
-            return text
-
-        return turkish_post_process(restored)
     except Exception as e:
         print(f"  [Ceviri] Hata: {e}")
         _failure_count += 1
         return text
+
+    for saglayici in saglayicilar():
+        if not saglayici.available():
+            continue
+        try:
+            translated = saglayici.translate(protected)
+            if translated is None:
+                continue
+            # Saglayici yer tutucuyu 'xtrm 0001x' gibi bozabilir; geri koymadan ONCE onarilmali
+            translated = _repair_placeholders(translated)
+            sorun = verify_translation(protected, translated, replacements)
+            if sorun is None:
+                restored = _restore_terms(translated, replacements)
+                if any(kod in restored for kod in replacements):
+                    sorun = 'yer tutucu kalintisi'
+            if sorun:
+                print(f"  [Ceviri] {saglayici.name} dogrulama basarisiz ({sorun}).")
+                continue
+            sonuc = turkish_post_process(restored)
+        except Exception as e:
+            print(f"  [Ceviri] {saglayici.name} hata: {e}")
+            continue
+        _used_providers.add(saglayici.name)
+        return sonuc
+
+    _failure_count += 1
+    return text
 
 
 def translate_long_text(text: str, chunk_size: int = 4500) -> str:
