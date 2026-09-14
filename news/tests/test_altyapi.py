@@ -60,3 +60,25 @@ class TestIzolasyonuTests(SimpleTestCase):
             # override'i geri alinmadan process'te kalir ve sonraki testleri
             # (ör. gercek settings.CACHES'i okuyan testler) bozar.
             Ornek.doClassCleanups()
+
+
+from django.conf import settings as _ayarlar
+from django.test import SimpleTestCase as _SimpleTestCase
+
+
+class TestOrtamiIzolasyonuTests(_SimpleTestCase):
+    """Testler canli LibreTranslate'e ve canli ceviri devre kesicisine dokunmamali.
+
+    Dagitimdan sonra API konteynerinde LIBRETRANSLATE_URL tanimli olur ve testler
+    ayni konteynerde kosar; bu testler o ortamda da gecmelidir.
+    """
+
+    def test_ozel_test_calistirici_ayarli(self):
+        self.assertEqual(_ayarlar.TEST_RUNNER, 'news.test_runner.GuvenliTestRunner')
+
+    def test_testlerde_libretranslate_kapali(self):
+        self.assertEqual(_ayarlar.LIBRETRANSLATE_URL, '')
+
+    def test_testlerde_google_devre_kesicisi_surec_ici(self):
+        from news import translation_utils as tu
+        self.assertIsInstance(tu._get_gate(), tu._LocalGate)

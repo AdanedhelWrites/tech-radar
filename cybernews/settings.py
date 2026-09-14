@@ -168,6 +168,13 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Yerel LibreTranslate servisi: Google kapaliyken devreye giren yedek ceviri
+# saglayicisi. Bos ise hic denenmez (bkz. news/translation_providers.py).
+LIBRETRANSLATE_URL = os.environ.get('LIBRETRANSLATE_URL', '')
+
+# Testler canli LibreTranslate'e ve canli ceviri devre kesicisine dokunmaz.
+TEST_RUNNER = 'news.test_runner.GuvenliTestRunner'
+
 # Celery Configuration
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/1')
 CELERY_RESULT_BACKEND = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')
