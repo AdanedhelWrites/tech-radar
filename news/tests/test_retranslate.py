@@ -17,6 +17,15 @@ from news import translation_utils as tu
 from news.models import AINewsEntry, CVEEntry, KubernetesEntry
 from news.tests.base import LOCMEM_CACHE, test_redis_client
 from news.tests.test_translation import FakeTranslator, TranslationGateMixin
+from news.tests.saglayici_yardimcilari import SahteSaglayici, SaglayiciZinciriMixin
+
+
+def _google(protected):
+    return 'GOOGLE ' + protected
+
+
+def _libre(protected):
+    return 'LIBRE ' + protected
 
 CEVIRILER = {
     'Farmers adopt new sensors': 'Çiftçiler yeni sensörler benimsiyor',
@@ -47,9 +56,10 @@ class RetranslateTestBase(TranslationGateMixin, TestCase):
         for anahtar in self.redis.scan_iter(f'{self.prefix}:*'):
             self.redis.delete(anahtar)
 
-    def _calistir(self, batch=8):
+    def _calistir(self, batch=8, upgrade_batch=5):
         from news.retranslate import retranslate_pending
-        return retranslate_pending(redis_client=self.redis, prefix=self.prefix, batch=batch)
+        return retranslate_pending(redis_client=self.redis, prefix=self.prefix,
+                                   batch=batch, upgrade_batch=upgrade_batch)
 
     def _ai(self, baslik, govde, slug):
         return AINewsEntry.objects.create(
@@ -74,7 +84,9 @@ class RetranslatePendingTests(RetranslateTestBase):
         self.assertEqual(kayit.turkish_description, 'Sensörler toprak nemini her saat ölçüyor.')
         self.assertGreater(kayit.updated_at, once, 'Basarida updated_at ilerlemeli: delta akisina dusmeli')
         self.assertEqual(sonuc['translated'], 1)
-        self.assertEqual(sonuc['sections']['ai'], {'translated': 1, 'failed': 0})
+        self.assertEqual(sonuc['sections']['ai'], {'translated': 1, 'failed': 0, 'upgraded': 0})
+        self.assertEqual(sonuc['by_provider'], {'google': 1, 'libretranslate': 0})
+        self.assertEqual(kayit.translation_provider, 'google')
         self.assertEqual(len(cevirmen.calls), 2)
 
     def test_erisim_hatasinda_kayda_yazilmaz_ve_durur(self):
@@ -87,7 +99,7 @@ class RetranslatePendingTests(RetranslateTestBase):
         kayit.refresh_from_db()
         self.assertTrue(kayit.needs_translation)
         self.assertEqual(kayit.updated_at, once, 'Basarisiz deneme delta akisina degismemis kayit dusurmemeli')
-        self.assertTrue(sonuc['stopped_by_cooldown'])
+        self.assertTrue(sonuc['stopped'])
         self.assertEqual(sonuc['translated'], 0)
         self.assertFalse(self.redis.exists(f'{self.prefix}:cursor:ai'),
                          'Erisim hatasinda imlec ilerlememeli; kayit bir sonraki turda once denenmeli')
@@ -100,7 +112,7 @@ class RetranslatePendingTests(RetranslateTestBase):
         sonuc = self._calistir()
 
         self.assertEqual(cevirmen.calls, [])
-        self.assertTrue(sonuc['stopped_by_cooldown'])
+        self.assertTrue(sonuc['stopped'])
 
     def test_bolum_basina_batch_siniri(self):
         self.use_translator(FakeTranslator(CEVIRILER))
@@ -165,7 +177,7 @@ class RetranslatePendingTests(RetranslateTestBase):
         sonuc = self._calistir()
         self.assertEqual(cevirmen.calls, [])
         self.assertEqual(sonuc['translated'], 0)
-        self.assertFalse(sonuc['stopped_by_cooldown'])
+        self.assertFalse(sonuc['stopped'])
 
     def test_cve_basligi_cevrilmez_kisa_olmayan_aciklama_cevrilir(self):
         """cve_scraper.process_cves ile ayni kural."""
@@ -204,6 +216,114 @@ class RetranslatePendingTests(RetranslateTestBase):
         self.assertEqual(k8s.turkish_description, 'YAPISAL CEVIRI')
         self.assertEqual(k8s.turkish_title, 'Kubernetes v1.32 yayımlandı')
         self.assertFalse(k8s.needs_translation)
+
+
+class RetranslateSaglayiciTests(SaglayiciZinciriMixin, RetranslateTestBase):
+    """Spec 6.2: bekleyenler tam zincirle, yukseltme yalnizca Google ile."""
+
+    def _libre_kaydi(self, slug, baslik='Farmers adopt new sensors',
+                     govde='Sensors measure soil moisture every hour.'):
+        return AINewsEntry.objects.create(
+            source='MIT Tech Review AI', original_title=baslik, turkish_title='LIBRE ' + baslik,
+            original_description=govde, turkish_description='LIBRE ' + govde,
+            link=f'https://ornek.test/yukselt/{slug}', published_date=date(2026, 9, 14),
+            needs_translation=False, translation_provider='libretranslate')
+
+    def test_varsayilan_sinirlar(self):
+        from news import retranslate
+        self.assertEqual(retranslate.RETRANSLATE_BATCH, 100)
+        self.assertEqual(retranslate.RETRANSLATE_UPGRADE_BATCH, 5)
+
+    def test_google_kapaliyken_libretranslate_ile_devam_eder(self):
+        self.saglayicilari_ayarla(SahteSaglayici('google', _google, hazir=False),
+                                  SahteSaglayici('libretranslate', _libre))
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'lt')
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertFalse(kayit.needs_translation)
+        self.assertEqual(kayit.translation_provider, 'libretranslate')
+        self.assertEqual(kayit.turkish_title, 'LIBRE Farmers adopt new sensors')
+        self.assertFalse(sonuc['stopped'])
+        self.assertEqual(sonuc['by_provider'], {'google': 0, 'libretranslate': 1})
+
+    def test_hicbir_saglayici_yoksa_durur(self):
+        google, libre = self.saglayicilari_ayarla(SahteSaglayici('google', _google, hazir=False),
+                                                  SahteSaglayici('libretranslate', _libre, hazir=False))
+        self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'yok')
+
+        sonuc = self._calistir()
+
+        self.assertTrue(sonuc['stopped'])
+        self.assertEqual(google.cagrilar + libre.cagrilar, [])
+
+    def test_google_acikken_libretranslate_cevirisi_yukseltilir(self):
+        _, libre = self.saglayicilari_ayarla(SahteSaglayici('google', _google),
+                                             SahteSaglayici('libretranslate', _libre))
+        kayit = self._libre_kaydi('tam')
+        once = kayit.updated_at
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(sonuc['upgraded'], 1)
+        self.assertEqual(sonuc['sections']['ai']['upgraded'], 1)
+        self.assertEqual(kayit.translation_provider, 'google')
+        self.assertEqual(kayit.turkish_title, 'GOOGLE Farmers adopt new sensors')
+        self.assertGreater(kayit.updated_at, once, 'Yukseltme delta akisina dusmeli')
+        self.assertEqual(libre.cagrilar, [], 'Yukseltme LibreTranslate kullanmamali')
+
+    def test_google_kapaliyken_yukseltme_yapilmaz(self):
+        google, libre = self.saglayicilari_ayarla(SahteSaglayici('google', _google, hazir=False),
+                                                  SahteSaglayici('libretranslate', _libre))
+        kayit = self._libre_kaydi('kapali')
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(sonuc['upgraded'], 0)
+        self.assertEqual(kayit.translation_provider, 'libretranslate')
+        self.assertEqual(google.cagrilar + libre.cagrilar, [])
+
+    def test_kismi_yukseltme_kayda_yazilmaz(self):
+        """Kullanici secimi: hepsi ya da hicbiri."""
+        self.saglayicilari_ayarla(
+            SahteSaglayici('google', {'Farmers adopt new sensors': 'Çiftçiler yeni sensörler benimsiyor'}),
+            SahteSaglayici('libretranslate', _libre))
+        kayit = self._libre_kaydi('kismi')
+        once = kayit.updated_at
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(sonuc['upgraded'], 0)
+        self.assertEqual(kayit.translation_provider, 'libretranslate')
+        self.assertEqual(kayit.turkish_title, 'LIBRE Farmers adopt new sensors')
+        self.assertEqual(kayit.updated_at, once)
+
+    def test_yukseltme_bolum_siniri(self):
+        self.saglayicilari_ayarla(SahteSaglayici('google', _google),
+                                  SahteSaglayici('libretranslate', _libre))
+        for i in range(7):
+            self._libre_kaydi(f'sinir-{i}')
+
+        sonuc = self._calistir(upgrade_batch=5)
+
+        self.assertEqual(sonuc['upgraded'], 5)
+        self.assertEqual(AINewsEntry.objects.filter(translation_provider='libretranslate').count(), 2)
+
+    def test_karisik_bekleyen_kayit_libretranslate_sayilir(self):
+        self.saglayicilari_ayarla(
+            SahteSaglayici('google', {'Farmers adopt new sensors': 'Çiftçiler yeni sensörler benimsiyor'}),
+            SahteSaglayici('libretranslate', _libre))
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'karisik')
+
+        self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(kayit.translation_provider, 'libretranslate')
+        self.assertEqual(kayit.turkish_title, 'Çiftçiler yeni sensörler benimsiyor')
 
 
 class RetranslateGoreviTests(SimpleTestCase):
