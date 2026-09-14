@@ -780,6 +780,8 @@ kubectl delete namespace teknoloji-haberleri
 |-----|------|-------|
 | [ADR-0001](docs/ADR-0001-AI-News.md) | AI News bileseni | Accepted |
 | [ADR-0002](docs/ADR-0002-AI-Benchmark.md) | AI Benchmark / Leaderboard bileseni | Proposed (ertelendi) |
+| [ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md) | Dis tuketiciler icin `/api/v1/` entegrasyon katmani (imlecli delta, token, refresh, ceviri dogrulugu) | Accepted (A1–A3 uygulandi; A4–A5 acik) |
+| [ADR-0004](docs/ADR-0004-Ceviri-Saglayici-Zinciri.md) | Ceviri saglayici zinciri (Google once, LibreTranslate yedek) | Accepted |
 
 ---
 
