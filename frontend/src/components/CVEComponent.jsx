@@ -4,6 +4,7 @@ import {
   Container, Row, Col, Card, Button, Form,
   Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
+import MakineCevirisiEtiketi, { makineCevirisiHtml } from './MakineCevirisiEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
   FaShieldAlt, FaChartBar, FaCogs, FaExclamationTriangle,
@@ -159,6 +160,7 @@ ${items.map(item => {
           return `<div class="article">
   <span class="cveid">${item.cve_id || ''}</span>
   <span class="badge" style="background:${severityColor(item.severity)}">${item.severity || 'Bilinmiyor'}</span>
+  ${makineCevirisiHtml(item)}
   ${item.cvss_score ? `<span class="score">CVSS: ${item.cvss_score}</span>` : ''}
   <span class="date">${item.published_date || ''}</span>
   <h3>${item.turkish_title || item.original_title || ''}</h3>
@@ -442,6 +444,7 @@ ${items.map(item => {
                         <small className="text-muted">{item.published_date}</small>
                       </div>
                       <h6 className="mb-1 fw-bold">{item.cve_id}</h6>
+                      <MakineCevirisiEtiketi kayit={item} className="mb-1" />
                       <div className="d-flex justify-content-between align-items-center mt-2">
                         <Badge className={getSeverityClass(item.severity)}>
                           <FaExclamationTriangle className="me-1" />
@@ -509,6 +512,7 @@ ${items.map(item => {
 
                   <div className="mb-3">
                     <h6 className="fw-bold text-danger">Açıklama</h6>
+                    <MakineCevirisiEtiketi kayit={selectedCVE} className="mb-2" />
                     <div className="article-content p-3 bg-light rounded">
                       {(selectedCVE.turkish_description || selectedCVE.original_description) ? (
                         (selectedCVE.turkish_description || selectedCVE.original_description)
