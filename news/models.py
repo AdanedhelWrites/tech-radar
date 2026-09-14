@@ -12,6 +12,10 @@ class NewsArticle(models.Model):
     date = models.DateField(verbose_name='Tarih')
     original_date = models.CharField(max_length=100, verbose_name='Orijinal Tarih')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    translation_provider = models.CharField(
+        max_length=20, blank=True, default='',
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
@@ -42,6 +46,10 @@ class CVEEntry(models.Model):
     references = models.JSONField(default=list, blank=True, verbose_name='Referanslar')
     affected_products = models.TextField(blank=True, verbose_name='Etkilenen Urunler')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    translation_provider = models.CharField(
+        max_length=20, blank=True, default='',
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
@@ -75,6 +83,10 @@ class KubernetesEntry(models.Model):
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='blog', verbose_name='Kategori')
     version = models.CharField(max_length=30, blank=True, verbose_name='Surum')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    translation_provider = models.CharField(
+        max_length=20, blank=True, default='',
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
@@ -98,6 +110,10 @@ class SREEntry(models.Model):
     link = models.URLField(verbose_name='Link', max_length=500, unique=True)
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    translation_provider = models.CharField(
+        max_length=20, blank=True, default='',
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
@@ -129,6 +145,10 @@ class DevToolsEntry(models.Model):
     version = models.CharField(max_length=100, blank=True, verbose_name='Surum')
     entry_type = models.CharField(max_length=20, choices=ENTRY_TYPE_CHOICES, default='release', verbose_name='Tur')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    translation_provider = models.CharField(
+        max_length=20, blank=True, default='',
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
@@ -152,6 +172,10 @@ class AINewsEntry(models.Model):
     link = models.URLField(verbose_name='Link', max_length=500, unique=True)
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    translation_provider = models.CharField(
+        max_length=20, blank=True, default='',
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
 
