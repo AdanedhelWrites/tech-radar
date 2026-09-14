@@ -1,7 +1,7 @@
 # Entegrasyon API v1 — Tasarim Dokumani
 
 - **Tarih:** 2026-09-12
-- **Durum:** Onaylandi (uygulama bekliyor)
+- **Durum:** Onaylandi. A1–A3 uygulandi ve `main`'de (2026-09-13); A4 ve A5 bekliyor. Karar kaydi: [ADR-0003](../../ADR-0003-Entegrasyon-API-v1.md). Spec ile plan celistiginde planlarin "Spec'e Gore Netlestirmeler" bolumleri gecerlidir.
 - **Kapsam:** Faz A — dis tuketici uygulamalar icin `/api/v1/` entegrasyon katmani
 - **Kapsam disi:** Faz B — PostgreSQL gecisi ve Kubernetes'e tasima (mevcut Helm chart'inin dogrulanmasi; ayri dokuman)
 
