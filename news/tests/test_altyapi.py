@@ -82,3 +82,8 @@ class TestOrtamiIzolasyonuTests(_SimpleTestCase):
     def test_testlerde_google_devre_kesicisi_surec_ici(self):
         from news import translation_utils as tu
         self.assertIsInstance(tu._get_gate(), tu._LocalGate)
+
+    def test_testlerde_libretranslate_devre_kesicisi_surec_ici(self):
+        from news import translation_providers as tp
+        from news import translation_utils as tu
+        self.assertIsInstance(tp._get_lt_gate(), tu._LocalGate)

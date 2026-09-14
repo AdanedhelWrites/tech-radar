@@ -23,6 +23,9 @@ class GuvenliTestRunner(DiscoverRunner):
         from news import translation_utils as tu
         tu._gate = tu._LocalGate()
 
+        from news import translation_providers as tp
+        tp._lt_gate = tu._LocalGate()
+
     def teardown_test_environment(self, **kwargs):
         self._libretranslate_kapali.disable()
         super().teardown_test_environment(**kwargs)
