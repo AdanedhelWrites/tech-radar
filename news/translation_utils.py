@@ -19,7 +19,7 @@ import time
 from contextlib import contextmanager
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from deep_translator import GoogleTranslator
+from curl_cffi import requests  # tarayici TLS taklidi; bkz. GtxTranslator
 
 # ============================================================
 # 1. KORUNACAK TEKNIK TERIMLER
@@ -376,8 +376,41 @@ def _get_gate():
     return _gate
 
 
+GTX_URL = 'https://translate.googleapis.com/translate_a/single'
+GTX_TIMEOUT = float(os.environ.get('TRANSLATE_TIMEOUT', '30'))
+
+
+class GtxTranslator:
+    """Google'in `translate_a/single?client=gtx` JSON ucu, Chrome TLS taklidiyle.
+
+    2026-09-14'e kadar deep-translator kullaniliyordu; o kutuphane
+    `translate.google.com/m` HTML sayfasini kazir ve 11 Eylul'den beri
+    hicbir ceviri donmedi. Arastirma bulgusu: Google bu IP'den gelen
+    Python/OpenSSL TLS parmak izini "automated queries" sayip 429 donuyor;
+    basliklar, GET/POST, IPv4/IPv6 fark etmiyor, ayni konteynerden tarayici
+    TLS taklidi (curl_cffi impersonate) 200 donuyor. Bu uc da resmi degildir;
+    hiz siniri ve devre kesici (_translate_via_google) aynen gecerlidir.
+    """
+
+    def translate(self, text: str) -> str:
+        yanit = requests.post(
+            GTX_URL,
+            params={'client': 'gtx', 'sl': 'auto', 'tl': 'tr', 'dt': 't'},
+            data={'q': text},  # uzun metin URL'e sigmaz; govdede gider
+            impersonate='chrome',
+            timeout=GTX_TIMEOUT,
+        )
+        if yanit.status_code != 200:
+            raise RuntimeError(f'Google HTTP {yanit.status_code}: {yanit.text[:80]!r}')
+        try:
+            segmentler = yanit.json()[0]
+        except (ValueError, IndexError, TypeError) as hata:
+            raise RuntimeError(f'Google JSON olmayan yanit dondurdu: {yanit.text[:80]!r}') from hata
+        return ''.join(parca[0] for parca in segmentler if parca and parca[0])
+
+
 def _make_translator():
-    return GoogleTranslator(source='auto', target='tr')
+    return GtxTranslator()
 
 
 _failure_count = 0

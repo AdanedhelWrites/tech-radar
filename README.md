@@ -132,7 +132,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Frontend** | React 18, Vite 5, React Bootstrap 2.9, React Router DOM 6, Axios |
 | **Veri** | SQLite (lokal), PostgreSQL 16 (K8s), Redis 7 (cache + broker) |
 | **Scraping** | BeautifulSoup4, lxml, Requests |
-| **Ceviri** | deep-translator (Google Translate) + merkezi post-processing |
+| **Ceviri** | Google Translate (`translate_a/single?client=gtx` JSON ucu, `requests` ile) + yerel LibreTranslate yedek + merkezi post-processing |
 | **Altyapi** | Docker Compose, Kubernetes, Nginx 1.25, Whitenoise |
 
 ---
