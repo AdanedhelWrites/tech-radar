@@ -119,14 +119,21 @@ Beat takvimi degismez (`crontab(minute=5, hour='1-23/2')`). Butce 400/gun, 12 tu
 
 Frontend kullanici metinleri Turkce karakterli (mevcut kalip).
 
-### 3.6 Dagitim
+### 3.6 Gelistirme ortami (frontend, ayni iste)
+
+Frontend'e zaten dokunuldugu icin iki kucuk gelistirme-ortami duzeltmesi bu ise dahildir (`frontend/vite.config.js`):
+
+- **`/admin` dev'de calismiyor:** Vite proxy'si yalniz `/api`'yi backend'e geciriyor; `localhost:3000/admin` React'in bos sayfasina dusuyor (backend `localhost:8000/admin/` ve prod `nginx.conf` dogru). `/admin` ve `/static` proxy'ye eklenir.
+- **HMR:** Windows Docker bind mount dosya olayi uretmedigi icin Vite degisiklikleri gormuyor; `server.watch.usePolling = true` eklenir (yalniz dev, kucuk CPU maliyeti).
+
+### 3.7 Dagitim
 
 - `docker-compose.yml`: `teknoloji-api` ve `teknoloji-worker` ortamina `GEMINI_API_KEY=${GEMINI_API_KEY}` (scheduler'a degil; ceviri yapmaz). Deger `cybersecurity_news/.env`'den okunur (gitignore'da; 2026-09-15'te yerine kondu). Anahtar repoya, loga, hata mesajina girmez.
 - `requirements.txt`'ten `curl_cffi` cikar → imaj yeniden kurulur (`docker compose build`), api/worker/scheduler `--force-recreate` (ortam degiskeni degisiyor; `restart` yeni ortami almaz).
 - Migration 0010 sema degistirmez; yine de alışkanlik olarak worker/scheduler durdurulup migrate edilir.
 - Geri donus: onceki imaj etiketi + `git revert`; migration geri alma zararsiz.
 
-### 3.7 Guvenlik ve veri
+### 3.8 Guvenlik ve veri
 
 - Anahtar yalniz ortam degiskeni; `GuvenliTestRunner` testlerde `GEMINI_API_KEY`'i bosaltir ve Gemini devre kesicisini surec ici tutar.
 - Gonderilen veri kamuya acik haber/CVE metni; ucretsiz katmanda Google verisi urun gelistirmede kullanabilir (kullanici kabul etti).
