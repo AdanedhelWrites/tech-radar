@@ -2,14 +2,16 @@
 
 2026-09-12'de 19 CVE kaydi 'cevrildi' isaretliyken Turkce aciklamasinda ham
 XTRM yer tutucusu tasiyordu. Bu testler o iki hatayi ve yeni dogrulama
-kurallarini korur. Google hicbir testte cagrilmaz.
+kurallarini korur. Dis servise hicbir gercek istek gitmez.
 """
 import re
 from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
 
+from news import translation_providers as tp
 from news import translation_utils as tu
+from news.tests.saglayici_yardimcilari import SahteSaglayici
 from news.tests.test_translation import FakeTranslator, TranslationGateMixin
 
 KALINTI = re.compile(r'XTRM\d{4}X')
@@ -30,10 +32,10 @@ class YerTutucuGeriKoymaTests(SimpleTestCase):
         self.assertEqual(tu._restore_terms(korunmus, esleme), metin)
 
     def test_bozuk_donen_yer_tutucu_onarilip_geri_konur(self):
-        """Google 'xtrm 0001x' dondurebilir; onarma geri koymadan ONCE yapilmali (H6)."""
+        """Saglayici 'xtrm 0001x' dondurebilir; onarma geri koymadan ONCE yapilmali (H6)."""
         metin = 'The Kubernetes scheduler crashed today.'
-        with mock.patch.object(tu, '_translate_via_google',
-                               return_value='xtrm 0001x zamanlayıcısı bugün çöktü.'):
+        with mock.patch.object(tp, 'SAGLAYICILAR', (
+                SahteSaglayici('libretranslate', lambda p: 'xtrm 0001x zamanlayıcısı bugün çöktü.'),)):
             sonuc = tu.translate_text(metin)
 
         self.assertEqual(sonuc, 'Kubernetes zamanlayıcısı bugün çöktü.')
@@ -46,18 +48,18 @@ UZUN_METIN = ('The researchers published a detailed report describing how the '
 
 
 class CeviriDogrulamaTests(TranslationGateMixin, TestCase):
-    """Guvenilmez ceviri: metin orijinal kalir, sayac artar, Google'a tekrar
+    """Guvenilmez ceviri: metin orijinal kalir, sayac artar, saglayiciya tekrar
     gidilmez ve devre kesici acilmaz."""
 
-    def _cevir(self, metin, google_cevabi):
-        cevirmen = self.use_translator(FakeTranslator(default=google_cevabi))
+    def _cevir(self, metin, saglayici_cevabi):
+        cevirmen = self.use_translator(FakeTranslator(default=saglayici_cevabi))
         return tu.translate_text(metin), cevirmen
 
     def _basarisiz_sayildi(self, sonuc, metin, cevirmen):
         self.assertEqual(sonuc, metin)
         self.assertEqual(tu.consume_translation_failures(), 1)
         self.assertEqual(len(cevirmen.calls), 1, 'Dogrulama hatasi yeniden deneme tetiklememeli')
-        self.assertFalse(tu._gate.cooldown_active(), 'Dogrulama hatasi devre kesiciyi acmamali')
+        self.assertFalse(tp._lt_gate.cooldown_active(), 'Dogrulama hatasi devre kesiciyi acmamali')
 
     def test_yanki_basarisiz_sayilir(self):
         metin = 'Attackers exploited the flaw to steal session cookies.'
@@ -105,7 +107,7 @@ class CeviriDogrulamaTests(TranslationGateMixin, TestCase):
         self.assertEqual(tu.consume_translation_failures(), 0)
 
     def test_eksik_yer_tutucu_basarisiz_sayilir(self):
-        """Google bir yer tutucuyu dusururse korunan terim Turkce metinden sessizce kaybolurdu."""
+        """Saglayici bir yer tutucuyu dusururse korunan terim Turkce metinden sessizce kaybolurdu."""
         metin = 'Upgrade Kubernetes before applying the Helm chart changes.'
         _, esleme = tu._protect_terms(metin)
         kube = next(kod for kod, deger in esleme.items() if deger == 'Kubernetes')
@@ -143,7 +145,7 @@ class VerifyTranslationTests(SimpleTestCase):
 
 
 class TanimlayiciKorumaTests(SimpleTestCase):
-    """LibreTranslate alt cizgiyi siliyor (parse_array -> parse array); Google da zaman zaman boluyor."""
+    """LibreTranslate alt cizgiyi siliyor (parse_array -> parse array); diger saglayicilar da zaman zaman boluyor."""
 
     def test_alt_cizgili_tanimlayici_korunur(self):
         korunmus, esleme = tu._protect_terms('Exploitation requires comments on tribe_events posts.')

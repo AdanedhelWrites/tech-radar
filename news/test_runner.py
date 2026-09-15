@@ -7,7 +7,7 @@ Redis canli devre kesici anahtarlarini tasir. Bu calistirici iki garanti verir:
    bostur. LibreTranslate testleri adresi override_settings ile kendileri verir ve
    HTTP'yi mock'lar.
 2. Hicbir test canli ceviri devre kesicisini okumaz veya acmaz: kapilar surec
-   icidir. Aksi halde Google canlida kisitliyken test sonuclari degisirdi.
+   icidir. Aksi halde LibreTranslate/Gemini devre kesicisi acikken test sonuclari degisirdi.
 3. Hicbir test gercek Gemini'ye gitmez: GEMINI_API_KEY bos, kapi/butce surec ici;
    Gemini testleri anahtari override_settings ile verir ve HTTP'yi mock'lar.
 """
@@ -23,7 +23,6 @@ class GuvenliTestRunner(DiscoverRunner):
         self._libretranslate_kapali.enable()
 
         from news import translation_utils as tu
-        tu._gate = tu._LocalGate()
 
         from news import translation_providers as tp
         tp._lt_gate = tu._LocalGate()

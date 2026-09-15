@@ -126,19 +126,7 @@ class LibreTranslateCeviriTests(LibreTranslateTestMixin, SimpleTestCase):
             self.assertIsNone(tp.LibreTranslateProvider().translate('Some text here.'))
 
 
-class GoogleSarmalayiciTests(SimpleTestCase):
+class SaglayiciZinciriSirasiTests(SimpleTestCase):
 
-    def test_hazirlik_google_devre_kesicisini_izler(self):
-        kapi = tu._LocalGate()
-        with mock.patch.object(tu, '_gate', kapi):
-            self.assertTrue(tp.GoogleProvider().available())
-            kapi.start_cooldown(60)
-            self.assertFalse(tp.GoogleProvider().available())
-
-    def test_ceviri_mevcut_google_mantigina_devredilir(self):
-        with mock.patch.object(tu, '_translate_via_google', return_value='çeviri') as google:
-            self.assertEqual(tp.GoogleProvider().translate('metin'), 'çeviri')
-        google.assert_called_once_with('metin')
-
-    def test_sira_google_once(self):
-        self.assertEqual([s.name for s in tp.SAGLAYICILAR], ['google', 'libretranslate'])
+    def test_zincirde_yalniz_libretranslate_var(self):
+        self.assertEqual([s.name for s in tp.SAGLAYICILAR], ['libretranslate'])

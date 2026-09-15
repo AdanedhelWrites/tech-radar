@@ -168,8 +168,8 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Yerel LibreTranslate servisi: Google kapaliyken devreye giren yedek ceviri
-# saglayicisi. Bos ise hic denenmez (bkz. news/translation_providers.py).
+# Yerel LibreTranslate servisi: cekim aninda tek ceviri saglayicisi.
+# Bos ise hic denenmez (bkz. news/translation_providers.py).
 LIBRETRANSLATE_URL = os.environ.get('LIBRETRANSLATE_URL', '')
 
 # Gemini API (retranslate'te kayit duzeyinde yukseltme; bkz. news/gemini.py).
@@ -194,7 +194,7 @@ CELERY_TASK_TRACK_STARTED = True
 # Celery Beat — tum bolumler 6 saatte bir otomatik cekilir.
 # Ceviri bekleyen kayitlar 2 saatte bir (tek saatlerde) yeniden cevrilir.
 # Bolumler worker ve ceviri yukunu dagitmak icin 10 dk arayla kaydirilir.
-# skip_existing=True: sadece yeni kayitlar cevrilir (Google Translate kotasi korunur).
+# skip_existing=True: sadece yeni kayitlar cevrilir (ceviri saglayicisinin kotasi korunur).
 # Gun araligi task varsayilanidir (manuel "Getir" ile ayni davranis).
 from celery.schedules import crontab
 

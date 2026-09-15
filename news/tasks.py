@@ -20,7 +20,7 @@ from .ai_scraper import MultiAINewsScraper
 def _drop_existing(entries, model, field, key='link'):
     """Veritabaninda zaten cevrilmis olan kayitlari listeden cikarir (tekrar cevrilmesin diye).
     Ceviri bekleyen (needs_translation) kayitlar listede kalir ve yeniden islenir.
-    Ucretsiz Google Translate kotasini korumak icin kullanilir."""
+    Ceviri saglayicisinin yukunu/kotasini korumak icin kullanilir."""
     keys = [e.get(key) for e in entries if e.get(key)]
     existing = set(model.objects.filter(**{f'{field}__in': keys}, needs_translation=False)
                    .values_list(field, flat=True))

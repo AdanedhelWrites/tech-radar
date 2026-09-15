@@ -13,7 +13,7 @@ yalnizca Gemini ile. Gemini tum alanlari dogrulamadan gecirdiyse yazilir (hepsi 
 da hicbiri, gemini.kaydi_cevir icinde); aksi halde LibreTranslate cevirisi yerinde
 kalir ve imlec ilerler. Gemini hazir degilse (anahtar yok / devre kesici / gunluk
 butce) asama baslamaz; butce asama ortasinda biterse imlec ilerletilmeden durur.
-Kendi imleci vardir ({prefix}:upgrade-cursor:{bolum}). Google kayitlari yukseltilmez.
+Kendi imleci vardir ({prefix}:upgrade-cursor:{bolum}). Eski 'google' etiketli kayitlar yukseltilmez.
 
 Yazma kurallari:
   - Basarisiz denemede kayda yazilmaz: updated_at ilerlemez.

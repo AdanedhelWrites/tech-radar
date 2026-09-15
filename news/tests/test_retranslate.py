@@ -1,7 +1,7 @@
 """Retranslate testleri (spec 9.3, A3 plani netlestirme 8-10, 14).
 
-Google sahte, Redis gercek (benzersiz onek), veritabani gercek. Hicbir Celery
-isi kuyruga atilmaz; fonksiyon dogrudan cagrilir.
+LibreTranslate ve Gemini sahte, Redis gercek (benzersiz onek), veritabani gercek.
+Hicbir Celery isi kuyruga atilmaz; fonksiyon dogrudan cagrilir.
 """
 import uuid
 from datetime import date
@@ -14,6 +14,7 @@ from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from news import gemini
+from news import translation_providers as tp
 from news import translation_utils as tu
 from news.models import AINewsEntry, CVEEntry, KubernetesEntry, NewsArticle
 from news.tests.base import LOCMEM_CACHE, test_redis_client
@@ -102,12 +103,24 @@ class RetranslatePendingTests(RetranslateTestBase):
         self.assertGreater(kayit.updated_at, once, 'Basarida updated_at ilerlemeli: delta akisina dusmeli')
         self.assertEqual(sonuc['translated'], 1)
         self.assertEqual(sonuc['sections']['ai'], {'translated': 1, 'failed': 0, 'upgraded': 0})
-        self.assertEqual(sonuc['by_provider'], {'gemini': 0, 'libretranslate': 0, 'google': 1})
-        self.assertEqual(kayit.translation_provider, 'google')
+        self.assertEqual(sonuc['by_provider'], {'gemini': 0, 'libretranslate': 1})
+        self.assertEqual(kayit.translation_provider, 'libretranslate')
         self.assertEqual(len(cevirmen.calls), 2)
 
     def test_erisim_hatasinda_kayda_yazilmaz_ve_durur(self):
-        self.use_translator(FakeTranslator())  # hata sayfasi -> devre kesici acilir
+        # Sahte saglayici gercek LibreTranslateProvider'in devre kesicisini taklit eder:
+        # ilk cagrida erisilemez olur ve bir daha hazir donmez.
+        saglayici = SahteSaglayici('libretranslate')
+
+        def erisilemez(protected):
+            saglayici.hazir = False
+            return None
+
+        saglayici._cevap = erisilemez
+        yama = mock.patch.object(tp, 'SAGLAYICILAR', (saglayici,))
+        yama.start()
+        self.addCleanup(yama.stop)
+
         kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'erisim')
         once = kayit.updated_at
 
@@ -120,16 +133,6 @@ class RetranslatePendingTests(RetranslateTestBase):
         self.assertEqual(sonuc['translated'], 0)
         self.assertFalse(self.redis.exists(f'{self.prefix}:cursor:ai'),
                          'Erisim hatasinda imlec ilerlememeli; kayit bir sonraki turda once denenmeli')
-
-    def test_devre_kesici_acikken_googlea_gidilmez(self):
-        cevirmen = self.use_translator(FakeTranslator(CEVIRILER))
-        self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'kesici')
-        tu._gate.start_cooldown(60)
-
-        sonuc = self._calistir()
-
-        self.assertEqual(cevirmen.calls, [])
-        self.assertTrue(sonuc['stopped'])
 
     def test_bolum_basina_batch_siniri(self):
         self.use_translator(FakeTranslator(CEVIRILER))
@@ -157,7 +160,7 @@ class RetranslatePendingTests(RetranslateTestBase):
         self.assertTrue(takilan.needs_translation)
         self.assertFalse(birinci.needs_translation)
         self.assertFalse(ikinci.needs_translation)
-        self.assertFalse(tu._gate.cooldown_active(), 'Yanki devre kesiciyi acmamali')
+        self.assertFalse(tp._lt_gate.cooldown_active(), 'Yanki devre kesiciyi acmamali')
 
     def test_sona_gelince_imlec_silinir_ve_bastan_baslar(self):
         cevirmen = self.use_translator(FakeTranslator({

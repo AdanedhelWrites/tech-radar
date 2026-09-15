@@ -2,7 +2,7 @@
 Teknoloji Radar — Ortak Ceviri Modulu
 =====================================
 Tum scraper'larin kullandigi merkezi ceviri altyapisi.
-Google Translate + terim koruma + Turkce imla post-processing.
+Ceviri saglayici zinciri + terim koruma + Turkce imla post-processing.
 
 Kullanim:
     from news.translation_utils import translate_text, translate_long_text
@@ -16,16 +16,13 @@ Neden tek modul?
 import os
 import re
 import time
-from contextlib import contextmanager
 from typing import Dict, Iterable, List, Optional, Set, Tuple
-
-from curl_cffi import requests  # tarayici TLS taklidi; bkz. GtxTranslator
 
 # ============================================================
 # 1. KORUNACAK TEKNIK TERIMLER
 # ============================================================
 # Bu terimler ceviri sirasinda placeholder ile degistirilir
-# ve ceviri sonrasi geri konulur. Boylece Google Translate
+# ve ceviri sonrasi geri konulur. Boylece saglayici
 # bunlari bozamaz.
 #
 # KURAL: Sadece "tam kelime" (word-boundary) olarak eslesenler
@@ -150,17 +147,17 @@ PROTECTED_TERMS = _unique_terms
 # 2. TERIM KORUMA MEKANIZMASI
 # ============================================================
 # Placeholder formati: XTRM0001X, XTRM0002X, ...
-# "XTRM" on eki Google Translate tarafindan tercume edilmez
+# "XTRM" on eki hicbir saglayici tarafindan tercume edilmez
 # cunku bilinmeyen bir harf dizisi. Sayisal kisim benzersizlik saglar.
 # ============================================================
 
 _PLACEHOLDER_RE = re.compile(r'XTRM\d{4}X')
-# Google yer tutucuyu bosluklu veya kucuk harfli dondurebilir: 'xtrm 0001x', 'X TRM0001 X'
+# Saglayici yer tutucuyu bosluklu veya kucuk harfli dondurebilir: 'xtrm 0001x', 'X TRM0001 X'
 _BROKEN_PLACEHOLDER_RE = re.compile(r'[Xx]\s*[Tt]\s*[Rr]\s*[Mm]\s*(\d{4})\s*[Xx]')
 
 
 def _repair_placeholders(text: str) -> str:
-    """Google'in bozdugu yer tutuculari standart bicime getirir.
+    """Saglayicinin bozdugu yer tutuculari standart bicime getirir.
 
     Geri koymadan ONCE cagrilmalidir; sonra cagrilirsa onarilan kod artik hic
     geri konamaz ve ceviride ham 'XTRM0001X' kalir.
@@ -211,7 +208,7 @@ def _protect_terms(text: str) -> Tuple[str, Dict[str, str]]:
     )
 
     # 4c) Alt cizgili tanimlayicilar: tribe_events, pg_stat_lock
-    # LibreTranslate alt cizgiyi siler; Google da zaman zaman kelimelere boler.
+    # LibreTranslate alt cizgiyi siler; diger saglayicilar da zaman zaman kelimelere boler.
     result = re.sub(r'\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b', _replace_match, result)
 
     # 5) Surum numaralari: v1.2.3, 9.3.1, 2025.2
@@ -251,32 +248,10 @@ def _restore_terms(text: str, replacements: Dict[str, str]) -> str:
 
 
 # ============================================================
-# 3. GOOGLE TRANSLATE CEVIRI — HIZ SINIRI + DEVRE KESICI
-# ============================================================
-# Ucretsiz Google Translate ucu IP bazli kisitlama uygular (Error 500 / 429).
-# Engeli uzatmamak icin tum worker process'leri Redis uzerinden ortak kurala uyar:
-#   - Iki Google istegi arasinda en az MIN_INTERVAL saniye
-#   - Hata sayfasi / istisna gelirse RETRY_DELAYS kadar bekleyip yeniden dene
-#   - Denemeler tukenirse COOLDOWN_SECONDS boyunca Google'a hic gidilmez
-# Cevrilemeyen metin orijinal haliyle doner ve basarisizlik sayaci artar;
-# task'lar bu sayaci okuyup kaydi `needs_translation` olarak isaretler,
-# boylece kayit sonraki cekimde yeniden cevrilir.
-# ============================================================
-# Google bu zincirin ilk saglayicisidir; LibreTranslate yedektir
-# (bkz. news/translation_providers.py ve saglayicilar()).
-
-MIN_INTERVAL = float(os.environ.get('TRANSLATE_MIN_INTERVAL', '2.0'))
-COOLDOWN_SECONDS = int(os.environ.get('TRANSLATE_COOLDOWN', '1200'))
-RETRY_DELAYS = (5, 15)
-
-ERROR_KEYWORDS = ["Error 500 (Server Error)", "That’s an error.", "Please try again later",
-                  "That's all we know", "Error 429"]
-
 # Dogrulama esikleri (spec 9.2, A3 plani netlestirme 3-7).
-# Google yanit verdi ama sonuc guvenilmezse metin orijinal kalir ve kayit
-# needs_translation ile isaretlenir. Erisim hatasindan farkli olarak yeniden
-# deneme ve devre kesici UYGULANMAZ: sorun icerik, ayni metni tekrar gondermek
-# kotayi yakar.
+# Saglayici yanit verdi ama sonuc guvenilmezse metin orijinal kalir ve kayit
+# needs_translation ile isaretlenir; yeniden deneme ve devre kesici UYGULANMAZ.
+# ============================================================
 MIN_RATIO = float(os.environ.get('TRANSLATE_MIN_RATIO', '0.4'))
 # 'Kubernetes 1.31', 'CVE-2026-1234' gibi kisa metinler mesru olarak ayni kalir
 ECHO_MIN_WORDS = 4
@@ -295,10 +270,10 @@ def _translatable_word_count(protected: str) -> int:
 
 def verify_translation(protected: str, translated: str,
                        placeholders: Iterable[str]) -> Optional[str]:
-    """Google cevabinin guvenilir olup olmadigini soyler.
+    """Saglayici cevabinin guvenilir olup olmadigini soyler.
 
-    protected: Google'a gonderilen, terimleri korunmus metin.
-    translated: Onarilmis ama henuz geri konmamis Google cevabi.
+    protected: Saglayiciya gonderilen, terimleri korunmus metin.
+    translated: Onarilmis ama henuz geri konmamis saglayici cevabi.
     placeholders: Bu cagrinin urettigi kodlar. Metinde bunlarin disinda kod
     olabilir (k8s_scraper dis katmani); onlar burada denetlenmez.
 
@@ -359,60 +334,6 @@ class _RedisGate:
             self.client.delete(self.cooldown_key)
 
 
-_gate = None
-
-
-def _get_gate():
-    """Django/Redis ortaminda paylasimli gate, degilse process ici gate."""
-    global _gate
-    if _gate is None:
-        try:
-            from django_redis import get_redis_connection
-            client = get_redis_connection('default')
-            client.ping()
-            _gate = _RedisGate(client)
-        except Exception:
-            _gate = _LocalGate()
-    return _gate
-
-
-GTX_URL = 'https://translate.googleapis.com/translate_a/single'
-GTX_TIMEOUT = float(os.environ.get('TRANSLATE_TIMEOUT', '30'))
-
-
-class GtxTranslator:
-    """Google'in `translate_a/single?client=gtx` JSON ucu, Chrome TLS taklidiyle.
-
-    2026-09-14'e kadar deep-translator kullaniliyordu; o kutuphane
-    `translate.google.com/m` HTML sayfasini kazir ve 11 Eylul'den beri
-    hicbir ceviri donmedi. Arastirma bulgusu: Google bu IP'den gelen
-    Python/OpenSSL TLS parmak izini "automated queries" sayip 429 donuyor;
-    basliklar, GET/POST, IPv4/IPv6 fark etmiyor, ayni konteynerden tarayici
-    TLS taklidi (curl_cffi impersonate) 200 donuyor. Bu uc da resmi degildir;
-    hiz siniri ve devre kesici (_translate_via_google) aynen gecerlidir.
-    """
-
-    def translate(self, text: str) -> str:
-        yanit = requests.post(
-            GTX_URL,
-            params={'client': 'gtx', 'sl': 'auto', 'tl': 'tr', 'dt': 't'},
-            data={'q': text},  # uzun metin URL'e sigmaz; govdede gider
-            impersonate='chrome',
-            timeout=GTX_TIMEOUT,
-        )
-        if yanit.status_code != 200:
-            raise RuntimeError(f'Google HTTP {yanit.status_code}: {yanit.text[:80]!r}')
-        try:
-            segmentler = yanit.json()[0]
-        except (ValueError, IndexError, TypeError) as hata:
-            raise RuntimeError(f'Google JSON olmayan yanit dondurdu: {yanit.text[:80]!r}') from hata
-        return ''.join(parca[0] for parca in segmentler if parca and parca[0])
-
-
-def _make_translator():
-    return GtxTranslator()
-
-
 _failure_count = 0
 
 
@@ -430,10 +351,9 @@ def consume_translation_failures() -> int:
 # Saglayici zinciri (spec 2026-09-14-ceviri-saglayici-zinciri)
 # ------------------------------------------------------------
 # translate_text saglayicilari translation_providers.SAGLAYICILAR sirasiyla
-# dener: Google -> LibreTranslate -> orijinal metin.
+# dener: LibreTranslate -> orijinal metin (Gemini yalniz retranslate'te).
 
 _used_providers: Set[str] = set()
-_saglayici_kisiti = None
 
 
 def consume_translation_providers() -> Set[str]:
@@ -453,50 +373,13 @@ def kayit_saglayicisi(kullanilanlar: Iterable[str]) -> str:
     return ''
 
 
-@contextmanager
-def yalnizca_saglayicilar(*adlar):
-    """Blok icinde yalnizca bu adlardaki saglayicilar denenir (orn. yukseltme: 'google')."""
-    global _saglayici_kisiti
-    onceki = _saglayici_kisiti
-    _saglayici_kisiti = set(adlar)
-    try:
-        yield
-    finally:
-        _saglayici_kisiti = onceki
-
-
 def saglayicilar() -> list:
     from . import translation_providers as tp
-    if _saglayici_kisiti is None:
-        return list(tp.SAGLAYICILAR)
-    return [s for s in tp.SAGLAYICILAR if s.name in _saglayici_kisiti]
+    return list(tp.SAGLAYICILAR)
 
 
 def herhangi_saglayici_hazir() -> bool:
     return any(s.available() for s in saglayicilar())
-
-
-def _translate_via_google(protected: str) -> Optional[str]:
-    """Hiz siniri ve devre kesici altinda Google'a gider; cevrilemezse None."""
-    gate = _get_gate()
-    for delay in (0,) + tuple(RETRY_DELAYS):
-        if gate.cooldown_active():
-            return None
-        if delay:
-            time.sleep(delay)
-        gate.wait_for_slot(MIN_INTERVAL)
-        try:
-            translated = _make_translator().translate(protected)
-        except Exception as e:
-            print(f"  [Ceviri] Hata: {e}")
-            continue
-        if translated and not any(keyword in translated for keyword in ERROR_KEYWORDS):
-            return translated
-        print("  [Ceviri] Google Translate hata sayfasi / bos yanit dondurdu.")
-
-    print(f"  [Ceviri] Google erisilemiyor; {COOLDOWN_SECONDS} sn boyunca ceviri durduruldu.")
-    gate.start_cooldown(COOLDOWN_SECONDS)
-    return None
 
 
 def translate_text(text: str) -> str:
@@ -607,10 +490,10 @@ def translate_long_text(text: str, chunk_size: int = 4500) -> str:
 # ============================================================
 # 4. TURKCE POST-PROCESSING
 # ============================================================
-# Google Translate sonrasi Turkce imla kurallarina uyum duzeltmeleri.
+# Ceviri sonrasi Turkce imla kurallarina uyum duzeltmeleri.
 # ============================================================
 
-# Google Translate'in sik yaptigi hatali ceviriler
+# Saglayicilarin sik yaptigi hatali ceviriler
 # Format: (regex_pattern, replacement_string)
 TRANSLATION_FIXES = [
     # --- Yanlis cevrilmis teknik kavramlar ---
