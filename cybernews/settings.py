@@ -172,6 +172,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # saglayicisi. Bos ise hic denenmez (bkz. news/translation_providers.py).
 LIBRETRANSLATE_URL = os.environ.get('LIBRETRANSLATE_URL', '')
 
+# Gemini API (retranslate'te kayit duzeyinde yukseltme; bkz. news/gemini.py).
+# Bos ise Gemini hic denenmez. Deger yalniz ortam degiskeninden gelir.
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+
 # Testler canli LibreTranslate'e ve canli ceviri devre kesicisine dokunmaz.
 TEST_RUNNER = 'news.test_runner.GuvenliTestRunner'
 
