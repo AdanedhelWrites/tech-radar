@@ -13,6 +13,7 @@ services:
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - teknoloji-redis
     volumes:
@@ -88,6 +89,7 @@ services:
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - teknoloji-redis
       - teknoloji-api
