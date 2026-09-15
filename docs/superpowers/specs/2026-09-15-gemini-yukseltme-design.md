@@ -1,7 +1,7 @@
 # Gemini ile Kayit Duzeyinde Ceviri Yukseltme — Tasarim Dokumani
 
 - **Tarih:** 2026-09-15
-- **Durum:** Onaylandi (2026-09-15, tasarim sohbette onaylandi; uygulama bekliyor)
+- **Durum:** Uygulandi (2026-09-15, PR #33). Onaylandi (2026-09-15).
 - **Kapsam:** Google Translate kazima yolunun kaldirilmasi; cekim aninda yalniz LibreTranslate; `retranslate_pending`'in bekleyen ve LibreTranslate kayitlarini Gemini API ile kayit duzeyinde (tek istek) yukseltmesi; her kayitta saglayici rozeti
 - **Kapsam disi:** Cekim aninda Gemini; `google` kayitlarinin yukseltilmesi; Helm/Kubernetes (Faz B); ucretli katman
 - **Iliskili:** [ADR-0004](../../ADR-0004-Ceviri-Saglayici-Zinciri.md) (saglayici zinciri), `2026-09-14-ceviri-saglayici-zinciri-design.md` (retranslate iki asama), A3 plani (dogrulama)

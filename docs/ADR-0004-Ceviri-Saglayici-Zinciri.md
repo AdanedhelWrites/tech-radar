@@ -1,7 +1,7 @@
 # ADR 0004: Ceviri Saglayici Zinciri (Google once, LibreTranslate yedek)
 
 ## Status
-Accepted — 2026-09-14 (uygulandi; PR #27 `1d70f46`, migration `0009_translation_provider`, canlida dogrulandi).
+Accepted — 2026-09-14 (uygulandi; PR #27 `1d70f46`, migration `0009_translation_provider`, canlida dogrulandi). Degisiklik 2026-09-15: Google kaldirildi, Gemini yukseltme (bkz. asagida).
 
 Tasarim: [`superpowers/specs/2026-09-14-ceviri-saglayici-zinciri-design.md`](superpowers/specs/2026-09-14-ceviri-saglayici-zinciri-design.md). Plan: `superpowers/plans/2026-09-14-ceviri-saglayici-zinciri.md` (spec ile celiskide planin "Spec'e Gore Netlestirmeler" bolumu gecerlidir). Ceviri dogrulamasi ve `retranslate_pending` icin bkz. [ADR-0003](ADR-0003-Entegrasyon-API-v1.md) karar 9.
 
@@ -46,6 +46,10 @@ Bu kalite bulgusu ilk fikri ("LibreTranslate ana, Google yedek") degistirdi.
 | HTML `translate="no"` / `<code>` ile terim koruma | Terimler korunuyor ama cumle parcalaniyor, kelime tekrari |
 | Ucretli ceviri API'leri, Opus-MT | Kapsam disi; Opus-MT ayni arayuzle ucuncu saglayici olarak eklenebilir |
 | Yukseltmede kismi yazma | Bir kayitta iki kalite seviyesi karisir; hepsi-ya-da-hicbiri secildi (kullanici karari) |
+
+## Degisiklik (2026-09-15) — Google kaldirildi, Gemini yukseltme
+
+Google Translate'in resmi olmayan uclari bu IP'den TLS parmak izi ve hacimle bloklandi (`/sorry/` CAPTCHA); `curl_cffi` ile acilan kapi hacimde yeniden kapandi. Kalici cozum: cekim aninda yalniz LibreTranslate; `retranslate` bekleyen ve LibreTranslate kayitlarini **Gemini API** (`gemini-3.5-flash-lite`, ucretsiz katman 500 RPD / 15 RPM) ile kayit basina tek istekle yukseltir; gunluk 400 istek butcesi + 5 sn aralik + devre kesici. `GoogleProvider`, `_translate_via_google`, `curl_cffi` silindi; `google` kayitlari etiketli kalir, yukseltilmez. Her kayit saglayici rozeti tasir. Tasarim: `superpowers/specs/2026-09-15-gemini-yukseltme-design.md`. Bu ADR'nin 3.1, 5 ve 7 numarali kararlari buna gore guncellenmistir; yerel LibreTranslate yedek olarak kalir.
 
 ## Consequences
 

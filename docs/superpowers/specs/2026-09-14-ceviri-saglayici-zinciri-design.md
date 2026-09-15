@@ -1,7 +1,7 @@
 # Ceviri Saglayici Zinciri — Tasarim Dokumani
 
 - **Tarih:** 2026-09-14
-- **Durum:** Uygulandi (PR #27, 2026-09-14; karar kaydi [ADR-0004](../../ADR-0004-Ceviri-Saglayici-Zinciri.md)). Onaylandi (2026-09-14). Kullanici secimleri: yukseltme hepsi-ya-da-hicbiri; eski kayitlar sessizce `google`; bekleyen 100 / yukseltme 5; LibreTranslate 4 CPU / 2 GB
+- **Durum:** Uygulandi (PR #27, 2026-09-14; karar kaydi [ADR-0004](../../ADR-0004-Ceviri-Saglayici-Zinciri.md)). Onaylandi (2026-09-14). Kullanici secimleri: yukseltme hepsi-ya-da-hicbiri; eski kayitlar sessizce `google`; bekleyen 100 / yukseltme 5; LibreTranslate 4 CPU / 2 GB. Google yolu 2026-09-15'te kaldirildi; bkz. 2026-09-15-gemini-yukseltme-design.md.
 - **Kapsam:** Google Translate'in yanina yerel LibreTranslate servisini yedek saglayici olarak eklemek; kaydin hangi saglayiciyla cevrildigini saklamak ve Google acildiginda dusuk kaliteli cevirileri yukseltmek
 - **Kapsam disi:** Helm chart (Faz B), Opus-MT gibi alternatif modeller, ucretli API'ler
 - **Iliskili:** `2026-09-12-entegrasyon-api-v1-design.md` (bolum 9 — ceviri dogrulugu); A3 plani (`retranslate_pending`)
