@@ -36,10 +36,12 @@ RETRANSLATE_UPGRADE_BATCH = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH', '5')
 
 def _baslik_ve_uzun_aciklama(kayit) -> Dict[str, str]:
     # scraper_multi, sre_scraper, devtools_scraper ve ai_scraper ile ayni kural
-    return {
-        'turkish_title': tu.translate_text(kayit.original_title),
-        'turkish_description': tu.translate_long_text(kayit.original_description),
-    }
+    alanlar = {'turkish_title': tu.translate_text(kayit.original_title)}
+    # Orijinal bos ise cevrilecek bir sey yok; mevcut Turkce govde ezilmesin
+    # (2026-09-15: haber kayitlarinda orijinal hic saklanmiyordu, 18 kayit boslandi)
+    if (kayit.original_description or '').strip():
+        alanlar['turkish_description'] = tu.translate_long_text(kayit.original_description)
+    return alanlar
 
 
 def _cve(kayit) -> Dict[str, str]:

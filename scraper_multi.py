@@ -637,6 +637,7 @@ class MultiSourceScraper(BaseRSSScraper):
                 yield {
                     'original_title': article['title'],
                     'turkish_title': translated_title,
+                    'original_description': article['description'],
                     'turkish_description': translated_desc,
                     'turkish_summary': '',
                     'link': article['link'],
@@ -649,6 +650,7 @@ class MultiSourceScraper(BaseRSSScraper):
                 yield {
                     'original_title': article['title'],
                     'turkish_title': article['title'],
+                    'original_description': article['description'],
                     'turkish_description': article['description'],
                     'turkish_summary': '',
                     'link': article['link'],
