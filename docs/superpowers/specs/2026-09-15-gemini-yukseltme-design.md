@@ -1,7 +1,7 @@
 # Gemini ile Kayit Duzeyinde Ceviri Yukseltme — Tasarim Dokumani
 
 - **Tarih:** 2026-09-15
-- **Durum:** Onaylandi (2026-09-15, tasarim sohbette onaylandi; uygulama bekliyor)
+- **Durum:** Uygulandi (2026-09-15, PR #33). Onaylandi (2026-09-15).
 - **Kapsam:** Google Translate kazima yolunun kaldirilmasi; cekim aninda yalniz LibreTranslate; `retranslate_pending`'in bekleyen ve LibreTranslate kayitlarini Gemini API ile kayit duzeyinde (tek istek) yukseltmesi; her kayitta saglayici rozeti
 - **Kapsam disi:** Cekim aninda Gemini; `google` kayitlarinin yukseltilmesi; Helm/Kubernetes (Faz B); ucretli katman
 - **Iliskili:** [ADR-0004](../../ADR-0004-Ceviri-Saglayici-Zinciri.md) (saglayici zinciri), `2026-09-14-ceviri-saglayici-zinciri-design.md` (retranslate iki asama), A3 plani (dogrulama)
@@ -77,7 +77,7 @@ def kaydi_cevir(alanlar: Dict[str, str]) -> Optional[Dict[str, str]]
 | Post-process | `turkish_post_process` uygulanmaz (LLM ciktisi zaten duzgun; cumle basi buyutme `kubectl → Kubectl` sorununu tasimayalim) |
 | Zaman asimi | `GEMINI_TIMEOUT`, varsayilan 60 sn |
 | Hiz | Redis paylasimli aralik kapisi (`_RedisGate`, onek `gemini`): istekler arasi en az `GEMINI_MIN_INTERVAL` sn (varsayilan 5 → en fazla 12/dk < 15 RPM) |
-| Gunluk butce | Redis sayaci `gemini:budget:<UTC tarih>` (TTL 48 sa), `GEMINI_DAILY_BUDGET` varsayilan **400** (< 500 RPD, Beat disi manuel kullanim icin pay). Her istek **oncesi** `INCR`; sinir asilmissa istek atilmaz, `butce_var() == False`. 4xx yanitta (istek Google tarafinda sayilmadi) `DECR` ile geri alinir |
+| Gunluk butce | Redis sayaci `gemini:budget:<Pasifik/America/Los_Angeles tarih>` (Google RPD kotasi bu saat diliminde sifirlanir; UTC anahtar bir Google gununde 2x isteğe izin verirdi) (TTL 48 sa), `GEMINI_DAILY_BUDGET` varsayilan **400** (< 500 RPD, Beat disi manuel kullanim icin pay). Her istek **oncesi** `INCR`; sinir asilmissa istek atilmaz, `butce_var() == False`. 4xx yanitta (istek Google tarafinda sayilmadi) `DECR` ile geri alinir |
 | Hata siniflari | Baglanti hatasi / zaman asimi / **429** / 5xx → `None` + devre kesici `GEMINI_COOLDOWN` (varsayilan 600 sn). 4xx (400 gecersiz istek, 401/403 anahtar) → `None`, devre kesici **acilmaz**, hata govdesi loglanir (anahtar sorunu gorulur). JSON ayristirilamiyor / anahtar eksik / `finishReason` `SAFETY` vb. → `None`, devre kesici acilmaz |
 | Hazirlik | `hazir()`: `GEMINI_API_KEY` dolu **ve** devre kesici kapali **ve** gunluk butce var |
 | Dis sozlesme | Hicbir istisna disari cikmaz; `None` doner |
@@ -159,7 +159,7 @@ Beat retranslate (2 saatte bir, tek saatler :05)
 | `GEMINI_API_KEY` yok | Gemini hic denenmez; sistem bugunku gibi (LibreTranslate) calisir |
 | 429 / 5xx / ag / zaman asimi | 10 dk devre kesici; asama durur, LT zinciri bekleyenler icin devam eder |
 | 401/403 (anahtar) | Loglanir, devre kesici acilmaz, kayit `None`; her turda 1 istekle fark edilir (butceden dusmez: sayac istek oncesi artar ama 4xx'te geri alinir) |
-| Gunluk butce bitti | O gun Gemini kullanilmaz; ertesi UTC gun sayac sifirlanir |
+| Gunluk butce bitti | O gun Gemini kullanilmaz; ertesi Pasifik gunu sayac sifirlanir |
 | JSON bozuk / alan eksik / safety | `None`, imlec ilerler, kayit sonraki turda tekrar denenir |
 | Dogrulama basarisiz | `None`; LibreTranslate'te kalan kayit rozetli kalir |
 

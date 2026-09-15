@@ -1,14 +1,14 @@
 """
 Ceviri dayanikliligi testleri.
 
-Ucretsiz Google Translate ucu IP bazli kisitlama uygular. Bu testler su davranislari korur:
-  - Hata sayfasi / istisna gelince yeniden denenir, denemeler tukenince orijinal metin doner
-  - Denemeler tukenince devre kesici (cooldown) acilir ve Google'a hic gidilmez
+Cekim aninda tek saglayici LibreTranslate'tir (Google 2026-09-15'te kaldirildi). Bu testler
+su davranislari korur:
+  - Saglayici erisilemez/hata verirse metin orijinal kalir ve basarisizlik sayilir
   - Basarisiz ceviriler sayilir; task kaydi `needs_translation` olarak isaretler
   - Isaretli kayitlar sonraki cekimde tekrar islenir (skip_existing onlari atlamaz)
-  - Hiz siniri ve cooldown Redis uzerinden tum worker process'lerince paylasilir
+  - Aralik kapisi ve devre kesici Redis uzerinden tum worker process'lerince paylasilir
 
-Google Translate harici servis oldugu icin sahte cevirmen kullanilir; Redis ve DB gercektir.
+Dis servisler icin sahte cevirmen kullanilir; Redis ve DB gercektir.
 """
 import time
 import uuid
@@ -19,8 +19,10 @@ from django.test import TestCase, override_settings
 from django_redis import get_redis_connection
 
 from news import tasks
+from news import translation_providers as tp
 from news import translation_utils as tu
 from news.models import AINewsEntry
+from news.tests.saglayici_yardimcilari import SahteSaglayici
 
 ERROR_PAGE = ('Error 500 (Server Error)!!1500.That’s an error.There was an error. '
               'Please try again later.That’s all we know.')
@@ -30,7 +32,7 @@ LOCMEM_CACHE = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMem
 
 
 class FakeTranslator:
-    """GoogleTranslator yerine gecer. Girdi metnine gore yanit verir; bilinmeyen metne hata sayfasi doner."""
+    """Gercek saglayici yerine gecer. Girdi metnine gore yanit verir; bilinmeyen metne hata sayfasi doner."""
 
     def __init__(self, answers=None, default=ERROR_PAGE):
         self.answers = answers or {}
@@ -61,70 +63,43 @@ class SequenceTranslator(FakeTranslator):
 
 
 class TranslationGateMixin:
-    """Her testte temiz, tek-process gate; beklemeler sifir."""
+    """Her testte temiz, tek-process kapi; zincirde sahte LibreTranslate."""
 
     def setUp(self):
         super().setUp()
-        for target, value in (('_gate', tu._LocalGate()), ('MIN_INTERVAL', 0.0),
-                              ('RETRY_DELAYS', (0.0, 0.0)), ('COOLDOWN_SECONDS', 60)):
-            patcher = mock.patch.object(tu, target, value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        yama = mock.patch.object(tp, '_lt_gate', tu._LocalGate())
+        yama.start()
+        self.addCleanup(yama.stop)
         tu.consume_translation_failures()
+        tu.consume_translation_providers()
 
     def use_translator(self, translator):
-        patcher = mock.patch.object(tu, '_make_translator', return_value=translator)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        """FakeTranslator'i zincirdeki tek saglayici (libretranslate) olarak takar.
+
+        FakeTranslator sozlesmesi korunur: bilinmeyen metne ERROR_PAGE (=> saglayici
+        erisilemedi, None), Exception degerine istisna (zincir yakalar, orijinal kalir).
+        """
+        def cevap(protected):
+            yanit = translator.translate(protected)
+            return None if yanit == ERROR_PAGE else yanit
+
+        yama = mock.patch.object(tp, 'SAGLAYICILAR', (SahteSaglayici('libretranslate', cevap),))
+        yama.start()
+        self.addCleanup(yama.stop)
         return translator
 
 
 class TranslateTextResilienceTests(TranslationGateMixin, TestCase):
 
-    def test_blocked_google_returns_original_text_after_retries_and_records_failure(self):
-        for label, response in (('hata sayfasi', ERROR_PAGE),
-                                ('istisna', Exception('No translation was found')),
-                                ('bos yanit', '')):
-            with self.subTest(label):
-                tu._gate.start_cooldown(0)  # onceki alt testin cooldown'unu sifirla
-                translator = self.use_translator(SequenceTranslator(response))
+    def test_saglayici_erisilemezse_orijinal_doner_ve_basarisizlik_sayilir(self):
+        self.use_translator(FakeTranslator())  # her metne hata sayfasi => erisilemedi
+        self.assertEqual(tu.translate_text('Farmers adopt new sensors'), 'Farmers adopt new sensors')
+        self.assertEqual(tu.consume_translation_failures(), 1)
 
-                result = tu.translate_text('Cloud security update released today.')
-
-                self.assertEqual(result, 'Cloud security update released today.')
-                self.assertEqual(len(translator.calls), 3)  # ilk deneme + 2 yeniden deneme
-                self.assertEqual(tu.consume_translation_failures(), 1)
-
-    def test_transient_error_recovers_on_retry(self):
-        translator = self.use_translator(
-            SequenceTranslator(ERROR_PAGE, 'Bulut güvenlik güncellemesi bugün yayınlandı.'))
-
-        result = tu.translate_text('Cloud security update released today.')
-
-        self.assertEqual(result, 'Bulut güvenlik güncellemesi bugün yayınlandı.')
-        self.assertEqual(len(translator.calls), 2)
-        self.assertEqual(tu.consume_translation_failures(), 0)
-
-    def test_exhausted_retries_open_cooldown_and_skip_google_entirely(self):
-        translator = self.use_translator(SequenceTranslator(ERROR_PAGE))
-        tu.translate_text('First article body.')
-        calls_after_first = len(translator.calls)
-
-        result = tu.translate_text('Second article body.')
-
-        self.assertEqual(result, 'Second article body.')
-        self.assertEqual(len(translator.calls), calls_after_first)  # cooldown: Google'a gidilmedi
-        self.assertEqual(tu.consume_translation_failures(), 2)
-
-    def test_cooldown_expires_and_translation_resumes(self):
-        with mock.patch.object(tu, 'COOLDOWN_SECONDS', 0.05):
-            self.use_translator(SequenceTranslator(ERROR_PAGE, ERROR_PAGE, ERROR_PAGE, 'Tekrar çalışıyor.'))
-            tu.translate_text('Blocked now.')
-            time.sleep(0.1)
-
-            result = tu.translate_text('Works again.')
-
-        self.assertEqual(result, 'Tekrar çalışıyor.')
+    def test_saglayici_istisnasi_orijinal_birakir(self):
+        self.use_translator(FakeTranslator({'Farmers adopt new sensors': RuntimeError('patladi')}))
+        self.assertEqual(tu.translate_text('Farmers adopt new sensors'), 'Farmers adopt new sensors')
+        self.assertEqual(tu.consume_translation_failures(), 1)
 
     def test_failed_chunk_in_long_text_is_recorded_and_kept_in_original(self):
         self.use_translator(FakeTranslator({'First sentence is here.': 'Birinci cümle burada.'}))
@@ -169,10 +144,6 @@ class RedisGateTests(TestCase):
         self.assertTrue(second.cooldown_active())
         self.assertFalse(unrelated.cooldown_active())
 
-    def test_django_environment_uses_shared_redis_gate(self):
-        with mock.patch.object(tu, '_gate', None):
-            self.assertIsInstance(tu._get_gate(), tu._RedisGate)
-
 
 class DropExistingTests(TestCase):
 
@@ -192,7 +163,7 @@ class DropExistingTests(TestCase):
 
 @override_settings(CACHES=LOCMEM_CACHE)
 class FetchAINewsTaskTranslationTests(TranslationGateMixin, TestCase):
-    """Gercek MultiAINewsScraper.process_entries + gercek task; sadece ag (fetch_all) ve Google sahte."""
+    """Gercek MultiAINewsScraper.process_entries + gercek task; sadece ag (fetch_all) ve saglayici sahte."""
 
     def raw(self, title, description, slug):
         return {'title': title, 'description': description, 'link': f'https://example.com/{slug}',
@@ -207,11 +178,10 @@ class FetchAINewsTaskTranslationTests(TranslationGateMixin, TestCase):
             'Farmers adopt new sensors': 'Çiftçiler yeni sensörler benimsiyor',
             'Sensors measure soil moisture every hour.': 'Sensörler toprak nemini her saat ölçüyor.',
         }))
-        with mock.patch.object(tu, 'COOLDOWN_SECONDS', 0):  # ikinci kayit cooldown'a takilmasin
-            result = self.run_task([
-                self.raw('Robots learn to sort laundry', 'The team trained robots for months.', 'robots'),
-                self.raw('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'farmers'),
-            ])
+        result = self.run_task([
+            self.raw('Robots learn to sort laundry', 'The team trained robots for months.', 'robots'),
+            self.raw('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'farmers'),
+        ])
 
         self.assertEqual(result, {'success': True, 'count': 2})
         failed = AINewsEntry.objects.get(link='https://example.com/robots')

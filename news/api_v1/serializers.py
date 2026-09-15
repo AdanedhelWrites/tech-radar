@@ -51,7 +51,7 @@ class BaseEntrySerializer(serializers.ModelSerializer):
         return {'original': obj.original_description, 'tr': obj.turkish_description}
 
     def get_translation_provider(self, obj):
-        # 'google', 'libretranslate' veya ceviri yoksa null. Tuketici
+        # 'google', 'libretranslate', 'gemini' veya ceviri yoksa null. Tuketici
         # 'libretranslate' icin "makine cevirisi" etiketi gosterebilir.
         return obj.translation_provider or None
 

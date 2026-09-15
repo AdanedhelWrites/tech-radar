@@ -1,7 +1,7 @@
 # ADR 0004: Ceviri Saglayici Zinciri (Google once, LibreTranslate yedek)
 
 ## Status
-Accepted — 2026-09-14 (uygulandi; PR #27 `1d70f46`, migration `0009_translation_provider`, canlida dogrulandi).
+Accepted — 2026-09-14 (uygulandi; PR #27 `1d70f46`, migration `0009_translation_provider`, canlida dogrulandi). Degisiklik 2026-09-15: Google kaldirildi, Gemini yukseltme (bkz. asagida).
 
 Tasarim: [`superpowers/specs/2026-09-14-ceviri-saglayici-zinciri-design.md`](superpowers/specs/2026-09-14-ceviri-saglayici-zinciri-design.md). Plan: `superpowers/plans/2026-09-14-ceviri-saglayici-zinciri.md` (spec ile celiskide planin "Spec'e Gore Netlestirmeler" bolumu gecerlidir). Ceviri dogrulamasi ve `retranslate_pending` icin bkz. [ADR-0003](ADR-0003-Entegrasyon-API-v1.md) karar 9.
 
@@ -47,6 +47,10 @@ Bu kalite bulgusu ilk fikri ("LibreTranslate ana, Google yedek") degistirdi.
 | Ucretli ceviri API'leri, Opus-MT | Kapsam disi; Opus-MT ayni arayuzle ucuncu saglayici olarak eklenebilir |
 | Yukseltmede kismi yazma | Bir kayitta iki kalite seviyesi karisir; hepsi-ya-da-hicbiri secildi (kullanici karari) |
 
+## Degisiklik (2026-09-15) — Google kaldirildi, Gemini yukseltme
+
+Google Translate'in resmi olmayan uclari bu IP'den TLS parmak izi ve hacimle bloklandi (`/sorry/` CAPTCHA); `curl_cffi` ile acilan kapi hacimde yeniden kapandi. Kalici cozum: cekim aninda yalniz LibreTranslate; `retranslate` bekleyen ve LibreTranslate kayitlarini **Gemini API** (`gemini-3.5-flash-lite`, ucretsiz katman 500 RPD / 15 RPM) ile kayit basina tek istekle yukseltir; gunluk 400 istek butcesi + 5 sn aralik + devre kesici. `GoogleProvider`, `_translate_via_google`, `curl_cffi` silindi; `google` kayitlari etiketli kalir, yukseltilmez. Her kayit saglayici rozeti tasir. Tasarim: `superpowers/specs/2026-09-15-gemini-yukseltme-design.md`. Bu ADR'nin 3.1, 5 ve 7 numarali kararlari buna gore guncellenmistir; yerel LibreTranslate yedek olarak kalir.
+
 ## Consequences
 
 - **Positive:** Google kapaliyken haberler yerel servisle aninda Turkceye cevrilir; retranslate durmaz. Canli dogrulamada (2026-09-14) ilk calismada 204/642 bekleyen kayit LibreTranslate ile cevrildi. Kullanici dusuk kaliteli ceviriyi rozetten ayirt eder; Google acilinca kayitlar kendiliginden yukselir. Alt cizgili tanimlayici korumasi Google cevirilerini de iyilestirdi. Dis bagimlilik yok; imaj 600 MB, bellek < 1.2 GB.
@@ -55,4 +59,4 @@ Bu kalite bulgusu ilk fikri ("LibreTranslate ana, Google yedek") degistirdi.
   - Aciklamasi 30 karakterden kisa oldugu icin hic cevrilmemis CVE'ler veri migration'inda `google` gorunur; cevrilecek metin olmadigi icin zararsizdir.
   - Yukseltme bolum basina 5 kayit/tur oldugu icin buyuk bir LibreTranslate birikimi Google acilsa bile gunler icinde erir.
   - `turkish_post_process` cumle basini buyuttugu icin `kubectl` → `Kubectl` (A3'ten kalan, dokunulmadi).
-- **Acik isler:** A4'te `FetchRun`'a `translation_failures` yaninda `by_provider` dagilimi; Faz B'de Helm'e LibreTranslate Deployment/Service/PVC + `LIBRETRANSLATE_URL`; A5'te README'ye `LIBRETRANSLATE_URL/TIMEOUT/COOLDOWN/CHUNK_CHARS`, `RETRANSLATE_UPGRADE_BATCH`, yeni servis ve rozet.
+- **Acik isler:** A4'te `FetchRun`'a `translation_failures` yaninda `by_provider` dagilimi; Faz B'de Helm'e LibreTranslate Deployment/Service/PVC + `LIBRETRANSLATE_URL`; A5'te README'ye `LIBRETRANSLATE_URL/TIMEOUT/COOLDOWN/CHUNK_CHARS`.

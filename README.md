@@ -29,7 +29,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
                               ┌───────────▼───────────┐
                                │   Harici Kaynaklar     │
                                │   (35 kaynak)          │
-                              │   + Google Translate    │
+                              │   + LibreTranslate      │
                               └─────────────────────────┘
 ```
 
@@ -132,7 +132,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Frontend** | React 18, Vite 5, React Bootstrap 2.9, React Router DOM 6, Axios |
 | **Veri** | SQLite (lokal), PostgreSQL 16 (K8s), Redis 7 (cache + broker) |
 | **Scraping** | BeautifulSoup4, lxml, Requests |
-| **Ceviri** | Google Translate (`translate_a/single?client=gtx` JSON ucu, `requests` ile) + yerel LibreTranslate yedek + merkezi post-processing |
+| **Ceviri** | Cekim aninda yerel LibreTranslate (aninda Turkce, rozetli); retranslate 2 saatte bir bekleyen ve LibreTranslate kayitlarini Gemini API (gemini-3.5-flash-lite, ucretsiz katman, kayit basina tek istek) ile yukseltir + merkezi post-processing |
 | **Altyapi** | Docker Compose, Kubernetes, Nginx 1.25, Whitenoise |
 
 ---
@@ -142,14 +142,17 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 ### Gereksinimler
 
 - Docker ve Docker Compose
-- Internet baglantisi (kaynak sitelere ve Google Translate'e erisim)
+- Internet baglantisi (kaynak sitelere ve Gemini API'ye erisim icin; LibreTranslate yerel container'da calisir)
 
 ### Hizli Baslangic
+
+`.env.example`'i `.env` olarak kopyalayin ve isterseniz `GEMINI_API_KEY` degerini girin (bos birakilirsa Gemini hic denenmez, sistem LibreTranslate ile calisir):
 
 ```bash
 git clone https://github.com/AdanedhelWrites/tech-radar.git
 cd tech-radar/cybersecurity_news
 
+cp .env.example .env
 docker compose up -d --build
 ```
 
@@ -348,7 +351,7 @@ Terimler uzunluktan kisaya siralanarak islenir — kisa terimlerin kelime icinde
 
 ### 2. Parca Tabanli Ceviri
 
-Uzun metinler cumle sinirlarindan 4500 karakterlik parcalara bolunur (Google Translate 5000 karakter limiti). Her parca icin ayri terim koruma uygulanir. Parcalar arasi bekleme ortak hiz siniri tarafindan yonetilir (bkz. 4. bolum).
+Uzun metinler cumle sinirlarindan 4500 karakterlik parcalara bolunur (saglayici istek boyutu sinirlarini asmamak icin). Her parca icin ayri terim koruma uygulanir. LibreTranslate bu parcalari kendi icinde ayrica 160 karakterlik alt parcalara boler (`LIBRETRANSLATE_CHUNK_CHARS`); Gemini yukseltmesi kayit basina tek istekte calisir.
 
 ### 3. Turkce Post-Processing
 
@@ -361,14 +364,19 @@ Ceviri sonrasi otomatik duzeltmeler:
 - Bozuk Turkce karakter encoding duzeltmesi
 - K8s kisaltmasinin korunmasi
 
-### 4. Hiz Siniri ve Devre Kesici (ucretsiz Google Translate icin)
+### 4. Hiz Siniri ve Devre Kesici
 
-Ucretsiz Google Translate ucu, kisa surede cok istek atan IP'yi bir sure kisitlar (Error 500 / 429). Engeli uzatmamak icin:
+- **LibreTranslate (cekim aninda)** — Baglanti hatasi, zaman asimi veya 5xx gelirse kendi Redis devre kesicisi `LIBRETRANSLATE_COOLDOWN` (60 sn, varsayilan) boyunca acilir; 4xx devre kesiciyi acmaz. Yeniden deneme ve ayri bir hiz siniri yoktur, eszamanlilik compose CPU siniriyla dogal olarak sinirlanir.
+- **Gemini (retranslate yukseltmesi)** — Istekler arasi en az `GEMINI_MIN_INTERVAL` saniye (Redis uzerinden tum worker'lar icin ortak), gunluk `GEMINI_DAILY_BUDGET` istek tavani, 429/5xx sonrasi `GEMINI_COOLDOWN` saniye devre kesici.
+- **Kayip yok** — Hicbir saglayici cevirmezse haber tam Ingilizce metniyle kaydedilir ve `needs_translation=True` isaretlenir; sonraki cekimde veya `retranslate_pending` turunde otomatik olarak yeniden denenir.
 
-- **Ortak hiz siniri** — Tum worker process'leri Redis uzerinden ayni sinira uyar: iki istek arasinda en az `TRANSLATE_MIN_INTERVAL` saniye
-- **Yeniden deneme** — Hata sayfasi veya istisna gelirse 5 ve 15 saniye bekleyerek iki kez daha denenir
-- **Devre kesici** — Denemeler tukenirse `TRANSLATE_COOLDOWN` saniye boyunca Google'a hic istek gitmez (tum worker'lar icin)
-- **Kayip yok** — Cevrilemeyen haber tam Ingilizce metniyle kaydedilir ve `needs_translation=True` isaretlenir; sonraki cekimde otomatik olarak yeniden cevrilir
+### 5. Retranslate ve Gemini Yukseltme
+
+`retranslate_pending` Celery Beat gorevi her 2 saatte bir (tek saatlerde, dakika 05) calisir ve iki isi yapar: bekleyen (`needs_translation=True`) kayitlari LibreTranslate ile cevirir, ardindan `translation_provider='libretranslate'` kayitlari Gemini API (`gemini-3.5-flash-lite`) ile kayit basina tek istekte yukseltir. Yukseltme bolum basina `RETRANSLATE_UPGRADE_BATCH` kayitla sinirlidir. Eski `google` etiketli kayitlar yukseltilmez, etiketli kalir.
+
+**Anahtar alma:** Google AI Studio (aistudio.google.com) → Get API key → Create API key; `cybersecurity_news/.env` icine `GEMINI_API_KEY=...` (gitignore'da). Kart gerekmez; kota asilirsa 429 doner, sistem LibreTranslate ile surer.
+
+**Rozetler:** Her kayit `translation_provider` tasir; arayuzde `Makine çevirisi: LibreTranslate` (sari), `Çeviri: Gemini`, `Çeviri: Google` (eski kayitlar).
 
 ---
 
@@ -385,7 +393,7 @@ Ucretsiz Google Translate ucu, kisa surede cok istek atan IP'yi bir sure kisitla
 | DevTools | `fetch_devtools_task` | :40 | 30 |
 | Yapay Zeka | `fetch_ai_news_task` | :50 | 30 |
 
-Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabaninda zaten cevrilmis kayitlar tekrar cevrilmez; yalnizca yeni haberler ve ceviri bekleyen (`needs_translation`) kayitlar Google Translate'e gonderilir. Gun araligi task varsayilanidir; her cekim (manuel "Getir" dahil) bu araligin disinda kalan eski kayitlari siler.
+Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabaninda zaten cevrilmis kayitlar tekrar cevrilmez; yalnizca yeni haberler ve ceviri bekleyen (`needs_translation`) kayitlar LibreTranslate'e gonderilir. Gun araligi task varsayilanidir; her cekim (manuel "Getir" dahil) bu araligin disinda kalan eski kayitlari siler. Bekleyen ve LibreTranslate kayitlarinin Gemini ile yukseltilmesi ayri bir Beat gorevidir (bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)).
 
 ---
 
@@ -698,8 +706,14 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `ALLOWED_HOSTS` | `*` | Virgulle ayrilmis izinli host listesi |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,...` | Frontend origin'leri |
 | `CSRF_TRUSTED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Admin oturumuyla POST yapabilecek frontend origin'leri (Vite proxy `changeOrigin` kullandigi icin gerekli) |
-| `TRANSLATE_MIN_INTERVAL` | `2.0` | Tum worker'lar genelinde iki Google Translate istegi arasindaki minimum sure (sn) |
-| `TRANSLATE_COOLDOWN` | `1200` | Google erisilemez oldugunda cevirinin tamamen durdurulacagi sure (sn) |
+| `GEMINI_API_KEY` | (bos) | Google AI Studio anahtari; bos ise Gemini hic denenmez |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model |
+| `GEMINI_DAILY_BUDGET` | `400` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD) |
+| `GEMINI_MIN_INTERVAL` | `5` | Istekler arasi saniye (15 RPM'in altinda) |
+| `GEMINI_COOLDOWN` | `600` | 429/5xx sonrasi bekleme (sn) |
+| `GEMINI_TIMEOUT` | `60` | Istek zaman asimi (sn) |
+| `GEMINI_MAX_CHARS` | `12000` | Bu uzunlugun ustundeki kayit Gemini'ye gitmez |
+| `RETRANSLATE_UPGRADE_BATCH` | `40` | Tur ve bolum basina yukseltme siniri |
 | `DATABASE_URL` | _(bos)_ | Herhangi bir deger atanirsa PostgreSQL aktif olur, bossa SQLite |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
@@ -763,7 +777,7 @@ kubectl delete namespace teknoloji-haberleri
 
 ## Bilinen Kisitlamalar
 
-- Google Translate ucretsiz ucu IP bazli kisitlama uygular; kisitlama surerken haberler Ingilizce kaydedilir ve kisitlama kalkinca sonraki cekimde cevrilir (bkz. [Hiz Siniri ve Devre Kesici](#4-hiz-siniri-ve-devre-kesici-ucretsiz-google-translate-icin))
+- LibreTranslate cevirileri Gemini'ye gore daha dusuk kalitede olabilir (ozel ad/guvenlik terimi hatalari otomatik dogrulamayla yakalanmaz); rozetten ayirt edilir, `retranslate_pending` Gemini ile yukseltene kadar boyle kalir. Gemini gunluk butcesi (`GEMINI_DAILY_BUDGET`, varsayilan 400) asilirsa yukseltme bir sonraki gune kalir (bkz. [Hiz Siniri ve Devre Kesici](#4-hiz-siniri-ve-devre-kesici))
 - Dark Reading HTML scraping'e 403 doner, bu yuzden RSS feed kullanilir
 - Gunicorn timeout 300 saniye — cok fazla kaynak secilirse zaman asimi olabilir
 - Her fetch'te toplam makale sayisi **30 ile sinirlidir** (Gunicorn timeout'undan kacinmak icin)
@@ -781,7 +795,7 @@ kubectl delete namespace teknoloji-haberleri
 | [ADR-0001](docs/ADR-0001-AI-News.md) | AI News bileseni | Accepted |
 | [ADR-0002](docs/ADR-0002-AI-Benchmark.md) | AI Benchmark / Leaderboard bileseni | Proposed (ertelendi) |
 | [ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md) | Dis tuketiciler icin `/api/v1/` entegrasyon katmani (imlecli delta, token, refresh, ceviri dogrulugu) | Accepted (A1–A3 uygulandi; A4–A5 acik) |
-| [ADR-0004](docs/ADR-0004-Ceviri-Saglayici-Zinciri.md) | Ceviri saglayici zinciri (Google once, LibreTranslate yedek) | Accepted |
+| [ADR-0004](docs/ADR-0004-Ceviri-Saglayici-Zinciri.md) | Ceviri saglayici zinciri (LibreTranslate yedek; 2026-09-15: Google kaldirildi, Gemini yukseltme) | Accepted (degisiklik 2026-09-15) |
 
 ---
 

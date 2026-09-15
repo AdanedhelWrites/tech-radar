@@ -7,9 +7,8 @@ Her saglayici ayni arayuzu uygular:
     available() -> bool                   simdi denenebilir mi
     translate(protected) -> str | None    terimleri korunmus metni cevirir; erisilemezse None
 
-Google mantigi (hiz siniri, yeniden deneme, devre kesici) translation_utils
-icinde kalir: mevcut testler oradaki adlari mock'luyor. GoogleProvider cagri
-aninda oraya basvuran ince bir sarmalayicidir.
+Cekim aninda tek saglayici LibreTranslate'tir; Gemini yalniz retranslate'te
+kayit duzeyinde kullanilir (news/gemini.py).
 """
 import os
 import re
@@ -67,16 +66,6 @@ def birlestir(satirlar: List[List[str]], cevrilen: List[str]) -> str:
     """parcala ciktisini cevrilmis parcalarla ayni satir yapisinda birlestirir."""
     kalan = iter(cevrilen)
     return '\n'.join(' '.join(next(kalan).strip() for _ in satir) for satir in satirlar)
-
-
-class GoogleProvider:
-    name = 'google'
-
-    def available(self) -> bool:
-        return not tu._get_gate().cooldown_active()
-
-    def translate(self, protected: str) -> Optional[str]:
-        return tu._translate_via_google(protected)
 
 
 _lt_gate = None
@@ -148,4 +137,4 @@ class LibreTranslateProvider:
         return birlestir(satirlar, cevrilen)
 
 
-SAGLAYICILAR = (GoogleProvider(), LibreTranslateProvider())
+SAGLAYICILAR = (LibreTranslateProvider(),)

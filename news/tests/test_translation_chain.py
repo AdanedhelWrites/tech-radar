@@ -16,6 +16,7 @@ def libre_eki(protected):
 
 
 class SaglayiciZinciriTests(SaglayiciZinciriMixin, SimpleTestCase):
+    # Adlar temsili: zincir saglayici adindan bagimsizdir; canlida yalniz libretranslate var.
 
     def setUp(self):
         super().setUp()
@@ -71,23 +72,10 @@ class SaglayiciZinciriTests(SaglayiciZinciriMixin, SimpleTestCase):
 
         self.assertEqual(tu.translate_text(METIN), 'LIBRE ' + METIN)
 
-    def test_yalnizca_google_kisiti(self):
-        _, libre = self.saglayicilari_ayarla(
-            SahteSaglayici('google', None), SahteSaglayici('libretranslate', libre_eki))
-
-        with tu.yalnizca_saglayicilar('google'):
-            self.assertEqual(tu.translate_text(METIN), METIN)
-        self.assertEqual(libre.cagrilar, [])
-        self.assertEqual(tu.consume_translation_failures(), 1)
-        # Kisit baglam disinda kalkar
-        self.assertEqual(tu.translate_text(METIN), 'LIBRE ' + METIN)
-
     def test_herhangi_saglayici_hazir(self):
         google, libre = self.saglayicilari_ayarla(
             SahteSaglayici('google', hazir=False), SahteSaglayici('libretranslate', hazir=True))
         self.assertTrue(tu.herhangi_saglayici_hazir())
-        with tu.yalnizca_saglayicilar('google'):
-            self.assertFalse(tu.herhangi_saglayici_hazir())
         libre.hazir = False
         self.assertFalse(tu.herhangi_saglayici_hazir())
 
