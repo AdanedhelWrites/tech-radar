@@ -39,23 +39,31 @@ function CVEComponent() {
   )
   const [severityFilter, setSeverityFilter] = useState('all')
 
+  // Diger bes bilesenle ayni kalip: cekim surerken yeni kayitlar kendiliginden ekrana duser
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadCVEs(true)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
   useEffect(() => {
     loadCVEs()
     loadStats()
   }, [])
 
-  const loadCVEs = async () => {
+  const loadCVEs = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const response = await cveApi.getCVEs()
       if (response.data.success) {
         setCVEs(response.data.data)
       }
     } catch (err) {
-      setError('CVE verileri yüklenirken hata oluştu')
+      if (!silent) setError('CVE verileri yüklenirken hata oluştu')
       console.error(err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -92,9 +100,8 @@ function CVEComponent() {
       })
 
       if (response.data.success) {
-        setCVEs(response.data.data)
         loadStats()
-        toast.success("Haber çekimi başladı! Haberler otomatik olarak ekrana yansıyacak.", { icon: "🚀", duration: 4000 })
+        toast.success("CVE çekimi başladı! Kayıtlar otomatik olarak ekrana yansıyacak.", { icon: "🚀", duration: 4000 })
       } else {
         setError(response.data.message)
       }
@@ -335,7 +342,7 @@ ${items.map(item => {
               <Button
                 variant="outline-secondary"
                 className="w-100 mb-2"
-                onClick={loadCVEs}
+                onClick={() => loadCVEs()}
                 disabled={loading}
               >
                 <FaSync className="me-2" />Yenile
