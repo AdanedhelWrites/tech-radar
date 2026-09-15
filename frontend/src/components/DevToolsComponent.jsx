@@ -103,7 +103,6 @@ function DevToolsComponent() {
       })
 
       if (response.data.success) {
-        setEntries(response.data.data)
         loadStats()
         toast.success("Haber çekimi başladı! Haberler otomatik olarak ekrana yansıyacak.", { icon: "🚀", duration: 4000 })
       } else {
