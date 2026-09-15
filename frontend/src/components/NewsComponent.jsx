@@ -4,7 +4,7 @@ import {
   Container, Row, Col, Card, Button, Form,
   Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
-import MakineCevirisiEtiketi from './MakineCevirisiEtiketi'
+import CeviriEtiketi from './CeviriEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
   FaNewspaper, FaChartBar, FaCogs,
@@ -351,7 +351,7 @@ ${items.map(item => {
                           ? item.turkish_title.substring(0, 70) + '...'
                           : item.turkish_title}
                       </h6>
-                      <MakineCevirisiEtiketi kayit={item} className="mt-1" />
+                      <CeviriEtiketi kayit={item} className="mt-1" />
                     </div>
                   ))}
                 </div>
@@ -391,7 +391,7 @@ ${items.map(item => {
                   </div>
 
                   <h5 className="fw-bold mb-3">{selectedNews.turkish_title}</h5>
-                  <MakineCevirisiEtiketi kayit={selectedNews} className="mb-3" />
+                  <CeviriEtiketi kayit={selectedNews} className="mb-3" />
 
                   <div className="mb-3 article-content p-3 bg-light rounded">
                     {selectedNews.turkish_description ? (

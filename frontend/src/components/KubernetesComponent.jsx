@@ -4,7 +4,7 @@ import {
   Container, Row, Col, Card, Button, Form,
   Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
-import MakineCevirisiEtiketi from './MakineCevirisiEtiketi'
+import CeviriEtiketi from './CeviriEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
   FaDharmachakra, FaChartBar, FaCogs,
@@ -532,7 +532,7 @@ ${items.map(item => {
                           ? (item.turkish_title || item.original_title).substring(0, 70) + '...'
                           : (item.turkish_title || item.original_title)}
                       </h6>
-                      <MakineCevirisiEtiketi kayit={item} className="mt-1" />
+                      <CeviriEtiketi kayit={item} className="mt-1" />
                       <div className="d-flex justify-content-between align-items-center mt-2">
                         <Badge className={getCategoryClass(item.category)}>
                           {categoryLabels[item.category] || item.category}
@@ -578,7 +578,7 @@ ${items.map(item => {
                   <h5 className="fw-bold mb-3">
                     {selectedEntry.turkish_title || selectedEntry.original_title}
                   </h5>
-                  <MakineCevirisiEtiketi kayit={selectedEntry} className="mb-3" />
+                  <CeviriEtiketi kayit={selectedEntry} className="mb-3" />
 
                   <div className="mb-3 d-flex align-items-center gap-2">
                     <Badge className={getCategoryClass(selectedEntry.category)}>
