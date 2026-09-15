@@ -14,7 +14,7 @@ class NewsArticle(models.Model):
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -48,7 +48,7 @@ class CVEEntry(models.Model):
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -85,7 +85,7 @@ class KubernetesEntry(models.Model):
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -112,7 +112,7 @@ class SREEntry(models.Model):
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -147,7 +147,7 @@ class DevToolsEntry(models.Model):
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -174,7 +174,7 @@ class AINewsEntry(models.Model):
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
