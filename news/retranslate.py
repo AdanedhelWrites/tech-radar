@@ -1,17 +1,19 @@
 """Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir ve LibreTranslate
-cevirilerini Google acildiginda yukseltir.
+cevirilerini Gemini ile yukseltir (spec 2026-09-15-gemini-yukseltme, bolum 3.3).
 
-Asama 1 — Bekleyenler (needs_translation=True), tam saglayici zinciriyle
-(Google -> LibreTranslate). A3 plani netlestirme 8'deki imlec kurallari aynen
-gecerlidir: her bolum icin Redis'te bir imlec ({prefix}:cursor:{bolum}); icerik
-yuzunden cevrilemeyen kayit sirada kalir ama imlec onu gecer; sona gelinince
-imlec silinir. Gorev yalnizca HICBIR saglayici hazir degilse durur; bu durumda
-imlec o kaydi gecmez.
+Asama 1 — Bekleyenler (needs_translation=True): once Gemini kayit duzeyinde
+(baslik + aciklama tek istek); cevrilemezse saglayici zinciri (LibreTranslate).
+A3 plani netlestirme 8'deki imlec kurallari aynen gecerlidir: her bolum icin
+Redis'te bir imlec ({prefix}:cursor:{bolum}); icerik yuzunden cevrilemeyen
+kayit sirada kalir ama imlec onu gecer; sona gelinince imlec silinir. Gorev
+yalnizca HICBIR saglayici (Gemini dahil) hazir degilse durur; imlec o kaydi gecmez.
 
 Asama 2 — Yukseltme (needs_translation=False, translation_provider='libretranslate'),
-yalnizca Google hazirsa ve yalnizca Google ile. Kaydin tum parcalari Google'la
-cevrilebildiyse yazilir (hepsi ya da hicbiri); aksi halde LibreTranslate cevirisi
-yerinde kalir. Kendi imleci vardir ({prefix}:upgrade-cursor:{bolum}).
+yalnizca Gemini ile. Gemini tum alanlari dogrulamadan gecirdiyse yazilir (hepsi ya
+da hicbiri, gemini.kaydi_cevir icinde); aksi halde LibreTranslate cevirisi yerinde
+kalir ve imlec ilerler. Gemini hazir degilse (anahtar yok / devre kesici / gunluk
+butce) asama baslamaz; butce asama ortasinda biterse imlec ilerletilmeden durur.
+Kendi imleci vardir ({prefix}:upgrade-cursor:{bolum}). Google kayitlari yukseltilmez.
 
 Yazma kurallari:
   - Basarisiz denemede kayda yazilmaz: updated_at ilerlemez.
@@ -19,8 +21,9 @@ Yazma kurallari:
     updated_at yazilir; ceviri delta akisindan tuketiciye gider.
 """
 import os
-from typing import Dict
+from typing import Dict, Optional
 
+from . import gemini
 from . import translation_utils as tu
 from .api_v1.cursor import InvalidCursor, apply_cursor, decode_cursor, encode_cursor
 from .cache_utils import cache_yenile
@@ -30,8 +33,8 @@ from .models import (
 
 # Bolum basina. LibreTranslate yerel ve hizli oldugu icin bekleyen siniri yuksek.
 RETRANSLATE_BATCH = int(os.environ.get('RETRANSLATE_BATCH', '100'))
-# Yukseltme ucretsiz Google kotasini kullanir; dusuk tutulur.
-RETRANSLATE_UPGRADE_BATCH = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH', '5'))
+# Yukseltme Gemini gunluk butcesini kullanir; asil sinir butcedir (gemini.GEMINI_DAILY_BUDGET).
+RETRANSLATE_UPGRADE_BATCH = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH', '40'))
 
 
 def _baslik_ve_uzun_aciklama(kayit) -> Dict[str, str]:
@@ -65,6 +68,32 @@ def _kubernetes(kayit) -> Dict[str, str]:
         'turkish_title': tu.translate_text(kayit.original_title),
         'turkish_description': turkce_aciklama,
     }
+
+
+_GEMINI_DB_ALANI = {'title': 'turkish_title', 'description': 'turkish_description'}
+
+
+def _gemini_alanlari(ad: str, kayit) -> Dict[str, str]:
+    """Gemini'ye gidecek alanlar (spec 3.3). Bos sozluk: kayit Gemini adayi degil."""
+    aciklama = (kayit.original_description or '').strip()
+    if ad == 'cve':
+        # cve_scraper kurali: baslik cevrilmez, 30 karakterden kisa aciklama oldugu gibi kalir
+        return {'description': aciklama} if len(aciklama) > 30 else {}
+    alanlar = {'title': (kayit.original_title or '').strip()}
+    if aciklama:  # 2026-09-15 haber kurali: orijinal bossa Turkce govdeye dokunma
+        alanlar['description'] = aciklama
+    return {alan: metin for alan, metin in alanlar.items() if metin}
+
+
+def _gemini_ile_cevir(ad: str, kayit) -> Optional[Dict[str, str]]:
+    """Kaydi Gemini ile cevirir; DB alan adlariyla sozluk ya da None (aday degil / hazir degil / cevrilemedi)."""
+    alanlar = _gemini_alanlari(ad, kayit)
+    if not alanlar or not gemini.hazir():
+        return None
+    sonuc = gemini.kaydi_cevir(alanlar)
+    if sonuc is None:
+        return None
+    return {_GEMINI_DB_ALANI[alan]: metin for alan, metin in sonuc.items()}
 
 
 BOLUMLER = (
@@ -117,10 +146,22 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
     cevrilen = basarisiz = 0
     durdu = False
     for kayit in kayitlar:
-        if not tu.herhangi_saglayici_hazir():
+        if not (tu.herhangi_saglayici_hazir() or gemini.hazir()):
             durdu = True
             break
         deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
+
+        gemini_alanlar = _gemini_ile_cevir(ad, kayit)
+        if gemini_alanlar is not None:
+            _yaz(kayit, gemini_alanlar, 'gemini')
+            cevrilen += 1
+            sonuc['by_provider']['gemini'] += 1
+            redis_client.set(anahtar, deneme_oncesi)
+            continue
+
+        if not tu.herhangi_saglayici_hazir():
+            durdu = True  # Gemini cevirmedi, zincir kapali: imleci ilerletme
+            break
         alanlar, hata, kullanilan = _cevir_ve_olc(cevir, kayit)
 
         if hata:
@@ -134,7 +175,7 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
             _yaz(kayit, alanlar, saglayici)
             cevrilen += 1
             if saglayici:
-                sonuc['by_provider'][saglayici] += 1
+                sonuc['by_provider'][saglayici] = sonuc['by_provider'].get(saglayici, 0) + 1
         redis_client.set(anahtar, deneme_oncesi)
 
     if not durdu and len(kayitlar) < sinir:
@@ -142,35 +183,34 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
     return cevrilen, basarisiz, durdu
 
 
-def _yukselt(ad, model, cevir, redis_client, prefix, sinir):
-    """Asama 2. Yalnizca Google. Donus: yukseltilen kayit sayisi."""
+def _yukselt(ad, model, redis_client, prefix, sinir, sonuc):
+    """Asama 2. Yalnizca Gemini. Donus: yukseltilen kayit sayisi."""
+    if not gemini.hazir():
+        if not gemini.butce_var():
+            sonuc['stopped_reason'] = 'gemini_budget'
+        return 0
     anahtar = f'{prefix}:upgrade-cursor:{ad}'
+    sorgu = (model.objects.filter(needs_translation=False, translation_provider='libretranslate')
+             .order_by('updated_at', 'id'))
+    kayitlar = _imlecten_sonraki(redis_client, anahtar, sorgu, sinir)
+
     yukseltilen = 0
-    with tu.yalnizca_saglayicilar('google'):
-        if not tu.herhangi_saglayici_hazir():
-            return 0
-        sorgu = (model.objects.filter(needs_translation=False, translation_provider='libretranslate')
-                 .order_by('updated_at', 'id'))
-        kayitlar = _imlecten_sonraki(redis_client, anahtar, sorgu, sinir)
+    durdu = False
+    for kayit in kayitlar:
+        if not gemini.hazir():
+            durdu = True  # butce/devre kesici asama ortasinda; imleci ilerletme
+            if not gemini.butce_var():
+                sonuc['stopped_reason'] = 'gemini_budget'
+            break
+        deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
+        alanlar = _gemini_ile_cevir(ad, kayit)
+        if alanlar is not None:
+            _yaz(kayit, alanlar, 'gemini')
+            yukseltilen += 1
+        redis_client.set(anahtar, deneme_oncesi)
 
-        durdu = False
-        for kayit in kayitlar:
-            if not tu.herhangi_saglayici_hazir():
-                durdu = True
-                break
-            deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
-            alanlar, hata, kullanilan = _cevir_ve_olc(cevir, kayit)
-
-            if not hata and kullanilan == {'google'}:
-                _yaz(kayit, alanlar, 'google')
-                yukseltilen += 1
-            elif not tu.herhangi_saglayici_hazir():
-                durdu = True  # Google asama ortasinda kapandi; imleci ilerletme
-                break
-            redis_client.set(anahtar, deneme_oncesi)
-
-        if not durdu and len(kayitlar) < sinir:
-            redis_client.delete(anahtar)
+    if not durdu and len(kayitlar) < sinir:
+        redis_client.delete(anahtar)
     return yukseltilen
 
 
@@ -179,16 +219,17 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
     redis_client = redis_client or _canli_redis()
     batch = RETRANSLATE_BATCH if batch is None else batch
     upgrade_batch = RETRANSLATE_UPGRADE_BATCH if upgrade_batch is None else upgrade_batch
-    sonuc = {'translated': 0, 'failed': 0, 'upgraded': 0, 'stopped': False,
-             'by_provider': {'google': 0, 'libretranslate': 0}, 'sections': {}}
+    sonuc = {'translated': 0, 'failed': 0, 'upgraded': 0, 'stopped': False, 'stopped_reason': None,
+             'by_provider': {'gemini': 0, 'libretranslate': 0}, 'sections': {}}
 
     for ad, model, cevir in BOLUMLER:
-        if not tu.herhangi_saglayici_hazir():
+        if not (tu.herhangi_saglayici_hazir() or gemini.hazir()):
             sonuc['stopped'] = True
+            sonuc['stopped_reason'] = 'no_provider'
             break
 
         cevrilen, basarisiz, durdu = _bekleyenler(ad, model, cevir, redis_client, prefix, batch, sonuc)
-        yukseltilen = 0 if durdu else _yukselt(ad, model, cevir, redis_client, prefix, upgrade_batch)
+        yukseltilen = 0 if durdu else _yukselt(ad, model, redis_client, prefix, upgrade_batch, sonuc)
 
         if cevrilen or yukseltilen:
             cache_yenile(ad)
@@ -199,6 +240,7 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
 
         if durdu:
             sonuc['stopped'] = True
+            sonuc['stopped_reason'] = 'no_provider'
             break
 
     return sonuc

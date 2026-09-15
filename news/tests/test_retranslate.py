@@ -13,8 +13,9 @@ from django.core.cache import cache
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 
+from news import gemini
 from news import translation_utils as tu
-from news.models import AINewsEntry, CVEEntry, KubernetesEntry
+from news.models import AINewsEntry, CVEEntry, KubernetesEntry, NewsArticle
 from news.tests.base import LOCMEM_CACHE, test_redis_client
 from news.tests.test_translation import FakeTranslator, TranslationGateMixin
 from news.tests.saglayici_yardimcilari import SahteSaglayici, SaglayiciZinciriMixin
@@ -42,6 +43,14 @@ TAKILAN_BASLIK = 'Robots learn to sort laundry today'
 TAKILAN_GOVDE = 'The team trained robots for many months.'
 
 
+def _libre_kaydi(slug, baslik='Farmers adopt new sensors', govde='Sensors measure soil moisture every hour.'):
+    return AINewsEntry.objects.create(
+        source='MIT Tech Review AI', original_title=baslik, turkish_title='LIBRE ' + baslik,
+        original_description=govde, turkish_description='LIBRE ' + govde,
+        link=f'https://ornek.test/rt/{slug}', published_date=date(2026, 9, 12),
+        needs_translation=False, translation_provider='libretranslate')
+
+
 @override_settings(CACHES=LOCMEM_CACHE)
 class RetranslateTestBase(TranslationGateMixin, TestCase):
 
@@ -51,6 +60,14 @@ class RetranslateTestBase(TranslationGateMixin, TestCase):
         self.redis = test_redis_client()
         self.prefix = f'test-retranslate-{uuid.uuid4().hex}'
         self.addCleanup(self._anahtarlari_sil)
+        self.gemini_ayarla_varsayilan()
+
+    def gemini_ayarla_varsayilan(self):
+        """Gemini kapali: mevcut zincir testleri etkilenmez. Gemini testleri kendi ayarini yapar."""
+        for hedef, deger in (('hazir', lambda: False), ('butce_var', lambda: True), ('kaydi_cevir', lambda alanlar: None)):
+            yama = mock.patch.object(gemini, hedef, deger)
+            yama.start()
+            self.addCleanup(yama.stop)
 
     def _anahtarlari_sil(self):
         for anahtar in self.redis.scan_iter(f'{self.prefix}:*'):
@@ -85,7 +102,7 @@ class RetranslatePendingTests(RetranslateTestBase):
         self.assertGreater(kayit.updated_at, once, 'Basarida updated_at ilerlemeli: delta akisina dusmeli')
         self.assertEqual(sonuc['translated'], 1)
         self.assertEqual(sonuc['sections']['ai'], {'translated': 1, 'failed': 0, 'upgraded': 0})
-        self.assertEqual(sonuc['by_provider'], {'google': 1, 'libretranslate': 0})
+        self.assertEqual(sonuc['by_provider'], {'gemini': 0, 'libretranslate': 0, 'google': 1})
         self.assertEqual(kayit.translation_provider, 'google')
         self.assertEqual(len(cevirmen.calls), 2)
 
@@ -219,20 +236,12 @@ class RetranslatePendingTests(RetranslateTestBase):
 
 
 class RetranslateSaglayiciTests(SaglayiciZinciriMixin, RetranslateTestBase):
-    """Spec 6.2: bekleyenler tam zincirle, yukseltme yalnizca Google ile."""
-
-    def _libre_kaydi(self, slug, baslik='Farmers adopt new sensors',
-                     govde='Sensors measure soil moisture every hour.'):
-        return AINewsEntry.objects.create(
-            source='MIT Tech Review AI', original_title=baslik, turkish_title='LIBRE ' + baslik,
-            original_description=govde, turkish_description='LIBRE ' + govde,
-            link=f'https://ornek.test/yukselt/{slug}', published_date=date(2026, 9, 14),
-            needs_translation=False, translation_provider='libretranslate')
+    """Spec 2026-09-15: bekleyenler Gemini-once, sonra zincir; yukseltme yalniz Gemini."""
 
     def test_varsayilan_sinirlar(self):
         from news import retranslate
         self.assertEqual(retranslate.RETRANSLATE_BATCH, 100)
-        self.assertEqual(retranslate.RETRANSLATE_UPGRADE_BATCH, 5)
+        self.assertEqual(retranslate.RETRANSLATE_UPGRADE_BATCH, 40)
 
     def test_google_kapaliyken_libretranslate_ile_devam_eder(self):
         self.saglayicilari_ayarla(SahteSaglayici('google', _google, hazir=False),
@@ -246,7 +255,7 @@ class RetranslateSaglayiciTests(SaglayiciZinciriMixin, RetranslateTestBase):
         self.assertEqual(kayit.translation_provider, 'libretranslate')
         self.assertEqual(kayit.turkish_title, 'LIBRE Farmers adopt new sensors')
         self.assertFalse(sonuc['stopped'])
-        self.assertEqual(sonuc['by_provider'], {'google': 0, 'libretranslate': 1})
+        self.assertEqual(sonuc['by_provider'], {'gemini': 0, 'libretranslate': 1})
 
     def test_hicbir_saglayici_yoksa_durur(self):
         google, libre = self.saglayicilari_ayarla(SahteSaglayici('google', _google, hazir=False),
@@ -257,61 +266,6 @@ class RetranslateSaglayiciTests(SaglayiciZinciriMixin, RetranslateTestBase):
 
         self.assertTrue(sonuc['stopped'])
         self.assertEqual(google.cagrilar + libre.cagrilar, [])
-
-    def test_google_acikken_libretranslate_cevirisi_yukseltilir(self):
-        _, libre = self.saglayicilari_ayarla(SahteSaglayici('google', _google),
-                                             SahteSaglayici('libretranslate', _libre))
-        kayit = self._libre_kaydi('tam')
-        once = kayit.updated_at
-
-        sonuc = self._calistir()
-
-        kayit.refresh_from_db()
-        self.assertEqual(sonuc['upgraded'], 1)
-        self.assertEqual(sonuc['sections']['ai']['upgraded'], 1)
-        self.assertEqual(kayit.translation_provider, 'google')
-        self.assertEqual(kayit.turkish_title, 'GOOGLE Farmers adopt new sensors')
-        self.assertGreater(kayit.updated_at, once, 'Yukseltme delta akisina dusmeli')
-        self.assertEqual(libre.cagrilar, [], 'Yukseltme LibreTranslate kullanmamali')
-
-    def test_google_kapaliyken_yukseltme_yapilmaz(self):
-        google, libre = self.saglayicilari_ayarla(SahteSaglayici('google', _google, hazir=False),
-                                                  SahteSaglayici('libretranslate', _libre))
-        kayit = self._libre_kaydi('kapali')
-
-        sonuc = self._calistir()
-
-        kayit.refresh_from_db()
-        self.assertEqual(sonuc['upgraded'], 0)
-        self.assertEqual(kayit.translation_provider, 'libretranslate')
-        self.assertEqual(google.cagrilar + libre.cagrilar, [])
-
-    def test_kismi_yukseltme_kayda_yazilmaz(self):
-        """Kullanici secimi: hepsi ya da hicbiri."""
-        self.saglayicilari_ayarla(
-            SahteSaglayici('google', {'Farmers adopt new sensors': 'Çiftçiler yeni sensörler benimsiyor'}),
-            SahteSaglayici('libretranslate', _libre))
-        kayit = self._libre_kaydi('kismi')
-        once = kayit.updated_at
-
-        sonuc = self._calistir()
-
-        kayit.refresh_from_db()
-        self.assertEqual(sonuc['upgraded'], 0)
-        self.assertEqual(kayit.translation_provider, 'libretranslate')
-        self.assertEqual(kayit.turkish_title, 'LIBRE Farmers adopt new sensors')
-        self.assertEqual(kayit.updated_at, once)
-
-    def test_yukseltme_bolum_siniri(self):
-        self.saglayicilari_ayarla(SahteSaglayici('google', _google),
-                                  SahteSaglayici('libretranslate', _libre))
-        for i in range(7):
-            self._libre_kaydi(f'sinir-{i}')
-
-        sonuc = self._calistir(upgrade_batch=5)
-
-        self.assertEqual(sonuc['upgraded'], 5)
-        self.assertEqual(AINewsEntry.objects.filter(translation_provider='libretranslate').count(), 2)
 
     def test_karisik_bekleyen_kayit_libretranslate_sayilir(self):
         self.saglayicilari_ayarla(
@@ -400,3 +354,249 @@ class BozukCevirileriIsaretleTests(TestCase):
     def test_ikinci_calistirmada_bulunacak_bir_sey_kalmaz(self):
         self._komut('--uygula')
         self.assertIn('TOPLAM: 0', self._komut())
+
+
+class GeminiSahteMixin:
+    """gemini modulunu ag erisimi olmadan taklit eder."""
+
+    def gemini_ayarla(self, cevap=None, hazir=True, butce=True):
+        """cevap: alanlar sozlugunu alan fonksiyon, sabit sozluk ya da None (cevrilemedi)."""
+        self.gemini_cagrilar = []
+
+        def kaydi_cevir(alanlar):
+            self.gemini_cagrilar.append(dict(alanlar))
+            return cevap(alanlar) if callable(cevap) else cevap
+
+        for hedef, deger in (('hazir', lambda: hazir and butce), ('butce_var', lambda: butce),
+                             ('kaydi_cevir', kaydi_cevir)):
+            yama = mock.patch.object(gemini, hedef, deger)
+            yama.start()
+            self.addCleanup(yama.stop)
+
+
+def _gemini_cevirisi(alanlar):
+    return {ad: 'GEMINI ' + metin for ad, metin in alanlar.items()}
+
+
+class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBase):
+
+    def setUp(self):
+        super().setUp()
+        self.libre = self.saglayicilari_ayarla(SahteSaglayici('libretranslate', _libre))[0]
+
+    # --- Asama 1: bekleyenler ---
+
+    def test_bekleyen_once_gemini_ile_cevrilir(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'g1')
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(kayit.turkish_title, 'GEMINI Farmers adopt new sensors')
+        self.assertEqual(kayit.turkish_description, 'GEMINI Sensors measure soil moisture every hour.')
+        self.assertEqual(kayit.translation_provider, 'gemini')
+        self.assertFalse(kayit.needs_translation)
+        self.assertEqual(sonuc['by_provider']['gemini'], 1)
+        self.assertEqual(self.libre.cagrilar, [])
+        self.assertEqual(self.gemini_cagrilar, [{'title': 'Farmers adopt new sensors',
+                                                'description': 'Sensors measure soil moisture every hour.'}])
+
+    def test_gemini_cevrilemezse_zincire_duser(self):
+        self.gemini_ayarla(None)
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'g2')
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(kayit.translation_provider, 'libretranslate')
+        self.assertTrue(kayit.turkish_title.startswith('LIBRE'))
+        self.assertEqual(sonuc['by_provider'], {'gemini': 0, 'libretranslate': 1})
+
+    def test_gemini_hazir_degilse_asama_durmaz(self):
+        self.gemini_ayarla(_gemini_cevirisi, hazir=False)
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'g3')
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(kayit.translation_provider, 'libretranslate')
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertFalse(sonuc['stopped'])
+        self.assertIsNone(sonuc['stopped_reason'])
+
+    def test_zincir_kapali_gemini_acik_bekleyen_cevrilir(self):
+        self.libre.hazir = False
+        self.gemini_ayarla(_gemini_cevirisi)
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'g4')
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(kayit.translation_provider, 'gemini')
+        self.assertFalse(sonuc['stopped'])
+
+    def test_hicbiri_yoksa_durur_ve_sebep_yazilir(self):
+        self.libre.hazir = False
+        self.gemini_ayarla(None, hazir=False)
+        self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'g5')
+
+        sonuc = self._calistir()
+
+        self.assertTrue(sonuc['stopped'])
+        self.assertEqual(sonuc['stopped_reason'], 'no_provider')
+
+    def test_cve_kisa_aciklama_gemini_adayi_degil(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        kayit = CVEEntry.objects.create(
+            cve_id='CVE-2026-0001', source='NVD', original_title='CVE-2026-0001 - Guvenlik Acigi',
+            turkish_title='CVE-2026-0001 - Guvenlik Acigi', original_description='Short text.',
+            turkish_description='Short text.', link='https://ornek.test/cve/1',
+            published_date=date(2026, 9, 12), severity='Orta', needs_translation=True)
+
+        self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertEqual(kayit.turkish_description, 'Short text.')
+        self.assertFalse(kayit.needs_translation)
+
+    def test_cve_uzun_aciklama_yalniz_description_ile_gider(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        govde = 'A remote attacker can read arbitrary files from the server.'
+        kayit = CVEEntry.objects.create(
+            cve_id='CVE-2026-0002', source='NVD', original_title='CVE-2026-0002 - Guvenlik Acigi',
+            turkish_title='CVE-2026-0002 - Guvenlik Acigi', original_description=govde,
+            turkish_description=govde, link='https://ornek.test/cve/2',
+            published_date=date(2026, 9, 12), severity='Yuksek', needs_translation=True)
+
+        self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(self.gemini_cagrilar, [{'description': govde}])
+        self.assertEqual(kayit.turkish_title, 'CVE-2026-0002 - Guvenlik Acigi')
+        self.assertEqual(kayit.turkish_description, 'GEMINI ' + govde)
+        self.assertEqual(kayit.translation_provider, 'gemini')
+
+    def test_kubernetes_yapisal_changelog_tek_alan_olarak_gider(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        govde = '===SECTION:Features===\n- Add new scheduler flag.\n===SECTION:Bug Fixes===\n- Fix kubelet crash.'
+        kayit = KubernetesEntry.objects.create(
+            source='GitHub Releases', category='release', version='v1.31.0',
+            original_title='Kubernetes v1.31.0 released', turkish_title='Kubernetes v1.31.0 released',
+            original_description=govde, turkish_description=govde, link='https://ornek.test/k8s/1',
+            published_date=date(2026, 9, 12), needs_translation=True)
+
+        self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(self.gemini_cagrilar, [{'title': 'Kubernetes v1.31.0 released', 'description': govde}])
+        self.assertEqual(kayit.turkish_description, 'GEMINI ' + govde)
+
+    def test_haber_bos_orijinal_aciklama_gonderilmez(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        kayit = NewsArticle.objects.create(
+            source='The Hacker News', original_title='Story number 1 published',
+            turkish_title='Story number 1 published', original_description='',
+            turkish_description='Mevcut Türkçe gövde.', link='https://ornek.test/haber/g1',
+            date=date(2026, 9, 14), original_date='2026-09-14', needs_translation=True)
+
+        self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(self.gemini_cagrilar, [{'title': 'Story number 1 published'}])
+        self.assertEqual(kayit.turkish_title, 'GEMINI Story number 1 published')
+        self.assertEqual(kayit.turkish_description, 'Mevcut Türkçe gövde.')
+
+    # --- Asama 2: yukseltme ---
+
+    def test_libretranslate_kaydi_gemini_ile_yukseltilir(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        kayit = _libre_kaydi('y1')
+        eski = kayit.updated_at
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(kayit.translation_provider, 'gemini')
+        self.assertEqual(kayit.turkish_title, 'GEMINI Farmers adopt new sensors')
+        self.assertEqual(kayit.turkish_description, 'GEMINI Sensors measure soil moisture every hour.')
+        self.assertGreater(kayit.updated_at, eski)
+        self.assertEqual(sonuc['upgraded'], 1)
+        self.assertEqual(sonuc['sections']['ai']['upgraded'], 1)
+
+    def test_gemini_cevrilemezse_yukseltme_yazilmaz(self):
+        self.gemini_ayarla(None)
+        kayit = _libre_kaydi('y2')
+        eski = kayit.updated_at
+
+        sonuc = self._calistir()
+
+        kayit.refresh_from_db()
+        self.assertEqual(kayit.translation_provider, 'libretranslate')
+        self.assertEqual(kayit.updated_at, eski)
+        self.assertEqual(sonuc['upgraded'], 0)
+        self.assertEqual(len(self.gemini_cagrilar), 1)
+
+    def test_gemini_hazir_degilse_yukseltme_baslamaz(self):
+        self.gemini_ayarla(_gemini_cevirisi, hazir=False)
+        _libre_kaydi('y3')
+
+        sonuc = self._calistir()
+
+        self.assertEqual(sonuc['upgraded'], 0)
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertIsNone(sonuc['stopped_reason'])
+
+    def test_butce_bitince_yukseltme_durur_ve_sebep_yazilir(self):
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        _libre_kaydi('y4')
+
+        sonuc = self._calistir()
+
+        self.assertEqual(sonuc['upgraded'], 0)
+        self.assertFalse(sonuc['stopped'])           # LibreTranslate zinciri hala calisir
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_budget')
+
+    def test_butce_asama_ortasinda_bitince_imlec_ilerlemez(self):
+        durum = {'kalan': 1}
+
+        def cevap(alanlar):
+            durum['kalan'] -= 1
+            return _gemini_cevirisi(alanlar)
+
+        self.gemini_ayarla(cevap)
+        # hazir() ikinci kayittan once False'a dusmeli
+        yama = mock.patch.object(gemini, 'hazir', lambda: durum['kalan'] > 0)
+        yama.start()
+        self.addCleanup(yama.stop)
+        for i in range(3):
+            _libre_kaydi(f'y5-{i}', baslik=f'Story number {i + 1} published')
+
+        sonuc = self._calistir()
+
+        self.assertEqual(sonuc['upgraded'], 1)
+        self.assertEqual(AINewsEntry.objects.filter(translation_provider='libretranslate').count(), 2)
+        # Imlec ilk kaydin arkasinda kaldi: bir sonraki tur ikinci kayittan devam eder
+        self.assertTrue(self.redis.exists(f'{self.prefix}:upgrade-cursor:ai'))
+
+    def test_yukseltme_bolum_siniri(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        for i in range(4):
+            _libre_kaydi(f'y6-{i}', baslik=f'Story number {i + 1} published')
+
+        sonuc = self._calistir(upgrade_batch=3)
+
+        self.assertEqual(sonuc['upgraded'], 3)
+        self.assertEqual(AINewsEntry.objects.filter(translation_provider='libretranslate').count(), 1)
+
+    def test_google_kayitlari_yukseltilmez(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        kayit = _libre_kaydi('y7')
+        kayit.translation_provider = 'google'
+        kayit.save(update_fields=['translation_provider'])
+
+        sonuc = self._calistir()
+
+        self.assertEqual(sonuc['upgraded'], 0)
+        self.assertEqual(self.gemini_cagrilar, [])
