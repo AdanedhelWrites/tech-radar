@@ -1,6 +1,7 @@
 """Gemini istemcisi (spec 2026-09-15-gemini-yukseltme, bolum 3.2). Ag erisimi yok."""
 import json
 import uuid
+from datetime import datetime, timezone
 from unittest import mock
 
 import requests
@@ -73,6 +74,10 @@ class GeminiHazirlikTests(GeminiTestMixin, SimpleTestCase):
         gemini._gate.start_cooldown(60)
         self.assertFalse(gemini.hazir())
 
+    def test_gate_erisilemezse_hazir_false(self):
+        with mock.patch.object(gemini, '_get_gate', side_effect=RuntimeError('redis erisilemedi')):
+            self.assertFalse(gemini.hazir())
+
 
 class GeminiIstekTests(GeminiTestMixin, SimpleTestCase):
 
@@ -109,6 +114,12 @@ class GeminiIstekTests(GeminiTestMixin, SimpleTestCase):
         self._post(side_effect=RuntimeError('beklenmeyen'))
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
         self.assertFalse(gemini._gate.cooldown_active())
+
+    def test_aralik_kapisi_cagrilir(self):
+        self._post(_yanit(govde=CEVIRI))
+        with mock.patch.object(gemini._gate, 'wait_for_slot') as beklet:
+            gemini.kaydi_cevir(ALANLAR)
+        beklet.assert_called_once_with(gemini.GEMINI_MIN_INTERVAL)
 
 
 class GeminiDogrulamaTests(GeminiTestMixin, SimpleTestCase):
@@ -184,6 +195,11 @@ class GeminiHataTests(GeminiTestMixin, SimpleTestCase):
         self._post(_yanit(metin='["liste"]'))
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
 
+    def test_aday_string_ise_istisna_sizmadan_none_doner(self):
+        yanit = mock.Mock(status_code=200, text='')
+        yanit.json.return_value = {'candidates': ['metin']}
+        self.assertIsNone(gemini._yaniti_coz(yanit))
+
 
 class GeminiButceTests(GeminiTestMixin, SimpleTestCase):
 
@@ -198,8 +214,15 @@ class GeminiButceTests(GeminiTestMixin, SimpleTestCase):
         self.assertEqual(post.call_count, 2)
         self.assertEqual(gemini.butce_kullanimi(), 2)
 
-    def test_butce_anahtari_utc_gun(self):
+    def test_butce_anahtari_bicimi(self):
         self.assertRegex(gemini.butce_anahtari(), r'^budget:\d{4}-\d{2}-\d{2}$')
+
+    def test_butce_anahtari_pasifik_gunune_gore(self):
+        # UTC 15 Eylul 05:00 -> Pasifik'te 14 Eylul 22:00; anahtar Pasifik gunune gore olmali
+        sabit = datetime(2026, 9, 15, 5, 0, tzinfo=timezone.utc)
+        with mock.patch('news.gemini.datetime') as sahte_datetime:
+            sahte_datetime.now.side_effect = lambda tz=None: sabit.astimezone(tz)
+            self.assertEqual(gemini.butce_anahtari(), 'budget:2026-09-14')
 
 
 class RedisButceTests(TestCase):

@@ -146,10 +146,13 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 
 ### Hizli Baslangic
 
+`.env.example`'i `.env` olarak kopyalayin ve isterseniz `GEMINI_API_KEY` degerini girin (bos birakilirsa Gemini hic denenmez, sistem LibreTranslate ile calisir):
+
 ```bash
 git clone https://github.com/AdanedhelWrites/tech-radar.git
 cd tech-radar/cybersecurity_news
 
+cp .env.example .env
 docker compose up -d --build
 ```
 
@@ -705,10 +708,11 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `CSRF_TRUSTED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Admin oturumuyla POST yapabilecek frontend origin'leri (Vite proxy `changeOrigin` kullandigi icin gerekli) |
 | `GEMINI_API_KEY` | (bos) | Google AI Studio anahtari; bos ise Gemini hic denenmez |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model |
-| `GEMINI_DAILY_BUDGET` | `400` | Gunluk istek butcesi (ucretsiz katman 500 RPD) |
+| `GEMINI_DAILY_BUDGET` | `400` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD) |
 | `GEMINI_MIN_INTERVAL` | `5` | Istekler arasi saniye (15 RPM'in altinda) |
 | `GEMINI_COOLDOWN` | `600` | 429/5xx sonrasi bekleme (sn) |
 | `GEMINI_TIMEOUT` | `60` | Istek zaman asimi (sn) |
+| `GEMINI_MAX_CHARS` | `12000` | Bu uzunlugun ustundeki kayit Gemini'ye gitmez |
 | `RETRANSLATE_UPGRADE_BATCH` | `40` | Tur ve bolum basina yukseltme siniri |
 | `DATABASE_URL` | _(bos)_ | Herhangi bir deger atanirsa PostgreSQL aktif olur, bossa SQLite |
 | `DB_HOST` | `localhost` | PostgreSQL host |
@@ -791,7 +795,7 @@ kubectl delete namespace teknoloji-haberleri
 | [ADR-0001](docs/ADR-0001-AI-News.md) | AI News bileseni | Accepted |
 | [ADR-0002](docs/ADR-0002-AI-Benchmark.md) | AI Benchmark / Leaderboard bileseni | Proposed (ertelendi) |
 | [ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md) | Dis tuketiciler icin `/api/v1/` entegrasyon katmani (imlecli delta, token, refresh, ceviri dogrulugu) | Accepted (A1–A3 uygulandi; A4–A5 acik) |
-| [ADR-0004](docs/ADR-0004-Ceviri-Saglayici-Zinciri.md) | Ceviri saglayici zinciri (Google once, LibreTranslate yedek) | Accepted |
+| [ADR-0004](docs/ADR-0004-Ceviri-Saglayici-Zinciri.md) | Ceviri saglayici zinciri (LibreTranslate yedek; 2026-09-15: Google kaldirildi, Gemini yukseltme) | Accepted (degisiklik 2026-09-15) |
 
 ---
 

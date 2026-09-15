@@ -83,3 +83,10 @@ class TestOrtamiIzolasyonuTests(_SimpleTestCase):
         from news import translation_providers as tp
         from news import translation_utils as tu
         self.assertIsInstance(tp._get_lt_gate(), tu._LocalGate)
+
+    def test_testlerde_gemini_surec_ici(self):
+        from news import gemini
+        from news import translation_utils as tu
+        self.assertEqual(_ayarlar.GEMINI_API_KEY, '')
+        self.assertIsInstance(gemini._get_gate(), tu._LocalGate)
+        self.assertIsInstance(gemini._get_butce(), gemini._LocalButce)

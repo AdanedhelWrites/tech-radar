@@ -14,6 +14,7 @@ da hicbiri, gemini.kaydi_cevir icinde); aksi halde LibreTranslate cevirisi yerin
 kalir ve imlec ilerler. Gemini hazir degilse (anahtar yok / devre kesici / gunluk
 butce) asama baslamaz; butce asama ortasinda biterse imlec ilerletilmeden durur.
 Kendi imleci vardir ({prefix}:upgrade-cursor:{bolum}). Eski 'google' etiketli kayitlar yukseltilmez.
+`stopped_reason='gemini_budget'` iken `stopped` False olabilir: LibreTranslate zinciri surer.
 
 Yazma kurallari:
   - Basarisiz denemede kayda yazilmaz: updated_at ilerlemez.
@@ -78,11 +79,18 @@ def _gemini_alanlari(ad: str, kayit) -> Dict[str, str]:
     aciklama = (kayit.original_description or '').strip()
     if ad == 'cve':
         # cve_scraper kurali: baslik cevrilmez, 30 karakterden kisa aciklama oldugu gibi kalir
-        return {'description': aciklama} if len(aciklama) > 30 else {}
-    alanlar = {'title': (kayit.original_title or '').strip()}
-    if aciklama:  # 2026-09-15 haber kurali: orijinal bossa Turkce govdeye dokunma
-        alanlar['description'] = aciklama
-    return {alan: metin for alan, metin in alanlar.items() if metin}
+        alanlar = {'description': aciklama} if len(aciklama) > 30 else {}
+    else:
+        taslak = {'title': (kayit.original_title or '').strip()}
+        if aciklama:  # 2026-09-15 haber kurali: orijinal bossa Turkce govdeye dokunma
+            taslak['description'] = aciklama
+        alanlar = {alan: metin for alan, metin in taslak.items() if metin}
+
+    uzunluk = sum(len(metin) for metin in alanlar.values())
+    if uzunluk > gemini.GEMINI_MAX_CHARS:
+        print(f"  [Gemini] {ad} kaydi cok uzun ({uzunluk} kr), atlaniyor.")
+        return {}
+    return alanlar
 
 
 def _gemini_ile_cevir(ad: str, kayit) -> Optional[Dict[str, str]]:
@@ -93,6 +101,11 @@ def _gemini_ile_cevir(ad: str, kayit) -> Optional[Dict[str, str]]:
     sonuc = gemini.kaydi_cevir(alanlar)
     if sonuc is None:
         return None
+    if ad == 'kubernetes' and 'description' in sonuc:
+        for isaret in ('===SECTION:', '---ITEM---', '<<<PR#'):
+            if alanlar['description'].count(isaret) != sonuc['description'].count(isaret):
+                print("  [Gemini] kubernetes yapisi bozuldu (isaret sayisi degisti).")
+                return None
     return {_GEMINI_DB_ALANI[alan]: metin for alan, metin in sonuc.items()}
 
 
@@ -159,8 +172,13 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
             redis_client.set(anahtar, deneme_oncesi)
             continue
 
-        if not tu.herhangi_saglayici_hazir():
-            durdu = True  # Gemini cevirmedi, zincir kapali: imleci ilerletme
+        if gemini_alanlar is None and not tu.herhangi_saglayici_hazir():
+            if gemini.hazir() and _gemini_alanlari(ad, kayit):
+                # Gemini hazirdi ama icerigi reddetti; zincir kapali: icerik hatasi say, imlec gecsin
+                basarisiz += 1
+                redis_client.set(anahtar, deneme_oncesi)
+                continue
+            durdu = True  # ne Gemini ne zincir: imleci ilerletme
             break
         alanlar, hata, kullanilan = _cevir_ve_olc(cevir, kayit)
 
@@ -204,6 +222,11 @@ def _yukselt(ad, model, redis_client, prefix, sinir, sonuc):
             break
         deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
         alanlar = _gemini_ile_cevir(ad, kayit)
+        if alanlar is None and not gemini.hazir():
+            durdu = True  # transport hatasi devre kesiciyi acti: bu kayit sonraki turda once denensin
+            if not gemini.butce_var():
+                sonuc['stopped_reason'] = 'gemini_budget'
+            break
         if alanlar is not None:
             _yaz(kayit, alanlar, 'gemini')
             yukseltilen += 1

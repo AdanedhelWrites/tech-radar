@@ -59,4 +59,4 @@ Google Translate'in resmi olmayan uclari bu IP'den TLS parmak izi ve hacimle blo
   - Aciklamasi 30 karakterden kisa oldugu icin hic cevrilmemis CVE'ler veri migration'inda `google` gorunur; cevrilecek metin olmadigi icin zararsizdir.
   - Yukseltme bolum basina 5 kayit/tur oldugu icin buyuk bir LibreTranslate birikimi Google acilsa bile gunler icinde erir.
   - `turkish_post_process` cumle basini buyuttugu icin `kubectl` → `Kubectl` (A3'ten kalan, dokunulmadi).
-- **Acik isler:** A4'te `FetchRun`'a `translation_failures` yaninda `by_provider` dagilimi; Faz B'de Helm'e LibreTranslate Deployment/Service/PVC + `LIBRETRANSLATE_URL`; A5'te README'ye `LIBRETRANSLATE_URL/TIMEOUT/COOLDOWN/CHUNK_CHARS`, `RETRANSLATE_UPGRADE_BATCH`, yeni servis ve rozet.
+- **Acik isler:** A4'te `FetchRun`'a `translation_failures` yaninda `by_provider` dagilimi; Faz B'de Helm'e LibreTranslate Deployment/Service/PVC + `LIBRETRANSLATE_URL`; A5'te README'ye `LIBRETRANSLATE_URL/TIMEOUT/COOLDOWN/CHUNK_CHARS`.

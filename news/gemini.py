@@ -13,17 +13,22 @@ import os
 import re
 from datetime import datetime, timezone
 from typing import Dict, Optional
+from zoneinfo import ZoneInfo
 
 import requests
 from django.conf import settings
 
 from . import translation_utils as tu
 
+PASIFIK = ZoneInfo('America/Los_Angeles')  # Google RPD kotasi bu saat diliminde sifirlanir
+
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-3.5-flash-lite')
 GEMINI_TIMEOUT = float(os.environ.get('GEMINI_TIMEOUT', '60'))
 GEMINI_MIN_INTERVAL = float(os.environ.get('GEMINI_MIN_INTERVAL', '5'))   # 15 RPM'in altinda kal
 GEMINI_DAILY_BUDGET = int(os.environ.get('GEMINI_DAILY_BUDGET', '400'))   # 500 RPD'nin altinda kal
 GEMINI_COOLDOWN = int(os.environ.get('GEMINI_COOLDOWN', '600'))
+# Daha buyuk kayit 60 sn'de bitmiyor ve devre kesiciyi aciyor; LibreTranslate yolunda kalir
+GEMINI_MAX_CHARS = int(os.environ.get('GEMINI_MAX_CHARS', '12000'))
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 MAX_RATIO = 3.0
 ECHO_MIN_WORDS = 4
@@ -36,6 +41,8 @@ SISTEM_TALIMATI = (
     "adlarini, CVE numaralarini, surum ve commit numaralarini AYNEN birak; Turkce ek getirmek disinda degistirme.\n"
     "- Satir sonlarini, madde isaretlerini, numaralandirmayi ve '===SECTION:' gibi yapisal isaretleri "
     "oldugu gibi koru.\n"
+    "- Kubernetes changelog'larinda '===SECTION: ...===', '---ITEM---' ve '<<<PR#...|...|...>>>' "
+    "satirlarini birebir koru; sayilarini ve sirasini degistirme.\n"
     "- Ozetleme, ekleme, yorum yapma; metnin tamamini cevir.\n"
     "- Guvenlik terimlerini teknik anlamiyla cevir (orn. 'unauthenticated attacker' -> "
     "'kimligi dogrulanmamis saldirgan', 'remote code execution' -> 'uzaktan kod calistirma').\n"
@@ -119,8 +126,8 @@ def _get_butce():
 
 
 def butce_anahtari() -> str:
-    """UTC gune gore: Google kotasi da UTC'de sifirlanir."""
-    return f'budget:{datetime.now(timezone.utc):%Y-%m-%d}'
+    """Google RPD kotasi Pasifik gece yarisinda sifirlanir; anahtar o gune gore."""
+    return f'budget:{datetime.now(PASIFIK):%Y-%m-%d}'
 
 
 def butce_kullanimi() -> int:
@@ -132,7 +139,11 @@ def butce_var() -> bool:
 
 
 def hazir() -> bool:
-    return bool(_anahtar()) and not _get_gate().cooldown_active() and butce_var()
+    """Anahtar dolu, devre kesici kapali ve gunluk butce var mi. Redis erisilemezse False."""
+    try:
+        return bool(_anahtar()) and not _get_gate().cooldown_active() and butce_var()
+    except Exception:
+        return False
 
 
 def _devre_kesici(sebep: str) -> None:
@@ -180,7 +191,7 @@ def _yaniti_coz(yanit) -> Optional[dict]:
             print(f"  [Gemini] yanit tamamlanmadi ({aday.get('finishReason')}).")
             return None
         cikti = json.loads(aday['content']['parts'][0]['text'])
-    except (ValueError, KeyError, IndexError, TypeError) as hata:
+    except Exception as hata:  # ValueError/KeyError/IndexError/TypeError/AttributeError vb.
         print(f"  [Gemini] yanit cozulemedi ({type(hata).__name__}).")
         return None
     if not isinstance(cikti, dict):
