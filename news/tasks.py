@@ -1,7 +1,9 @@
 # Celery tasks
+import os
 from celery import shared_task
 from django.core.cache import cache
-from datetime import timedelta, date
+from django.utils import timezone
+from datetime import timedelta
 
 from .models import NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
 from .translation_utils import (
@@ -15,6 +17,24 @@ from .k8s_scraper import MultiK8sScraper
 from .sre_scraper import MultiSREScraper
 from .devtools_scraper import MultiDevToolsScraper
 from .ai_scraper import MultiAINewsScraper
+
+
+# ADR-0005: saklama olcusu "kaydin yayim tarihi" degil "bu kayda en son ne zaman
+# dokunduk"tur. published_date'e bakmak sil/yeniden yaz dongusune yol aciyordu:
+# NVD Guncel akisi eski yayimlanmis ama yeni guncellenmis CVE'leri donuyor, biz
+# onlari siliyor, kaynak tekrar donuyor, update_or_create yeni id ile yaziyordu.
+RETENTION_DAYS = int(os.environ.get('RETENTION_DAYS', '90'))
+
+
+def _saklama_temizligi(model):
+    """Saklama penceresi disinda kalan kayitlari siler.
+
+    Cekim penceresinden (task'larin `days` parametresi) bagimsizdir: `days`
+    kaynaktan ne kadar geriye gidilecegini belirler, bu fonksiyon veritabaninda
+    ne kadar kalinacagini.
+    """
+    cutoff = timezone.now() - timedelta(days=RETENTION_DAYS)
+    model.objects.filter(updated_at__lt=cutoff).delete()
 
 
 def _drop_existing(entries, model, field, key='link'):
@@ -38,11 +58,10 @@ def _drop_existing(entries, model, field, key='link'):
 @shared_task
 def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_existing=True):
     try:
-        # Eski cache ve gun araliginin disindaki kayitlari temizle
+        # Eski cache ve saklama penceresi disindaki kayitlari temizle
         cache.delete('cybersecurity_news')
         cache.delete('last_update')
-        cutoff = date.today() - timedelta(days=days)
-        NewsArticle.objects.filter(date__lt=cutoff).delete()
+        _saklama_temizligi(NewsArticle)
 
         scraper = MultiSourceScraper()
         articles = scraper.fetch_all_news(days=days, selected_sources=selected_sources)
@@ -82,8 +101,7 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
     try:
         cache.delete('cve_entries')
         cache.delete('cve_last_update')
-        cutoff = date.today() - timedelta(days=days)
-        CVEEntry.objects.filter(published_date__lt=cutoff).delete()
+        _saklama_temizligi(CVEEntry)
 
         scraper = MultiCVEScraper()
         cves = scraper.fetch_all_cves(days=days, selected_sources=selected_sources)
@@ -128,8 +146,7 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
     try:
         cache.delete('k8s_entries')
         cache.delete('k8s_last_update')
-        cutoff = date.today() - timedelta(days=days)
-        KubernetesEntry.objects.filter(published_date__lt=cutoff).delete()
+        _saklama_temizligi(KubernetesEntry)
 
         scraper = MultiK8sScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
@@ -169,8 +186,7 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
     try:
         cache.delete('sre_entries')
         cache.delete('sre_last_update')
-        cutoff = date.today() - timedelta(days=days)
-        SREEntry.objects.filter(published_date__lt=cutoff).delete()
+        _saklama_temizligi(SREEntry)
 
         scraper = MultiSREScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
@@ -208,8 +224,7 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
     try:
         cache.delete('devtools_entries')
         cache.delete('devtools_last_update')
-        cutoff = date.today() - timedelta(days=days)
-        DevToolsEntry.objects.filter(published_date__lt=cutoff).delete()
+        _saklama_temizligi(DevToolsEntry)
 
         scraper = MultiDevToolsScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
@@ -249,8 +264,7 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
     try:
         cache.delete('ai_entries')
         cache.delete('ai_last_update')
-        cutoff = date.today() - timedelta(days=days)
-        AINewsEntry.objects.filter(published_date__lt=cutoff).delete()
+        _saklama_temizligi(AINewsEntry)
 
         scraper = MultiAINewsScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
