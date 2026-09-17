@@ -29,6 +29,14 @@ GEMINI_DAILY_BUDGET = int(os.environ.get('GEMINI_DAILY_BUDGET', '400'))   # 500 
 GEMINI_COOLDOWN = int(os.environ.get('GEMINI_COOLDOWN', '600'))
 # Daha buyuk kayit 60 sn'de bitmiyor ve devre kesiciyi aciyor; LibreTranslate yolunda kalir
 GEMINI_MAX_CHARS = int(os.environ.get('GEMINI_MAX_CHARS', '12000'))
+# ADR-0005: CVE oncelikli bolumdur (tuketicinin asil cektigi veri). Butce
+# darlastiginda CVE ac kalmasin diye gunluk butcenin bir payi ona ayrilir:
+# CVE tum butceye erisir, diger bolumler yalnizca rezerve disi kisma.
+# Sinir disi deger butce korumasini bozar: negatifse diger bolumlerin tavani
+# GEMINI_DAILY_BUDGET'i asar, 1'den buyukse tavan negatife duser ve o bolumler
+# sessizce devre disi kalir; bu yuzden 0..1 araligina sabitleniyor.
+GEMINI_CVE_RESERVE = min(max(float(os.environ.get('GEMINI_CVE_RESERVE', '0.5')), 0.0), 1.0)
+ONCELIKLI_BOLUM = 'cve'
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 MAX_RATIO = 3.0
 ECHO_MIN_WORDS = 4
@@ -134,14 +142,27 @@ def butce_kullanimi() -> int:
     return _get_butce().oku(butce_anahtari())
 
 
-def butce_var() -> bool:
-    return butce_kullanimi() < GEMINI_DAILY_BUDGET
+def butce_tavani(bolum: Optional[str] = None) -> int:
+    """Bolumun kullanabilecegi gunluk istek tavani.
+
+    Sayac paylasilir; oncelikli bolum tum butceye erisir, digerleri rezerve
+    disi kisimla sinirlidir. Boylece oncelikli bolume en az
+    GEMINI_DAILY_BUDGET * GEMINI_CVE_RESERVE kadar cagri garanti edilir.
+    Bolum verilmediyse guvenli taraf secilir (rezerve korunur).
+    """
+    if bolum == ONCELIKLI_BOLUM:
+        return GEMINI_DAILY_BUDGET
+    return int(GEMINI_DAILY_BUDGET * (1 - GEMINI_CVE_RESERVE))
 
 
-def hazir() -> bool:
-    """Anahtar dolu, devre kesici kapali ve gunluk butce var mi. Redis erisilemezse False."""
+def butce_var(bolum: Optional[str] = None) -> bool:
+    return butce_kullanimi() < butce_tavani(bolum)
+
+
+def hazir(bolum: Optional[str] = None) -> bool:
+    """Anahtar dolu, devre kesici kapali ve bolumun butcesi var mi. Redis erisilemezse False."""
     try:
-        return bool(_anahtar()) and not _get_gate().cooldown_active() and butce_var()
+        return bool(_anahtar()) and not _get_gate().cooldown_active() and butce_var(bolum)
     except Exception:
         return False
 
@@ -200,16 +221,17 @@ def _yaniti_coz(yanit) -> Optional[dict]:
     return cikti
 
 
-def kaydi_cevir(alanlar: Dict[str, str]) -> Optional[Dict[str, str]]:
+def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optional[Dict[str, str]]:
     """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi)."""
     alanlar = {ad: metin for ad, metin in alanlar.items() if isinstance(metin, str) and metin.strip()}
-    if not alanlar or not hazir():
+    if not alanlar or not hazir(bolum):
         return None
 
     butce, anahtar = _get_butce(), butce_anahtari()
-    if butce.artir(anahtar) > GEMINI_DAILY_BUDGET:
+    if butce.artir(anahtar) > butce_tavani(bolum):
         butce.azalt(anahtar)
-        print(f"  [Gemini] gunluk butce doldu ({GEMINI_DAILY_BUDGET}).")
+        print(f"  [Gemini] {bolum or 'genel'} bolumu gunluk butce payini doldurdu "
+              f"({butce_tavani(bolum)}/{GEMINI_DAILY_BUDGET}).")
         return None
 
     _get_gate().wait_for_slot(GEMINI_MIN_INTERVAL)

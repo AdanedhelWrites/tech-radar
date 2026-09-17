@@ -5,12 +5,14 @@ tutucunun geri koymadan sonra onarilmasi) 19 CVE kaydinda ham XTRM kodu birakti.
 Hatalar A3 Task 1'de duzeltildi; bu komut mevcut bozuk kayitlari
 needs_translation=True yapar ki retranslate_pending_task onlari yeniden cevirsin.
 
-Isaretleme updated_at'i ilerletmez (QuerySet.update): tuketiciye yeni bir sey
-gitmez. Duzgun ceviri yazildiginda updated_at ilerler ve delta akisindan gider.
+Isaretleme sirasinda updated_at de simdiki zamana cekilir (QuerySet.update
+auto_now'i atlar): aksi halde saklama suzgeci (updated_at'e gore 90 gunluk
+pencere) yeniden cevrilmeyi bekleyen bu kaydi silebilirdi.
 """
 import re
 
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from news.models import (
     AINewsEntry, CVEEntry, DevToolsEntry, KubernetesEntry, NewsArticle, SREEntry,
@@ -41,7 +43,9 @@ class Command(BaseCommand):
                 if any(KALINTI.search(getattr(kayit, alan) or '') for alan in alanlar)
             ]
             if options['uygula'] and kimlikler:
-                model.objects.filter(pk__in=kimlikler).update(needs_translation=True)
+                model.objects.filter(pk__in=kimlikler).update(
+                    needs_translation=True, updated_at=timezone.now(),
+                )
             toplam += len(kimlikler)
             self.stdout.write(f'{model.__name__}: {len(kimlikler)}')
 

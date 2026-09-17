@@ -206,11 +206,11 @@ class GeminiButceTests(GeminiTestMixin, SimpleTestCase):
     def test_gunluk_butce_asilmaz(self):
         with mock.patch.object(gemini, 'GEMINI_DAILY_BUDGET', 2):
             post = self._post(_yanit(govde=CEVIRI))
-            self.assertEqual(gemini.kaydi_cevir(ALANLAR), CEVIRI)
-            self.assertEqual(gemini.kaydi_cevir(ALANLAR), CEVIRI)
-            self.assertFalse(gemini.butce_var())
-            self.assertFalse(gemini.hazir())
-            self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+            self.assertEqual(gemini.kaydi_cevir(ALANLAR, 'cve'), CEVIRI)
+            self.assertEqual(gemini.kaydi_cevir(ALANLAR, 'cve'), CEVIRI)
+            self.assertFalse(gemini.butce_var('cve'))
+            self.assertFalse(gemini.hazir('cve'))
+            self.assertIsNone(gemini.kaydi_cevir(ALANLAR, 'cve'))
         self.assertEqual(post.call_count, 2)
         self.assertEqual(gemini.butce_kullanimi(), 2)
 
@@ -250,3 +250,83 @@ class RedisButceTests(TestCase):
         with mock.patch.object(gemini, '_butce', None), mock.patch.object(gemini, '_gate', None):
             self.assertIsInstance(gemini._get_butce(), gemini._RedisButce)
             self.assertIsInstance(gemini._get_gate(), tu._RedisGate)
+
+
+class ButcePayiTests(GeminiTestMixin, SimpleTestCase):
+    """ADR-0005: CVE tum butceye erisir, diger bolumler rezerve disi payla sinirlidir."""
+
+    def test_cve_tam_butceye_erisir(self):
+        self.assertEqual(gemini.butce_tavani('cve'), gemini.GEMINI_DAILY_BUDGET)
+
+    def test_diger_bolumler_rezerve_disi_payla_sinirli(self):
+        beklenen = int(gemini.GEMINI_DAILY_BUDGET * (1 - gemini.GEMINI_CVE_RESERVE))
+        for bolum in ('news', 'kubernetes', 'sre', 'devtools', 'ai'):
+            with self.subTest(bolum=bolum):
+                self.assertEqual(gemini.butce_tavani(bolum), beklenen)
+
+    def test_bolumsuz_cagri_rezerve_disi_tavana_tabi(self):
+        """Guvenli taraf: bolum bilinmiyorsa CVE payi korunur."""
+        self.assertEqual(gemini.butce_tavani(None), gemini.butce_tavani('news'))
+
+    def test_diger_bolum_kendi_tavaninda_durur_cve_devam_eder(self):
+        tavan = gemini.butce_tavani('news')
+        for _ in range(tavan):
+            gemini._butce.artir(gemini.butce_anahtari())
+
+        self.assertFalse(gemini.butce_var('news'))
+        self.assertTrue(gemini.butce_var('cve'))
+        self.assertFalse(gemini.hazir('news'))
+        self.assertTrue(gemini.hazir('cve'))
+
+    def test_tavana_dayanan_bolumde_kaydi_cevir_istek_atmaz(self):
+        post = self._post(_yanit(govde={'title': 'Baslik'}))
+        tavan = gemini.butce_tavani('news')
+        for _ in range(tavan):
+            gemini._butce.artir(gemini.butce_anahtari())
+        onceki = gemini.butce_kullanimi()
+
+        sonuc = gemini.kaydi_cevir({'title': 'A new flaw in the parser'}, 'news')
+
+        self.assertIsNone(sonuc)
+        post.assert_not_called()
+        self.assertEqual(gemini.butce_kullanimi(), onceki, 'Sayac geri alinmaliydi')
+
+    def test_tavana_dayanan_bolumde_kaydi_cevir_sayaci_geri_alir(self):
+        """hazir()/artir() arasindaki yaris: hazir() True sonucu verdiginde bile
+        artir() tavani asarsa kaydi_cevir istek atmadan azalt() ile sayaci geri
+        almali (gemini.py ~231). Bunu tetiklemek icin hazir() sabit True
+        yapilir; boylece butce zaten tavanda olsa da artir() calisir ve
+        geri alma dali (azalt) fiilen calisir."""
+        post = self._post(_yanit(govde={'title': 'Baslik'}))
+        tavan = gemini.butce_tavani('news')
+        for _ in range(tavan):
+            gemini._butce.artir(gemini.butce_anahtari())
+        onceki = gemini.butce_kullanimi()
+
+        with mock.patch.object(gemini, 'hazir', return_value=True):
+            sonuc = gemini.kaydi_cevir({'title': 'A new flaw in the parser'}, 'news')
+
+        self.assertIsNone(sonuc)
+        post.assert_not_called()
+        self.assertEqual(gemini.butce_kullanimi(), onceki,
+                         'Sayac geri alinmaliydi (artir sonrasi azalt calismali)')
+
+    def test_cve_ayni_noktada_calismaya_devam_eder(self):
+        post = self._post(_yanit(govde={'title': 'Ayristiricida yeni bir acik'}))
+        for _ in range(gemini.butce_tavani('news')):
+            gemini._butce.artir(gemini.butce_anahtari())
+
+        sonuc = gemini.kaydi_cevir({'title': 'A new flaw in the parser'}, 'cve')
+
+        self.assertEqual(sonuc, {'title': 'Ayristiricida yeni bir acik'})
+        post.assert_called_once()
+
+    def test_rezerve_sifir_ise_tum_bolumler_tam_butceye_erisir(self):
+        with mock.patch.object(gemini, 'GEMINI_CVE_RESERVE', 0.0):
+            self.assertEqual(gemini.butce_tavani('news'), gemini.GEMINI_DAILY_BUDGET)
+
+    def test_rezerve_bir_ise_cve_disi_bolumler_gemini_kullanamaz(self):
+        with mock.patch.object(gemini, 'GEMINI_CVE_RESERVE', 1.0):
+            self.assertEqual(gemini.butce_tavani('news'), 0)
+            self.assertFalse(gemini.butce_var('news'))
+            self.assertTrue(gemini.butce_var('cve'))

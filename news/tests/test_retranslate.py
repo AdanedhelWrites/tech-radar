@@ -65,7 +65,7 @@ class RetranslateTestBase(TranslationGateMixin, TestCase):
 
     def gemini_ayarla_varsayilan(self):
         """Gemini kapali: mevcut zincir testleri etkilenmez. Gemini testleri kendi ayarini yapar."""
-        for hedef, deger in (('hazir', lambda: False), ('butce_var', lambda: True), ('kaydi_cevir', lambda alanlar: None)):
+        for hedef, deger in (('hazir', lambda bolum=None: False), ('butce_var', lambda bolum=None: True), ('kaydi_cevir', lambda alanlar, bolum=None: None)):
             yama = mock.patch.object(gemini, hedef, deger)
             yama.start()
             self.addCleanup(yama.stop)
@@ -351,8 +351,9 @@ class BozukCevirileriIsaretleTests(TestCase):
         self.assertTrue(self.bozuk.needs_translation)
         self.assertTrue(self.bosluklu.needs_translation, 'Bosluklu/kucuk harfli kalinti da bozuktur')
         self.assertFalse(self.temiz.needs_translation)
-        self.assertEqual(self.bozuk.updated_at, once,
-                         'Isaretleme updated_at ilerletmemeli; duzgun ceviri yazilinca ilerleyecek')
+        self.assertGreater(self.bozuk.updated_at, once,
+                           'Isaretleme updated_at ilerletmeli; aksi halde saklama suzgeci '
+                           'yeniden cevrilmeyi bekleyen kaydi silebilir')
 
     def test_ikinci_calistirmada_bulunacak_bir_sey_kalmaz(self):
         self._komut('--uygula')
@@ -368,11 +369,11 @@ class GeminiSahteMixin:
         self.gemini_cagrilar = []
         hazir_fn = hazir if callable(hazir) else (lambda: hazir)
 
-        def kaydi_cevir(alanlar):
+        def kaydi_cevir(alanlar, bolum=None):
             self.gemini_cagrilar.append(dict(alanlar))
             return cevap(alanlar) if callable(cevap) else cevap
 
-        for hedef, deger in (('hazir', lambda: hazir_fn() and butce), ('butce_var', lambda: butce),
+        for hedef, deger in (('hazir', lambda bolum=None: hazir_fn() and butce), ('butce_var', lambda bolum=None: butce),
                              ('kaydi_cevir', kaydi_cevir)):
             yama = mock.patch.object(gemini, hedef, deger)
             yama.start()
@@ -652,7 +653,7 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
 
         self.gemini_ayarla(cevap)
         # hazir() ikinci kayittan once False'a dusmeli
-        yama = mock.patch.object(gemini, 'hazir', lambda: durum['kalan'] > 0)
+        yama = mock.patch.object(gemini, 'hazir', lambda bolum=None: durum['kalan'] > 0)
         yama.start()
         self.addCleanup(yama.stop)
         for i in range(3):
@@ -723,3 +724,141 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
 
         self.assertEqual(sonuc['upgraded'], 0)
         self.assertEqual(self.gemini_cagrilar, [])
+
+
+class BolumOncelikTests(SimpleTestCase):
+    """ADR-0005: CVE tur basina ilk bolumdur ve butce cagrilarina adiyla gider."""
+
+    def test_cve_ilk_bolumdur(self):
+        from news.retranslate import BOLUMLER
+        self.assertEqual(BOLUMLER[0][0], 'cve')
+
+    def test_bolum_sirasi_beklendigi_gibi(self):
+        from news.retranslate import BOLUMLER
+        self.assertEqual([ad for ad, _model, _cevir in BOLUMLER],
+                         ['cve', 'news', 'kubernetes', 'sre', 'devtools', 'ai'])
+
+
+class GeminiBolumAdiTests(TestCase):
+    """Bolum adi Gemini cagrilarina gecirilmeli; aksi halde rezerve islemez."""
+
+    def test_gemini_cagrilarina_bolum_adi_gecer(self):
+        from news import retranslate
+
+        cve = CVEEntry.objects.create(
+            cve_id='CVE-2026-9500', source='NVD',
+            original_title='CVE-2026-9500 - Guvenlik Acigi',
+            original_description='A remote attacker can read arbitrary files from the server.',
+            published_date=date(2026, 9, 12), link='https://ornek.test/cve/9500',
+            turkish_title='CVE-2026-9500 - Guvenlik Acigi',
+            turkish_description='Eski LibreTranslate cevirisi.',
+            needs_translation=False, translation_provider='libretranslate')
+
+        with mock.patch.object(gemini, 'hazir', return_value=True) as hazir, \
+             mock.patch.object(gemini, 'kaydi_cevir',
+                               return_value={'description': 'Yeni Gemini cevirisi.'}) as cevir:
+            retranslate._gemini_ile_cevir('cve', cve)
+
+        self.assertIn('cve', [c.args[0] for c in hazir.call_args_list if c.args],
+                      'gemini.hazir bolum adiyla cagrilmaliydi')
+        self.assertEqual(cevir.call_args.args[1], 'cve',
+                         'gemini.kaydi_cevir bolum adiyla cagrilmaliydi')
+
+
+class ButcePayiRetranslateTests(TestCase):
+    """Rezerve retranslate icinde fiilen isliyor mu (spec bolum 6, test_retranslate)."""
+
+    def setUp(self):
+        super().setUp()
+        ayar = override_settings(GEMINI_API_KEY='test-anahtar')
+        ayar.enable()
+        self.addCleanup(ayar.disable)
+        for hedef, deger in (('_gate', tu._LocalGate()), ('_butce', gemini._LocalButce())):
+            yama = mock.patch.object(gemini, hedef, deger)
+            yama.start()
+            self.addCleanup(yama.stop)
+        self.redis = test_redis_client()
+        self.onek = f'test-oncelik-{uuid.uuid4().hex}'
+        self.addCleanup(self._anahtarlari_sil)
+
+    def _anahtarlari_sil(self):
+        for anahtar in self.redis.scan_iter(f'{self.onek}:*'):
+            self.redis.delete(anahtar)
+
+    def _butceyi_doldur(self, adet):
+        for _ in range(adet):
+            gemini._butce.artir(gemini.butce_anahtari())
+
+    def test_diger_bolum_tavana_dayaninca_stopped_reason_yazilir(self):
+        from news import retranslate
+        self._butceyi_doldur(gemini.butce_tavani('news'))
+        sonuc = {'stopped_reason': None}
+
+        yukseltilen = retranslate._yukselt('news', NewsArticle, self.redis, self.onek, 10, sonuc)
+
+        self.assertEqual(yukseltilen, 0)
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_budget')
+
+    def test_ayni_noktada_cve_durmaz(self):
+        from news import retranslate
+        self._butceyi_doldur(gemini.butce_tavani('news'))
+        sonuc = {'stopped_reason': None}
+
+        retranslate._yukselt('cve', CVEEntry, self.redis, self.onek, 10, sonuc)
+
+        self.assertIsNone(sonuc['stopped_reason'],
+                          'CVE rezerve sayesinde durmamaliydi')
+
+    def test_bekleyenler_cve_devam_ederken_diger_bolum_durur(self):
+        """Asama 1'de CVE butcesi varken, non-CVE durur.
+        spec §3.3 / ADR-0005: CVE rezerve icin yapilan duzenlemelerle
+        butce dosumunda bile CVE devam etmeli."""
+        from news import retranslate
+
+        # LibreTranslate zincirini kapat
+        with mock.patch.object(tu, 'herhangi_saglayici_hazir', return_value=False):
+            # Non-CVE butcesini doldur
+            self._butceyi_doldur(gemini.butce_tavani('news'))
+
+            # Kontrol: CVE'nin butcesi var, non-CVE yok
+            self.assertTrue(gemini.hazir('cve'),
+                           'CVE rezerve sayesinde butcesi olmali')
+            self.assertFalse(gemini.hazir('news'),
+                            'Non-CVE butcesi dolmali')
+
+            # CVE: Asama 1'e bir kayit ver, Gemini'yi hazir ve cevirmelerde
+            cve_kayit = CVEEntry.objects.create(
+                cve_id='CVE-2026-5555', source='NVD',
+                original_title='CVE-2026-5555', original_description='Thirty-one chars description here',
+                published_date=date(2026, 9, 17), link='https://test.local/cve/5555',
+                needs_translation=True)
+
+            # Non-CVE kayit
+            news_kayit = NewsArticle.objects.create(
+                source='Test', original_title='Test Article',
+                original_description='Test body', link='https://test.local/news/1',
+                date=date(2026, 9, 17), original_date='2026-09-17', needs_translation=True)
+
+            # Gemini cevirilerini ayarla
+            with mock.patch.object(gemini, 'kaydi_cevir',
+                                   return_value={'description': 'Gemini cevirisi'}):
+                # CVE Asama 1: devam etmeli
+                cve_sonuc = {'by_provider': {'gemini': 0, 'libretranslate': 0}, 'stopped_reason': None}
+                cve_cevrilen, cve_basarisiz, cve_durdu = retranslate._bekleyenler(
+                    'cve', CVEEntry, retranslate._cve, self.redis, self.onek, 10, cve_sonuc)
+
+                # Non-CVE Asama 1: durmali
+                news_sonuc = {'by_provider': {'gemini': 0, 'libretranslate': 0}, 'stopped_reason': None}
+                news_cevrilen, news_basarisiz, news_durdu = retranslate._bekleyenler(
+                    'news', NewsArticle, retranslate._baslik_ve_uzun_aciklama,
+                    self.redis, self.onek, 10, news_sonuc)
+
+                # Dogrulama
+                self.assertFalse(cve_durdu,
+                                'CVE Asama 1 devam etmeli (rezerve sayesinde)')
+                self.assertGreater(cve_cevrilen, 0,
+                                  'CVE kayitlari cevrilmeli')
+                self.assertTrue(news_durdu,
+                               'Non-CVE Asama 1 durmali (butce dolu)')
+                self.assertEqual(news_cevrilen, 0,
+                                'Non-CVE kayitlari cevrilmemeli')
