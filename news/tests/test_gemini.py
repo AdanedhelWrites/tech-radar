@@ -278,7 +278,7 @@ class ButcePayiTests(GeminiTestMixin, SimpleTestCase):
         self.assertFalse(gemini.hazir('news'))
         self.assertTrue(gemini.hazir('cve'))
 
-    def test_tavana_dayanan_bolumde_kaydi_cevir_istek_atmaz_ve_sayaci_geri_alir(self):
+    def test_tavana_dayanan_bolumde_kaydi_cevir_istek_atmaz(self):
         post = self._post(_yanit(govde={'title': 'Baslik'}))
         tavan = gemini.butce_tavani('news')
         for _ in range(tavan):
@@ -290,6 +290,26 @@ class ButcePayiTests(GeminiTestMixin, SimpleTestCase):
         self.assertIsNone(sonuc)
         post.assert_not_called()
         self.assertEqual(gemini.butce_kullanimi(), onceki, 'Sayac geri alinmaliydi')
+
+    def test_tavana_dayanan_bolumde_kaydi_cevir_sayaci_geri_alir(self):
+        """hazir()/artir() arasindaki yaris: hazir() True sonucu verdiginde bile
+        artir() tavani asarsa kaydi_cevir istek atmadan azalt() ile sayaci geri
+        almali (gemini.py ~231). Bunu tetiklemek icin hazir() sabit True
+        yapilir; boylece butce zaten tavanda olsa da artir() calisir ve
+        geri alma dali (azalt) fiilen calisir."""
+        post = self._post(_yanit(govde={'title': 'Baslik'}))
+        tavan = gemini.butce_tavani('news')
+        for _ in range(tavan):
+            gemini._butce.artir(gemini.butce_anahtari())
+        onceki = gemini.butce_kullanimi()
+
+        with mock.patch.object(gemini, 'hazir', return_value=True):
+            sonuc = gemini.kaydi_cevir({'title': 'A new flaw in the parser'}, 'news')
+
+        self.assertIsNone(sonuc)
+        post.assert_not_called()
+        self.assertEqual(gemini.butce_kullanimi(), onceki,
+                         'Sayac geri alinmaliydi (artir sonrasi azalt calismali)')
 
     def test_cve_ayni_noktada_calismaya_devam_eder(self):
         post = self._post(_yanit(govde={'title': 'Ayristiricida yeni bir acik'}))

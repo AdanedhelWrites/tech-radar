@@ -68,6 +68,27 @@ class CVESaklamaTests(TestCase):
 
         self.assertTrue(CVEEntry.objects.filter(pk=kayit.pk).exists())
 
+    def test_ayni_cve_id_tekrar_donunce_pk_korunur(self):
+        """ADR-0005 basligi: mevcut bir kaydin ayni cve_id ile tekrar donmesi
+        yeni satir yaratmaz, update_or_create var olan pk'yi korur."""
+        kayit = self._cve('9005', yayim_gun_once=252)
+        orijinal_pk = kayit.pk
+
+        donen_cve = {
+            'cve_id': kayit.cve_id, 'source': 'NVD',
+            'original_title': f'{kayit.cve_id} - Guncellenmis Baslik',
+            'original_description': 'Guncellenmis aciklama metni.',
+            'published_date': kayit.published_date,
+        }
+        self.scraper.return_value.fetch_all_cves.return_value = [donen_cve]
+        self.scraper.return_value.process_cves.return_value = [donen_cve]
+
+        tasks.fetch_cve_task(days=7, skip_existing=False)
+
+        guncel = CVEEntry.objects.get(cve_id=kayit.cve_id)
+        self.assertEqual(guncel.pk, orijinal_pk)
+        self.assertEqual(CVEEntry.objects.filter(cve_id=kayit.cve_id).count(), 1)
+
     def test_cekim_penceresi_saklamayi_etkilemez(self):
         """`days` yalnizca kaynaktan ne kadar geriye gidilecegini belirler."""
         kayit = self._cve('9004', yayim_gun_once=300)

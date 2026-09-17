@@ -32,7 +32,10 @@ GEMINI_MAX_CHARS = int(os.environ.get('GEMINI_MAX_CHARS', '12000'))
 # ADR-0005: CVE oncelikli bolumdur (tuketicinin asil cektigi veri). Butce
 # darlastiginda CVE ac kalmasin diye gunluk butcenin bir payi ona ayrilir:
 # CVE tum butceye erisir, diger bolumler yalnizca rezerve disi kisma.
-GEMINI_CVE_RESERVE = float(os.environ.get('GEMINI_CVE_RESERVE', '0.5'))
+# Sinir disi deger butce korumasini bozar: negatifse diger bolumlerin tavani
+# GEMINI_DAILY_BUDGET'i asar, 1'den buyukse tavan negatife duser ve o bolumler
+# sessizce devre disi kalir; bu yuzden 0..1 araligina sabitleniyor.
+GEMINI_CVE_RESERVE = min(max(float(os.environ.get('GEMINI_CVE_RESERVE', '0.5')), 0.0), 1.0)
 ONCELIKLI_BOLUM = 'cve'
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 MAX_RATIO = 3.0

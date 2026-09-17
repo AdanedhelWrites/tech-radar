@@ -351,8 +351,9 @@ class BozukCevirileriIsaretleTests(TestCase):
         self.assertTrue(self.bozuk.needs_translation)
         self.assertTrue(self.bosluklu.needs_translation, 'Bosluklu/kucuk harfli kalinti da bozuktur')
         self.assertFalse(self.temiz.needs_translation)
-        self.assertEqual(self.bozuk.updated_at, once,
-                         'Isaretleme updated_at ilerletmemeli; duzgun ceviri yazilinca ilerleyecek')
+        self.assertGreater(self.bozuk.updated_at, once,
+                           'Isaretleme updated_at ilerletmeli; aksi halde saklama suzgeci '
+                           'yeniden cevrilmeyi bekleyen kaydi silebilir')
 
     def test_ikinci_calistirmada_bulunacak_bir_sey_kalmaz(self):
         self._komut('--uygula')
@@ -781,7 +782,7 @@ class ButcePayiRetranslateTests(TestCase):
         self.addCleanup(self._anahtarlari_sil)
 
     def _anahtarlari_sil(self):
-        for anahtar in self.redis.keys(f'{self.onek}:*'):
+        for anahtar in self.redis.scan_iter(f'{self.onek}:*'):
             self.redis.delete(anahtar)
 
     def _butceyi_doldur(self, adet):
@@ -846,18 +847,18 @@ class ButcePayiRetranslateTests(TestCase):
                 cve_cevrilen, cve_basarisiz, cve_durdu = retranslate._bekleyenler(
                     'cve', CVEEntry, retranslate._cve, self.redis, self.onek, 10, cve_sonuc)
 
-                # Non-CVE Asama 1: durmalı
+                # Non-CVE Asama 1: durmali
                 news_sonuc = {'by_provider': {'gemini': 0, 'libretranslate': 0}, 'stopped_reason': None}
                 news_cevrilen, news_basarisiz, news_durdu = retranslate._bekleyenler(
                     'news', NewsArticle, retranslate._baslik_ve_uzun_aciklama,
                     self.redis, self.onek, 10, news_sonuc)
 
-                # Doğrulama
+                # Dogrulama
                 self.assertFalse(cve_durdu,
                                 'CVE Asama 1 devam etmeli (rezerve sayesinde)')
                 self.assertGreater(cve_cevrilen, 0,
                                   'CVE kayitlari cevrilmeli')
                 self.assertTrue(news_durdu,
-                               'Non-CVE Asama 1 durmalı (butce dolu)')
+                               'Non-CVE Asama 1 durmali (butce dolu)')
                 self.assertEqual(news_cevrilen, 0,
                                 'Non-CVE kayitlari cevrilmemeli')
