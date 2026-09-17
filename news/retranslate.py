@@ -161,7 +161,7 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
     cevrilen = basarisiz = 0
     durdu = False
     for kayit in kayitlar:
-        if not (tu.herhangi_saglayici_hazir() or gemini.hazir()):
+        if not (tu.herhangi_saglayici_hazir() or gemini.hazir(ad)):
             durdu = True
             break
         deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
@@ -175,7 +175,7 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
             continue
 
         if gemini_alanlar is None and not tu.herhangi_saglayici_hazir():
-            if gemini.hazir() and _gemini_alanlari(ad, kayit):
+            if gemini.hazir(ad) and _gemini_alanlari(ad, kayit):
                 # Gemini hazirdi ama icerigi reddetti; zincir kapali: icerik hatasi say, imlec gecsin
                 basarisiz += 1
                 redis_client.set(anahtar, deneme_oncesi)

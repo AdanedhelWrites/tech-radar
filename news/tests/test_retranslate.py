@@ -807,3 +807,57 @@ class ButcePayiRetranslateTests(TestCase):
 
         self.assertIsNone(sonuc['stopped_reason'],
                           'CVE rezerve sayesinde durmamaliydi')
+
+    def test_bekleyenler_cve_devam_ederken_diger_bolum_durur(self):
+        """Asama 1'de CVE butcesi varken, non-CVE durur.
+        spec §3.3 / ADR-0005: CVE rezerve icin yapilan duzenlemelerle
+        butce dosumunda bile CVE devam etmeli."""
+        from news import retranslate
+
+        # LibreTranslate zincirini kapat
+        with mock.patch.object(tu, 'herhangi_saglayici_hazir', return_value=False):
+            # Non-CVE butcesini doldur
+            self._butceyi_doldur(gemini.butce_tavani('news'))
+
+            # Kontrol: CVE'nin butcesi var, non-CVE yok
+            self.assertTrue(gemini.hazir('cve'),
+                           'CVE rezerve sayesinde butcesi olmali')
+            self.assertFalse(gemini.hazir('news'),
+                            'Non-CVE butcesi dolmali')
+
+            # CVE: Asama 1'e bir kayit ver, Gemini'yi hazir ve cevirmelerde
+            cve_kayit = CVEEntry.objects.create(
+                cve_id='CVE-2026-5555', source='NVD',
+                original_title='CVE-2026-5555', original_description='Thirty-one chars description here',
+                published_date=date(2026, 9, 17), link='https://test.local/cve/5555',
+                needs_translation=True)
+
+            # Non-CVE kayit
+            news_kayit = NewsArticle.objects.create(
+                source='Test', original_title='Test Article',
+                original_description='Test body', link='https://test.local/news/1',
+                date=date(2026, 9, 17), original_date='2026-09-17', needs_translation=True)
+
+            # Gemini cevirilerini ayarla
+            with mock.patch.object(gemini, 'kaydi_cevir',
+                                   return_value={'description': 'Gemini cevirisi'}):
+                # CVE Asama 1: devam etmeli
+                cve_sonuc = {'by_provider': {'gemini': 0, 'libretranslate': 0}, 'stopped_reason': None}
+                cve_cevrilen, cve_basarisiz, cve_durdu = retranslate._bekleyenler(
+                    'cve', CVEEntry, retranslate._cve, self.redis, self.onek, 10, cve_sonuc)
+
+                # Non-CVE Asama 1: durmalı
+                news_sonuc = {'by_provider': {'gemini': 0, 'libretranslate': 0}, 'stopped_reason': None}
+                news_cevrilen, news_basarisiz, news_durdu = retranslate._bekleyenler(
+                    'news', NewsArticle, retranslate._baslik_ve_uzun_aciklama,
+                    self.redis, self.onek, 10, news_sonuc)
+
+                # Doğrulama
+                self.assertFalse(cve_durdu,
+                                'CVE Asama 1 devam etmeli (rezerve sayesinde)')
+                self.assertGreater(cve_cevrilen, 0,
+                                  'CVE kayitlari cevrilmeli')
+                self.assertTrue(news_durdu,
+                               'Non-CVE Asama 1 durmalı (butce dolu)')
+                self.assertEqual(news_cevrilen, 0,
+                                'Non-CVE kayitlari cevrilmemeli')
