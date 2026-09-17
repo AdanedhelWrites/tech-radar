@@ -96,9 +96,9 @@ def _gemini_alanlari(ad: str, kayit) -> Dict[str, str]:
 def _gemini_ile_cevir(ad: str, kayit) -> Optional[Dict[str, str]]:
     """Kaydi Gemini ile cevirir; DB alan adlariyla sozluk ya da None (aday degil / hazir degil / cevrilemedi)."""
     alanlar = _gemini_alanlari(ad, kayit)
-    if not alanlar or not gemini.hazir():
+    if not alanlar or not gemini.hazir(ad):
         return None
-    sonuc = gemini.kaydi_cevir(alanlar)
+    sonuc = gemini.kaydi_cevir(alanlar, ad)
     if sonuc is None:
         return None
     if ad == 'kubernetes' and 'description' in sonuc:
@@ -109,9 +109,11 @@ def _gemini_ile_cevir(ad: str, kayit) -> Optional[Dict[str, str]]:
     return {_GEMINI_DB_ALANI[alan]: metin for alan, metin in sonuc.items()}
 
 
+# ADR-0005: cve basta. Tuketicinin asil cektigi bolum oldugu icin tur basina
+# butceye ilk o erisir; ayrica gemini.butce_tavani onu rezerve ile korur.
 BOLUMLER = (
-    ('news', NewsArticle, _baslik_ve_uzun_aciklama),
     ('cve', CVEEntry, _cve),
+    ('news', NewsArticle, _baslik_ve_uzun_aciklama),
     ('kubernetes', KubernetesEntry, _kubernetes),
     ('sre', SREEntry, _baslik_ve_uzun_aciklama),
     ('devtools', DevToolsEntry, _baslik_ve_uzun_aciklama),
@@ -203,8 +205,8 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
 
 def _yukselt(ad, model, redis_client, prefix, sinir, sonuc):
     """Asama 2. Yalnizca Gemini. Donus: yukseltilen kayit sayisi."""
-    if not gemini.hazir():
-        if not gemini.butce_var():
+    if not gemini.hazir(ad):
+        if not gemini.butce_var(ad):
             sonuc['stopped_reason'] = 'gemini_budget'
         return 0
     anahtar = f'{prefix}:upgrade-cursor:{ad}'
@@ -215,16 +217,16 @@ def _yukselt(ad, model, redis_client, prefix, sinir, sonuc):
     yukseltilen = 0
     durdu = False
     for kayit in kayitlar:
-        if not gemini.hazir():
+        if not gemini.hazir(ad):
             durdu = True  # butce/devre kesici asama ortasinda; imleci ilerletme
-            if not gemini.butce_var():
+            if not gemini.butce_var(ad):
                 sonuc['stopped_reason'] = 'gemini_budget'
             break
         deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
         alanlar = _gemini_ile_cevir(ad, kayit)
-        if alanlar is None and not gemini.hazir():
+        if alanlar is None and not gemini.hazir(ad):
             durdu = True  # transport hatasi devre kesiciyi acti: bu kayit sonraki turda once denensin
-            if not gemini.butce_var():
+            if not gemini.butce_var(ad):
                 sonuc['stopped_reason'] = 'gemini_budget'
             break
         if alanlar is not None:
