@@ -11,7 +11,7 @@ from unittest import mock
 from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 
 from news import gemini
 from news import translation_providers as tp
@@ -862,3 +862,84 @@ class ButcePayiRetranslateTests(TestCase):
                                'Non-CVE Asama 1 durmali (butce dolu)')
                 self.assertEqual(news_cevrilen, 0,
                                 'Non-CVE kayitlari cevrilmemeli')
+
+
+class SilinenKayitTests(TransactionTestCase):
+    """Tur ortasinda silinen kayit tum turu dusurmemeli (2026-09-18 vakasi).
+
+    Eszamanli bir temizleme (views.clear_cve_cache) retranslate'in elindeki
+    kaydi silince kayit.save(update_fields=...) 0 satir gunceller ve Django
+    DatabaseError atar; bu istisna tum retranslate turunu comertti ve o turda
+    diger bolumler hic yukseltme almadi.
+
+    TransactionTestCase ZORUNLU, TestCase ile calismaz: Model.save() kendi icinde
+    atomic(savepoint=False) kullanir ve iceride istisna olusunca KUSATAN transaction
+    'rollback gerekiyor' diye isaretlenir. TestCase her testi bir atomic bloga
+    sardigi icin, istisnadan sonraki ilk sorgu TransactionManagementError atar ve
+    dongu devam edemez. Uretimde retranslate hicbir atomic blok icinde degildir
+    (dogrulandi: retranslate.py, tasks.py ve settings.py'de atomic/ATOMIC_REQUESTS
+    yok), yani save()'in kendi atomic'i en distaki blok olur ve dongu devam eder.
+    TransactionTestCase bu autocommit kosulunu birebir yansitir.
+    """
+
+    def _cve(self, no, saglayici='libretranslate'):
+        return CVEEntry.objects.create(
+            cve_id=f'CVE-2026-{no}', source='NVD',
+            original_title=f'CVE-2026-{no}',
+            original_description='A remote attacker can read arbitrary files from the server.',
+            turkish_description='Eski LibreTranslate cevirisi.',
+            published_date=date(2026, 9, 12), link=f'https://ornek.test/cve/{no}',
+            needs_translation=False, translation_provider=saglayici)
+
+    def test_yaz_silinmis_kayitta_istisna_atmaz_false_doner(self):
+        from news import retranslate
+        kayit = self._cve('9701')
+        CVEEntry.objects.filter(pk=kayit.pk).delete()  # tur ortasinda silindi
+
+        sonuc = retranslate._yaz(kayit, {'turkish_description': 'Yeni ceviri.'}, 'gemini')
+
+        self.assertFalse(sonuc, 'Silinmis kayitta _yaz False donmeli')
+
+    def test_yaz_basarili_yazimda_true_doner(self):
+        from news import retranslate
+        kayit = self._cve('9702')
+
+        sonuc = retranslate._yaz(kayit, {'turkish_description': 'Yeni ceviri.'}, 'gemini')
+
+        self.assertTrue(sonuc)
+        kayit.refresh_from_db()
+        self.assertEqual(kayit.translation_provider, 'gemini')
+        self.assertEqual(kayit.turkish_description, 'Yeni ceviri.')
+
+    def test_yaz_gecici_veritabani_hatasini_yutmaz(self):
+        """database is locked gibi OperationalError altyapi hatasidir; yukari cikmali."""
+        from django.db import OperationalError
+        from news import retranslate
+        kayit = self._cve('9703')
+
+        with mock.patch.object(CVEEntry, 'save', side_effect=OperationalError('database is locked')):
+            with self.assertRaises(OperationalError):
+                retranslate._yaz(kayit, {'turkish_description': 'Yeni ceviri.'}, 'gemini')
+
+    def test_yukselt_silinen_kaydi_atlayip_turu_surdurur(self):
+        """Asil vaka: tur ortasinda silinen kayit turu dusurmemeli, sonraki kayit yukselmeli."""
+        from news import retranslate
+        birinci = self._cve('9704')
+        ikinci = self._cve('9705')
+        redis_client = test_redis_client()
+        onek = f'test-silinen-{uuid.uuid4().hex}'
+        self.addCleanup(lambda: [redis_client.delete(a) for a in redis_client.scan_iter(f'{onek}:*')])
+
+        def sahte_cevir(ad, kayit):
+            if kayit.pk == birinci.pk:
+                CVEEntry.objects.filter(pk=birinci.pk).delete()  # eszamanli temizleme
+            return {'turkish_description': 'Gemini cevirisi.'}
+
+        sonuc = {'stopped_reason': None}
+        with mock.patch.object(gemini, 'hazir', lambda bolum=None: True), \
+             mock.patch.object(retranslate, '_gemini_ile_cevir', sahte_cevir):
+            yukseltilen = retranslate._yukselt('cve', CVEEntry, redis_client, onek, 10, sonuc)
+
+        self.assertEqual(yukseltilen, 1, 'Silinen kayit sayilmamali, ikinci kayit yukselmeli')
+        ikinci.refresh_from_db()
+        self.assertEqual(ikinci.translation_provider, 'gemini')

@@ -24,6 +24,8 @@ Yazma kurallari:
 import os
 from typing import Dict, Optional
 
+from django.db import DatabaseError, OperationalError
+
 from . import gemini
 from . import translation_utils as tu
 from .api_v1.cursor import InvalidCursor, apply_cursor, decode_cursor, encode_cursor
@@ -144,12 +146,30 @@ def _cevir_ve_olc(cevir, kayit):
     return alanlar, tu.consume_translation_failures(), tu.consume_translation_providers()
 
 
-def _yaz(kayit, alanlar, saglayici):
+def _yaz(kayit, alanlar, saglayici) -> bool:
+    """Ceviriyi kayda yazar. False: kayit artik yok, atlanmali.
+
+    Kayit tur ortasinda silinmisse (ornegin views.clear_cve_cache eszamanli
+    calisti) update_fields ile yapilan save 0 satir gunceller ve Django
+    DatabaseError atar. Bu tum turu dusurmek icin sebep degildir: kayit gitmistir,
+    atlanir ve imlec ilerler (2026-09-18: boyle bir istisna bir retranslate turunu
+    comertti, o turda diger bolumler hic yukseltme almadi).
+
+    OperationalError (ornegin 'database is locked') gecici bir altyapi hatasidir,
+    kaydin yoklugu degil; yutulmaz, yukari cikar.
+    """
     for alan, deger in alanlar.items():
         setattr(kayit, alan, deger)
     kayit.needs_translation = False
     kayit.translation_provider = saglayici
-    kayit.save(update_fields=[*alanlar, 'needs_translation', 'translation_provider', 'updated_at'])
+    try:
+        kayit.save(update_fields=[*alanlar, 'needs_translation', 'translation_provider', 'updated_at'])
+    except OperationalError:
+        raise
+    except DatabaseError:
+        print(f"  [Retranslate] kayit {kayit.pk} tur ortasinda silinmis, atlaniyor.")
+        return False
+    return True
 
 
 def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
@@ -168,9 +188,9 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
 
         gemini_alanlar = _gemini_ile_cevir(ad, kayit)
         if gemini_alanlar is not None:
-            _yaz(kayit, gemini_alanlar, 'gemini')
-            cevrilen += 1
-            sonuc['by_provider']['gemini'] += 1
+            if _yaz(kayit, gemini_alanlar, 'gemini'):
+                cevrilen += 1
+                sonuc['by_provider']['gemini'] += 1
             redis_client.set(anahtar, deneme_oncesi)
             continue
 
@@ -192,10 +212,10 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
             basarisiz += 1  # icerik hatasi: imlec gecer, kayit sirada kalir
         else:
             saglayici = tu.kayit_saglayicisi(kullanilan)
-            _yaz(kayit, alanlar, saglayici)
-            cevrilen += 1
-            if saglayici:
-                sonuc['by_provider'][saglayici] = sonuc['by_provider'].get(saglayici, 0) + 1
+            if _yaz(kayit, alanlar, saglayici):
+                cevrilen += 1
+                if saglayici:
+                    sonuc['by_provider'][saglayici] = sonuc['by_provider'].get(saglayici, 0) + 1
         redis_client.set(anahtar, deneme_oncesi)
 
     if not durdu and len(kayitlar) < sinir:
@@ -229,8 +249,7 @@ def _yukselt(ad, model, redis_client, prefix, sinir, sonuc):
             if not gemini.butce_var(ad):
                 sonuc['stopped_reason'] = 'gemini_budget'
             break
-        if alanlar is not None:
-            _yaz(kayit, alanlar, 'gemini')
+        if alanlar is not None and _yaz(kayit, alanlar, 'gemini'):
             yukseltilen += 1
         redis_client.set(anahtar, deneme_oncesi)
 
