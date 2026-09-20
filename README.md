@@ -268,6 +268,8 @@ Her istekte `Authorization: Token <key>` basligi gonderilir. Admin arayuzunde **
 
 | Method | Uc nokta | Aciklama |
 |--------|----------|----------|
+| GET | `/api/v1/schema/` | OpenAPI 3 semasi (token gerekir) |
+| GET | `/api/v1/docs/` | Swagger UI — tarayicida admin oturumuyla acilir |
 | GET | `/api/v1/health/` | Servis ayakta mi — **tokensiz** (Kubernetes probe'lari icin) |
 | GET | `/api/v1/status/` | Bolum basina veri tazeligi: `last_success_at`, `last_status`, `last_fetched_count`, `last_saved_count`, `pending_translation`, `total` |
 | GET | `/api/v1/{bolum}/` | Imlecli delta okuma |
@@ -381,6 +383,24 @@ Tum v1 hatalari ayni bicimde doner:
 | `internal` | 500 | Beklenmeyen sunucu hatasi |
 
 > **Not:** Bu sozlesme yalnizca **tanimli** uc noktalar icin gecerlidir. Hic rotasi olmayan bir yol — ornegin `GET /api/v1/k8s/`, cunku v1'de bolum adi `kubernetes`'tir — DRF'e hic ulasmadan Django'nun duz **HTML 404**'unu dondurur, JSON gelmez. Tuketici yanit govdesini ayristirmadan once `Content-Type`'i kontrol etmelidir. Buna karsilik `POST /api/v1/k8s/refresh/` rotalidir ve duzgun `{"error": {"code": "not_found", ...}}` dondurur.
+
+### Makine tarafindan okunur sozlesme
+
+`/api/v1/schema/` OpenAPI 3 dokumani dondurur ve yalnizca `/api/v1/` uclarini
+kapsar; eski `/api/*` uclari bilincli olarak disaridadir.
+
+```bash
+curl -H "Authorization: Token $CYBERNEWS_TOKEN" \
+  http://localhost:8000/api/v1/schema/ -o cybernews-v1.yaml
+```
+
+Semadan istemci uretilebilir (`openapi-generator` vb.). `/api/v1/docs/` ayni
+semayi Swagger UI ile gosterir; tarayici `Authorization` basligi gondermedigi
+icin bu sayfa **admin'de oturum acmis** bir kullaniciyla acilir.
+
+> **Not:** Sema yayimlandigi andan itibaren dis sozlesmedir. Bir alanin tipi
+> degisirse bu artik "dokumantasyon hatasi" degil, tuketicinin istemcisini
+> kiran bir degisikliktir.
 
 ---
 
@@ -952,7 +972,7 @@ kubectl delete namespace teknoloji-haberleri
 |-----|------|-------|
 | [ADR-0001](docs/ADR-0001-AI-News.md) | AI News bileseni | Accepted |
 | [ADR-0002](docs/ADR-0002-AI-Benchmark.md) | AI Benchmark / Leaderboard bileseni | Proposed (ertelendi) |
-| [ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md) | Dis tuketiciler icin `/api/v1/` entegrasyon katmani (imlecli delta, token, refresh, ceviri dogrulugu) | Accepted (A1–A4 ve A5a uygulandi; A5b — drf-spectacular semasi — acik) |
+| [ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md) | Dis tuketiciler icin `/api/v1/` entegrasyon katmani (imlecli delta, token, refresh, ceviri dogrulugu) | Accepted (A1–A5b uygulandi, canlida dogrulandi) |
 | [ADR-0004](docs/ADR-0004-Ceviri-Saglayici-Zinciri.md) | Ceviri saglayici zinciri (LibreTranslate yedek; 2026-09-15: Google kaldirildi, Gemini yukseltme) | Accepted (degisiklik 2026-09-15) |
 | [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md) | Saklama olcusu `updated_at` (sil/yeniden yaz dongusu) ve CVE'ye Gemini butce onceligi | Accepted (uygulandi 2026-09-18, canlida dogrulandi) |
 | [ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md) | `FetchRun` gorunurlugu, durum semantigi ve dar `GET /api/v1/status/` ucu (ADR-0003 bolum 11'in yerine gecer) | Accepted (uygulandi 2026-09-21, canlida dogrulandi) |
