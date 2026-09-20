@@ -31,6 +31,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'drf_spectacular',
+    'drf_spectacular_sidecar',
     'news',
     'django_celery_beat',
 ]
@@ -72,6 +74,26 @@ REST_FRAMEWORK = {
         'v1_read': '120/min',
         'v1_refresh': '12/hour',
     },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# Sema yalnizca /api/v1/ icindir. DEFAULT_SCHEMA_CLASS global bir ayardir ve
+# teknik olarak eski /api/* view'larini da kapsar, ama davranissal etkisi
+# yoktur: sema sinifi yalnizca sema uretiminde kullanilir, istek isleme
+# yolunda degil. Eski uclar ayrica asagidaki hook ile semadan tamamen elenir.
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'CyberNews Entegrasyon API',
+    'DESCRIPTION': (
+        'Dis tuketiciler icin imlecli delta senkron API. Tuketici tarafi upsert '
+        'olmalidir ve birlestirme anahtari `id` DEGILDIR: `cve` bolumunde '
+        '`cve_id`, diger bes bolumde `link` kullanilir. Ayrinti icin README '
+        'icindeki "Entegrasyon API" bolumune bakiniz.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'PREPROCESSING_HOOKS': ['news.api_v1.schema.yalniz_v1'],
+    'SWAGGER_UI_DIST': 'SIDECAR',
+    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
 }
 
 ROOT_URLCONF = 'cybernews.urls'
