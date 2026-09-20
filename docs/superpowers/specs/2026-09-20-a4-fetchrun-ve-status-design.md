@@ -127,7 +127,9 @@ TASK_BOLUMLERI = {
 
 **`trigger` nasil belirlenir:** varsayilan `beat`. Manuel tetikleyen iki cagri noktasi Celery header'i gecer: `news/api_v1/refresh.py` (`trigger='api'`) ve `news/views.py`'deki fetch view'lari (`trigger='admin'`). Sinyal header'i `sender.request` uzerinden okur; yoksa `beat` kabul eder.
 
-> **Selef spec'ten bilincli sapma:** ADR-0003 "`news/views.py` degismez" diyordu. Burada `views.py`'de degisen tek sey `.delay(...)` cagrilarina bir Celery header'i eklenmesidir; hicbir HTTP sozlesmesi, yanit govdesi veya URL degismez. Gerekce: 2026-09-18'deki tablo bosalmasi bu yoldan geldi ve `trigger` alani onu ayirt etmenin tek yolu.
+> **Selef spec'ten bilincli sapma:** ADR-0003 "`news/views.py` degismez" diyordu. Burada `views.py`'de alti gorev dagitim satiri (`73, 200, 336, 467, 591, 720`) bicim degistirir: `.delay(**kwargs)` yerine `.apply_async(kwargs={...}, headers={'fetchrun_trigger': 'admin'})`. `.delay()` header kabul etmedigi icin bu zorunludur. Hicbir HTTP sozlesmesi, yanit govdesi, URL veya gorev imzasi degismez; yalnizca cagri bicimi degisir. `news/api_v1/refresh.py:148` zaten `apply_async` kullaniyor, oraya yalnizca `headers={'fetchrun_trigger': 'api'}` eklenir.
+>
+> **Bu sapmayi istemiyorsak alternatif:** `trigger` alani dusurulur veya yalnizca v1 yolu (`api`) isaretlenir, digerleri `beat` kalir. Tablo bosalmasini yakalayan asil sinyal `total_after`'dir; `trigger` onu destekleyen ikincil bir ipucudur.
 
 ### 3.4 `news/tasks.py` — zenginlestirilmis donus sozlesmesi
 
