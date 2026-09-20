@@ -60,3 +60,66 @@ class SerializerTipleriTests(V1TestCase):
 
         alan = bilesenler['CVEEntryV1']['properties']['translation_provider']
         self.assertTrue(alan.get('nullable'), 'translation_provider nullable olmali')
+
+
+DELTA_YOLLARI = {
+    'news': '/api/v1/news/',
+    'cve': '/api/v1/cve/',
+    'kubernetes': '/api/v1/kubernetes/',
+    'sre': '/api/v1/sre/',
+    'devtools': '/api/v1/devtools/',
+    'ai': '/api/v1/ai/',
+}
+
+ORTAK_PARAMETRELER = {
+    'since_cursor', 'since', 'limit', 'source', 'needs_translation',
+}
+
+
+class DeltaSemasiTests(V1TestCase):
+
+    def _get(self, sema, yol):
+        return sema['paths'][yol]['get']
+
+    def test_delta_uclari_zarf_dondurur(self):
+        sema = sema_uret()
+
+        for bolum, yol in DELTA_YOLLARI.items():
+            with self.subTest(bolum=bolum):
+                govde = self._get(sema, yol)['responses']['200']
+                ref = govde['content']['application/json']['schema']['$ref']
+                ad = ref.rsplit('/', 1)[-1]
+                zarf = sema['components']['schemas'][ad]['properties']
+                self.assertEqual(
+                    sorted(zarf), ['count', 'has_more', 'next_cursor', 'results'])
+                self.assertEqual(zarf['results']['type'], 'array')
+
+    def test_ortak_parametreler_her_delta_ucunda(self):
+        sema = sema_uret()
+
+        for bolum, yol in DELTA_YOLLARI.items():
+            with self.subTest(bolum=bolum):
+                adlar = {p['name'] for p in self._get(sema, yol)['parameters']}
+                self.assertTrue(ORTAK_PARAMETRELER <= adlar,
+                                f'{bolum} eksik: {ORTAK_PARAMETRELER - adlar}')
+
+    def test_bolume_ozgu_parametreler(self):
+        sema = sema_uret()
+
+        def adlar(yol):
+            return {p['name'] for p in self._get(sema, yol)['parameters']}
+
+        self.assertTrue({'min_severity', 'severity'} <= adlar(DELTA_YOLLARI['cve']))
+        self.assertIn('category', adlar(DELTA_YOLLARI['kubernetes']))
+        self.assertIn('entry_type', adlar(DELTA_YOLLARI['devtools']))
+        # Sizinti olmamali: severity yalniz CVE'nindir
+        self.assertNotIn('min_severity', adlar(DELTA_YOLLARI['news']))
+        self.assertNotIn('category', adlar(DELTA_YOLLARI['sre']))
+
+    def test_min_severity_gecerli_degerleri_enum_olarak_verir(self):
+        sema = sema_uret()
+
+        parametreler = self._get(sema, DELTA_YOLLARI['cve'])['parameters']
+        ms = next(p for p in parametreler if p['name'] == 'min_severity')
+        self.assertEqual(ms['schema']['enum'],
+                         ['low', 'medium', 'high', 'critical'])

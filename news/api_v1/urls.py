@@ -5,6 +5,7 @@ from rest_framework.authentication import SessionAuthentication, TokenAuthentica
 from rest_framework.permissions import IsAuthenticated
 
 from . import views
+from .schema import DELTA_SEMALARI
 
 # Sema ve docs uclari da kimlik dogrulamasi ister (v1'de yalniz /health/ aciktir).
 # TokenAuthentication listede ILK olmalidir: DRF WWW-Authenticate basligini ilk
@@ -21,12 +22,14 @@ urlpatterns = [
     path('health/', views.HealthView.as_view(), name='v1-health'),
     path('status/', views.StatusView.as_view(), name='v1-status'),
     path('refresh/', views.RefreshAllView.as_view(), name='v1-refresh-all'),
-    path('news/', views.NewsDeltaView.as_view(), name='v1-news'),
-    path('cve/', views.CVEDeltaView.as_view(), name='v1-cve'),
-    path('kubernetes/', views.KubernetesDeltaView.as_view(), name='v1-kubernetes'),
-    path('sre/', views.SREDeltaView.as_view(), name='v1-sre'),
-    path('devtools/', views.DevToolsDeltaView.as_view(), name='v1-devtools'),
-    path('ai/', views.AIDeltaView.as_view(), name='v1-ai'),
+    path('news/', DELTA_SEMALARI['news'](views.NewsDeltaView).as_view(), name='v1-news'),
+    path('cve/', DELTA_SEMALARI['cve'](views.CVEDeltaView).as_view(), name='v1-cve'),
+    path('kubernetes/', DELTA_SEMALARI['kubernetes'](views.KubernetesDeltaView).as_view(),
+         name='v1-kubernetes'),
+    path('sre/', DELTA_SEMALARI['sre'](views.SREDeltaView).as_view(), name='v1-sre'),
+    path('devtools/', DELTA_SEMALARI['devtools'](views.DevToolsDeltaView).as_view(),
+         name='v1-devtools'),
+    path('ai/', DELTA_SEMALARI['ai'](views.AIDeltaView).as_view(), name='v1-ai'),
     path('<str:section>/refresh/', views.RefreshView.as_view(), name='v1-refresh'),
     path('jobs/<str:job_id>/', views.JobView.as_view(), name='v1-job'),
 ]
