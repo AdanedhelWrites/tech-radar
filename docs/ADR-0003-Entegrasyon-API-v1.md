@@ -1,7 +1,7 @@
 # ADR 0003: Dis Tuketiciler icin `/api/v1/` Entegrasyon Katmani
 
 ## Status
-Accepted — 2026-09-12 (A1–A3 uygulandi ve `main`'de: PR #1 A2 `c435550`, PR #2 A3 `eb5f93a`; A1 dogrudan `main`'e alindi). A4 (FetchRun / `status`) ve A5 (sema, ornek istemci, README) henuz uygulanmadi.
+Accepted — 2026-09-12 (A1–A3 uygulandi ve `main`'de: PR #1 A2 `c435550`, PR #2 A3 `eb5f93a`; A1 dogrudan `main`'e alindi). **A4 uygulandi** (2026-09-21, merge `1268ac5`); kapsami [ADR-0006](ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md)'ya tasindi. A5 (sema, ornek istemci, README) henuz uygulanmadi.
 
 Tasarim: [`superpowers/specs/2026-09-12-entegrasyon-api-v1-design.md`](superpowers/specs/2026-09-12-entegrasyon-api-v1-design.md). Uygulama planlari: `superpowers/plans/2026-09-12-entegrasyon-api-v1-a{1,2,3}.md`. Spec ile plan celistiginde planlarin "Spec'e Gore Netlestirmeler" bolumleri gecerlidir.
 
