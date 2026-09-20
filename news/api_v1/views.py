@@ -331,3 +331,32 @@ class JobView(V1APIView):
             govde['error'] = str(sonuc.result)
 
         return Response(govde)
+
+
+class StatusView(V1APIView):
+    """Veri tazeligi raporu (spec 2026-09-20-a4, bolum 3.5).
+
+    Bilincli olarak DARDIR: yalnizca tuketicinin "veri bayat mi" sorusunu
+    yanitlar. Operator verisi (Gemini butcesi, by_provider, stopped_reason,
+    trigger, error) buraya girmez; o FetchRun'da ve admin'dedir.
+    """
+
+    def get(self, request):
+        from django.utils import timezone
+
+        from news.fetch_runs import BOLUM_MODELLERI
+        from news.models import FetchRun
+
+        bolumler = {}
+        for ad, model in BOLUM_MODELLERI.items():
+            son = FetchRun.objects.filter(section=ad).first()
+            son_basarili = FetchRun.objects.filter(section=ad, status='success').first()
+            bolumler[ad] = {
+                'last_success_at': son_basarili.finished_at if son_basarili else None,
+                'last_status': son.status if son else None,
+                'last_fetched_count': son.fetched_count if son else None,
+                'last_saved_count': son.saved_count if son else None,
+                'pending_translation': model.objects.filter(needs_translation=True).count(),
+                'total': model.objects.count(),
+            }
+        return Response({'generated_at': timezone.now(), 'sections': bolumler})
