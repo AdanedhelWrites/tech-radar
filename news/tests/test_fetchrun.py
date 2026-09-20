@@ -236,3 +236,44 @@ class DonusSozlesmesiTests(TestCase):
             tasks.retranslate_pending_task()
 
         self.assertFalse(FetchRun.objects.filter(pk=eski.pk).exists())
+
+    def test_fetched_count_drop_existing_oncesinde_sayilir(self):
+        """SPEC 1.3'un ta kendisi: sre/devtools gunlerdir bu durumda -- kaynak
+        calisiyor ama donen kayitlarin hepsi zaten DB'de (needs_translation=False),
+        _drop_existing hepsini eliyor. fetched_count dedup'tan ONCE sayilmali,
+        yoksa 'kaynak bozuk' (fetched=0) ile 'yeni kayit yok' (fetched>0, saved=0)
+        ayirt edilemez. kaynaktan_gelen dedup'tan SONRA sayilsaydi bu test
+        fetched_count icin 1 bekler, fakat gercek deger 0 olurdu (yalnizca 'yeni'
+        hayatta kalirdi) -- ilk assertion o zaman patlardi."""
+        from unittest import mock
+        from datetime import date
+        from news import tasks
+        from news.models import CVEEntry
+
+        CVEEntry.objects.create(
+            cve_id='CVE-2026-5000', source='NVD', original_title='Var olan CVE',
+            original_description='Aciklama', published_date=date(2026, 9, 1),
+            link='https://ornek.test/mevcut', needs_translation=False,
+        )
+
+        var_olan = {'cve_id': 'CVE-2026-5000', 'source': 'NVD',
+                    'original_title': 'Var olan CVE', 'original_description': 'Aciklama',
+                    'published_date': date(2026, 9, 1), 'link': 'https://ornek.test/mevcut'}
+        yeni = {'cve_id': 'CVE-2026-5001', 'source': 'NVD',
+                'original_title': 'Yeni CVE', 'original_description': 'Aciklama',
+                'published_date': date(2026, 9, 2), 'link': 'https://ornek.test/yeni'}
+
+        yama = mock.patch('news.tasks.MultiCVEScraper')
+        scraper_sinifi = yama.start()
+        self.addCleanup(yama.stop)
+        scraper = scraper_sinifi.return_value
+        scraper.fetch_all_cves.return_value = [var_olan, yeni]
+        # dedup sonrasi sadece 'yeni' kalir; process_cves onu oldugu gibi isler
+        scraper.process_cves.side_effect = lambda cves: cves
+
+        sonuc = tasks.fetch_cve_task(days=7)
+
+        self.assertEqual(sonuc['fetched_count'], 2,
+                         'kaynaktan 2 kayit geldi -- dedup ONCESI sayi')
+        self.assertEqual(sonuc['count'], 1, 'sadece yeni olan kaydedildi')
+        self.assertTrue(CVEEntry.objects.filter(cve_id='CVE-2026-5001').exists())
