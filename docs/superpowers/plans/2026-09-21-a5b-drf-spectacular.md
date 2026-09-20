@@ -679,15 +679,21 @@ class DeltaDisiUclarTests(V1TestCase):
         self.assertEqual(uyarilar, [], f'{len(uyarilar)} uyari kaldi')
         self.assertEqual(hatalar, [], f'{len(hatalar)} hata kaldi')
 
-    def test_delta_disi_uclarin_200_semasi_var(self):
+    def test_delta_disi_uclarin_basari_semasi_var(self):
         sema = sema_uret()
 
-        for yol, yontem in [('/api/v1/health/', 'get'), ('/api/v1/status/', 'get'),
-                            ('/api/v1/jobs/{job_id}/', 'get'),
-                            ('/api/v1/refresh/', 'post')]:
+        # refresh uclari 202 doner (is kuyruga atildi), 200 degil.
+        beklenen = [
+            ('/api/v1/health/', 'get', '200'),
+            ('/api/v1/status/', 'get', '200'),
+            ('/api/v1/jobs/{job_id}/', 'get', '200'),
+            ('/api/v1/refresh/', 'post', '202'),
+            ('/api/v1/{section}/refresh/', 'post', '202'),
+        ]
+        for yol, yontem, kod in beklenen:
             with self.subTest(yol=yol):
                 govde = sema['paths'][yol][yontem]['responses']
-                self.assertIn('200', govde, f'{yol} icin 200 semasi yok')
+                self.assertIn(kod, govde, f'{yol} icin {kod} semasi yok')
 
     def test_status_semasi_operator_alanlarini_icermez(self):
         sema = sema_uret()
