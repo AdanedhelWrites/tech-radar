@@ -1,7 +1,8 @@
 """GET /api/v1/status/ (spec 2026-09-20-a4, bolum 3.5)."""
-from datetime import date
+from datetime import date, timedelta
 
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from news.models import CVEEntry, FetchRun
 from news.tests.base import V1TestCase
@@ -43,13 +44,45 @@ class StatusViewTests(V1TestCase):
         self.assertIsNotNone(cve['last_success_at'])
 
     def test_basarisiz_tur_last_success_at_i_ilerletmez(self):
-        FetchRun.objects.create(section='cve', trigger='beat', status='failure',
-                                error='disk I/O error', finished_at=timezone.now())
+        """Eski basarili, yeni basarili, en yeni basarısız: yeni success zamanı doner."""
+        simdi = timezone.now()
+        iki_gun_once = simdi - timedelta(days=2)
+        bir_gun_once = simdi - timedelta(days=1)
+
+        # Eski basarili cekim (2 gun once)
+        eski_success = FetchRun.objects.create(
+            section='cve', trigger='beat', status='success',
+            fetched_count=10, saved_count=5,
+            finished_at=iki_gun_once
+        )
+        FetchRun.objects.filter(pk=eski_success.pk).update(
+            started_at=iki_gun_once, finished_at=iki_gun_once
+        )
+
+        # Yeni basarili cekim (1 gun once)
+        yeni_success = FetchRun.objects.create(
+            section='cve', trigger='beat', status='success',
+            fetched_count=15, saved_count=8,
+            finished_at=bir_gun_once
+        )
+        FetchRun.objects.filter(pk=yeni_success.pk).update(
+            started_at=bir_gun_once, finished_at=bir_gun_once
+        )
+
+        # En yeni basarisiz cekim (hemen simdi)
+        FetchRun.objects.create(
+            section='cve', trigger='beat', status='failure',
+            error='disk I/O error', finished_at=simdi
+        )
 
         cve = self.client.get('/api/v1/status/', **self.token_basligi()).json()['sections']['cve']
 
+        # Son BASARILI cekim zaman degeri yeni success'ten geliyor
+        son_basarili_zaman = parse_datetime(cve['last_success_at'])
+        self.assertEqual(son_basarili_zaman, yeni_success.finished_at,
+                        'son BASARILI cekim en yeni success\'in zamani olmali')
+        # En yeni cekim basarisiz
         self.assertEqual(cve['last_status'], 'failure')
-        self.assertIsNone(cve['last_success_at'], 'son BASARILI cekim yok')
 
     def test_retranslate_bolumu_yanitta_yer_almaz(self):
         FetchRun.objects.create(section='retranslate', trigger='beat', status='success',
@@ -69,5 +102,5 @@ class StatusViewTests(V1TestCase):
         govde = self.client.get('/api/v1/status/', **self.token_basligi()).json()
 
         ham = str(govde)
-        for yasak in ('by_provider', 'stopped_reason', 'trigger', 'gizli', 'gemini', 'circuit_open'):
+        for yasak in ('by_provider', 'stopped_reason', 'trigger', 'error', 'gizli', 'gemini', 'circuit_open'):
             self.assertNotIn(yasak, ham, f'{yasak} dar sozlesmeye girmemeli')
