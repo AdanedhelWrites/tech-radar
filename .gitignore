@@ -58,3 +58,6 @@ htmlcov/
 
 # Superpowers SDD scratch workspace
 .superpowers/
+
+# Ornek istemcinin imlec durumu (scripts/ornek_istemci.py)
+scripts/ornek_istemci_durum.json

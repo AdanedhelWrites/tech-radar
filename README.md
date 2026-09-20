@@ -242,6 +242,148 @@ Her bolum (news, cve, k8s, sre, devtools, ai) ayni endpoint yapisini kullanir:
 
 ---
 
+## Entegrasyon API (`/api/v1/`)
+
+Yukaridaki `/api/*` uc noktalari React arayuzune hizmet eder. **Dis tuketici uygulamalar `/api/v1/` kullanmalidir:** token ister, cache'e hic bakmaz, imlecli delta ile hicbir kaydi atlamadan ve tekrar islemeden senkron yapilmasini saglar. Karar gerekcesi icin [ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md).
+
+Calisan ornek: [`scripts/ornek_istemci.py`](scripts/ornek_istemci.py) — alti bolumu bastan sona ceker, imleci diske yazar, yalnizca standart kutuphane kullanir.
+
+### Token alma
+
+Token'lar Django admin'den uretilir ve iptal edilir:
+
+```bash
+# Kullanici olustur (yoksa) ve token uret
+docker compose exec teknoloji-api python manage.py shell -c "
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
+u, _ = User.objects.get_or_create(username='entegrasyon')
+print(Token.objects.get_or_create(user=u)[0].key)
+"
+```
+
+Her istekte `Authorization: Token <key>` basligi gonderilir. Admin arayuzunde **Auth Token → Tokens** ekranindan da uretilebilir ve iptal edilebilir.
+
+### Uc noktalar
+
+| Method | Uc nokta | Aciklama |
+|--------|----------|----------|
+| GET | `/api/v1/health/` | Servis ayakta mi — **tokensiz** (Kubernetes probe'lari icin) |
+| GET | `/api/v1/status/` | Bolum basina veri tazeligi: `last_success_at`, `last_status`, `last_fetched_count`, `last_saved_count`, `pending_translation`, `total` |
+| GET | `/api/v1/{bolum}/` | Imlecli delta okuma |
+| POST | `/api/v1/{bolum}/refresh/` | Tek bolum icin manuel cekim tetikler |
+| POST | `/api/v1/refresh/` | Alti bolumu birden tetikler |
+| GET | `/api/v1/jobs/{job_id}/` | Manuel tetiklenen isin durumu |
+
+**Bolum isimleri:** `news`, `cve`, `kubernetes`, `sre`, `devtools`, `ai` — dikkat: v1'de `k8s` degil **`kubernetes`**.
+
+### Delta dongusu
+
+```bash
+curl -H "Authorization: Token $CYBERNEWS_TOKEN" \
+  "http://localhost:8000/api/v1/cve/?limit=200&min_severity=high"
+```
+
+Yanit zarfi:
+
+```json
+{
+  "results": [ ... ],
+  "next_cursor": "eyJ1IjoiMjAyNi0wOS0yMFQyMjowODo1Mi43MDE4MzErMDA6MDAiLCJpIjoxMDM2NX0",
+  "has_more": true,
+  "count": 200
+}
+```
+
+Dongu: `next_cursor`'i sakla, bir sonraki istekte `?since_cursor=<deger>` olarak gonder, `has_more` `false` olana kadar tekrarla. **Imlec opaktir** — `(updated_at, id)` ikilisinin kodlanmis halidir, ic bicimi haber verilmeden degisebilir; acma, yalnizca sakla ve geri gonder. `next_cursor` bos sonucta bile doner ki saklayacak bir degerin hep olsun. Siralama her zaman `updated_at ASC, id ASC`'dir; bu **akis sirasidir, ekrana basma sirasi degildir**.
+
+Ilk senkronda tum kayitlar yeni gorunur. Daraltmak icin `?since=YYYY-MM-DD` kullanilabilir (yalnizca imlec yokken gecerlidir).
+
+| Parametre | Bolumler | Aciklama |
+|-----------|----------|----------|
+| `since_cursor` | hepsi | Opak imlec; verildiginde `since` yok sayilir |
+| `since` | hepsi | `YYYY-MM-DD` — ilk senkronu daraltmak icin |
+| `limit` | hepsi | Varsayilan 100, tavan 500 |
+| `source` | hepsi | Virgulle ayrilmis kaynak adlari |
+| `needs_translation` | hepsi | `true` / `false` — cevirisi bekleyenler |
+| `min_severity` | `cve` | `low` \| `medium` \| `high` \| `critical` — esik ve uzeri |
+| `severity` | `cve` | Virgulle ayrilmis tam eslesme (`critical,high`) |
+| `category` | `kubernetes` | Virgulle ayrilmis kategori |
+| `entry_type` | `devtools` | Virgulle ayrilmis tur |
+
+Gecersiz parametre sessizce yok sayilmaz; `400 invalid_parameter` doner.
+
+### Upsert anahtari — `id` kullanmayin
+
+**Tuketici tarafi upsert (idempotent) olmalidir; salt insert cift kayit uretir.** `updated_at` icerik degismese de ilerleyebilir, yani ayni kayit akista birden fazla kez gorunur.
+
+Birlestirme anahtari olarak **`id` kullanilmamalidir.** `id` kalici degildir: saklama penceresi (`RETENTION_DAYS`) disina dusen bir kayit silinir ve kaynak onu tekrar dondurdugunde **yeni bir `id` ile** geri gelir. Kararli anahtarlar:
+
+| Bolum | Upsert anahtari |
+|-------|-----------------|
+| `cve` | **`cve_id`** |
+| `news`, `kubernetes`, `sre`, `devtools`, `ai` | **`link`** |
+
+Bunlar yazma yolunun da anahtarlaridir: `news/tasks.py` ayni alanlarla `update_or_create` yapar. Gerekce ve olcumler icin [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md).
+
+> **Uyari:** Bes bolumden dordunde (`kubernetes`, `sre`, `devtools`, `ai`) `link` veritabaninda `unique=True`, `cve` icin `cve_id` de oyle. **`news` bolumunde `link` uzerinde benzersizlik kisiti yoktur** — anahtar yazma yolunun sozlesmesidir, sema garantisi degildir. Tuketici kendi tarafinda benzersiz indeks tanimlamalidir.
+
+Silmeler akista bildirilmez (tombstone yok); tuketici kendi saklama suresini uygular.
+
+### Dil alanlari
+
+Baslik ve aciklama ic ice doner ve severity normalize edilir:
+
+```json
+{
+  "title":    { "original": "Critical RCE in ...", "tr": "... kritik RCE" },
+  "severity": { "code": "critical", "label": "Kritik" },
+  "needs_translation": false,
+  "translation_provider": "gemini"
+}
+```
+
+Tuketici `title.tr || title.original` yazarak cevirisi henuz hazir olmayan kayitta Ingilizceye duser — kayit kaybolmaz, Turkcesi hazir olunca `updated_at` ilerledigi icin ayni anahtar uzerine guncelleme gelir. Filtreler severity'nin **`code`** degeri uzerinden calisir.
+
+### Manuel tetikleme
+
+```bash
+curl -X POST -H "Authorization: Token $CYBERNEWS_TOKEN" \
+  http://localhost:8000/api/v1/cve/refresh/
+```
+
+`202` ile `{"job_id", "section", "status", "status_url"}` doner; durum `/api/v1/jobs/{job_id}/` ile izlenir. Uc katman korur: bolum kilidi (`REFRESH_LOCK_TTL`) cift kazimayi onler, **paylasilan** bolum sogumasi (`REFRESH_COOLDOWN`) kaynak siteleri ve ceviri kotasini korur, token basina hiz siniri tek istemciyi sinirlar. Sogumadaki bolum `429 cooldown` ve `Retry-After` basligi dondurur. Toplu `/api/v1/refresh/` her zaman `202` doner; govdede `started` / `already_running` / `skipped` listeleri bulunur.
+
+### Hiz sinirlari
+
+| Kapsam | Oran |
+|--------|------|
+| Okuma (`v1_read`) | token basina `120/dk` |
+| Tetikleme (`v1_refresh`) | token basina `12/saat` |
+| Bolum sogumasi | `REFRESH_COOLDOWN` (900 sn) — **tum token'lar arasinda paylasilir** |
+
+### Hata sozlesmesi
+
+Tum v1 hatalari ayni bicimde doner:
+
+```json
+{ "error": { "code": "invalid_cursor", "message": "Imlec cozulemedi: ..." } }
+```
+
+| Kod | HTTP | Ne zaman |
+|-----|------|----------|
+| `unauthorized` | 401 | Token yok, gecersiz veya iptal edilmis |
+| `invalid_cursor` | 400 | `since_cursor` cozulemedi |
+| `invalid_parameter` | 400 | Parametre bicimi veya degeri gecersiz |
+| `not_found` | 404 | `refresh/` icin bilinmeyen bolum; bilinmeyen veya suresi dolmus `job_id` |
+| `throttled` | 429 | Hiz siniri asildi |
+| `cooldown` | 429 | Bolum sogumada (`Retry-After` basligi ile) |
+| `internal` | 500 | Beklenmeyen sunucu hatasi |
+
+> **Not:** Bu sozlesme yalnizca **tanimli** uc noktalar icin gecerlidir. Hic rotasi olmayan bir yol — ornegin `GET /api/v1/k8s/`, cunku v1'de bolum adi `kubernetes`'tir — DRF'e hic ulasmadan Django'nun duz **HTML 404**'unu dondurur, JSON gelmez. Tuketici yanit govdesini ayristirmadan once `Content-Type`'i kontrol etmelidir. Buna karsilik `POST /api/v1/k8s/refresh/` rotalidir ve duzgun `{"error": {"code": "not_found", ...}}` dondurur.
+
+---
+
 ## Proje Yapisi
 
 ```
@@ -265,7 +407,17 @@ cybersecurity_news/
 │   ├── k8s_scraper.py          # 3 Kubernetes kaynagi scraper'i
 │   ├── sre_scraper.py          # 5 SRE kaynagi scraper'i
 │   ├── devtools_scraper.py     # 9 DevTools kaynagi scraper'i
+│   ├── fetch_runs.py           # FetchRun satirlarini yazan Celery sinyalleri
+│   ├── api_v1/                 # Dis tuketici entegrasyon katmani (ADR-0003)
+│   │   ├── views.py            # Delta, refresh, jobs, status, health uc noktalari
+│   │   ├── serializers.py      # v1 serializer'lari (alanlar tek tek yazilir)
+│   │   ├── cursor.py           # (updated_at, id) keyset imleci
+│   │   ├── filters.py          # Query parametresi ayristirma
+│   │   └── refresh.py          # Bolum kilidi, soguma, job kaydi
 │   └── admin.py                # Django admin kayitlari
+│
+├── scripts/
+│   └── ornek_istemci.py        # /api/v1/ delta senkron ornegi (stdlib-only)
 │
 ├── scraper_multi.py            # 5 siber guvenlik kaynagi scraper'i
 │
@@ -713,7 +865,13 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `GEMINI_COOLDOWN` | `600` | 429/5xx sonrasi bekleme (sn) |
 | `GEMINI_TIMEOUT` | `60` | Istek zaman asimi (sn) |
 | `GEMINI_MAX_CHARS` | `12000` | Bu uzunlugun ustundeki kayit Gemini'ye gitmez |
+| `GEMINI_CVE_RESERVE` | `0.5` | Gunluk Gemini butcesinin CVE'ye ayrilan payi; CVE tavani 400, diger bolumler 200 ([ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md)) |
+| `RETRANSLATE_BATCH` | `100` | Retranslate turunda bolum basina taranan bekleyen kayit sayisi |
 | `RETRANSLATE_UPGRADE_BATCH` | `40` | Tur ve bolum basina yukseltme siniri |
+| `TRANSLATE_MIN_RATIO` | `0.4` | Ceviri kirpilma esigi: 80+ karakterlik metinde cikti/girdi orani bunun altindaysa ceviri reddedilir, kayit `needs_translation` kalir |
+| `RETENTION_DAYS` | `90` | Saklama penceresi; `updated_at` bundan eski kayitlar cekim basinda silinir (cekim penceresinden ayridir) |
+| `REFRESH_COOLDOWN` | `900` | `/api/v1/*/refresh/` sonrasi bolum sogumasi (sn) — **tum token'lar arasinda paylasilir** |
+| `REFRESH_LOCK_TTL` | `3600` | Bolum cekim kilidinin omru (sn); worker olurse kilit bu surede kendiliginden duser |
 | `DATABASE_URL` | _(bos)_ | Herhangi bir deger atanirsa PostgreSQL aktif olur, bossa SQLite |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
@@ -794,7 +952,7 @@ kubectl delete namespace teknoloji-haberleri
 |-----|------|-------|
 | [ADR-0001](docs/ADR-0001-AI-News.md) | AI News bileseni | Accepted |
 | [ADR-0002](docs/ADR-0002-AI-Benchmark.md) | AI Benchmark / Leaderboard bileseni | Proposed (ertelendi) |
-| [ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md) | Dis tuketiciler icin `/api/v1/` entegrasyon katmani (imlecli delta, token, refresh, ceviri dogrulugu) | Accepted (A1–A3 uygulandi; A4–A5 acik) |
+| [ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md) | Dis tuketiciler icin `/api/v1/` entegrasyon katmani (imlecli delta, token, refresh, ceviri dogrulugu) | Accepted (A1–A4 ve A5a uygulandi; A5b — drf-spectacular semasi — acik) |
 | [ADR-0004](docs/ADR-0004-Ceviri-Saglayici-Zinciri.md) | Ceviri saglayici zinciri (LibreTranslate yedek; 2026-09-15: Google kaldirildi, Gemini yukseltme) | Accepted (degisiklik 2026-09-15) |
 | [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md) | Saklama olcusu `updated_at` (sil/yeniden yaz dongusu) ve CVE'ye Gemini butce onceligi | Accepted (uygulandi 2026-09-18, canlida dogrulandi) |
 | [ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md) | `FetchRun` gorunurlugu, durum semantigi ve dar `GET /api/v1/status/` ucu (ADR-0003 bolum 11'in yerine gecer) | Accepted (uygulandi 2026-09-21, canlida dogrulandi) |
