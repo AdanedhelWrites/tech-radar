@@ -183,7 +183,8 @@ class FetchAINewsTaskTranslationTests(TranslationGateMixin, TestCase):
             self.raw('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'farmers'),
         ])
 
-        self.assertEqual(result, {'success': True, 'count': 2})
+        self.assertEqual(result, {'success': True, 'count': 2,
+                                   'fetched_count': 2, 'translation_failures': 2})
         failed = AINewsEntry.objects.get(link='https://example.com/robots')
         translated = AINewsEntry.objects.get(link='https://example.com/farmers')
         self.assertTrue(failed.needs_translation)

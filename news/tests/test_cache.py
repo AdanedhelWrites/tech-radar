@@ -36,7 +36,8 @@ class FetchCacheYenilemeTests(TranslationGateMixin, TestCase):
 
     def test_25_kayitta_cache_uc_kez_kurulur(self):
         sonuc, casus = self._cek(25)
-        self.assertEqual(sonuc, {'success': True, 'count': 25})
+        self.assertEqual(sonuc, {'success': True, 'count': 25,
+                                  'fetched_count': 25, 'translation_failures': 50})
         self.assertEqual(casus.call_count, 3)  # 10. kayit, 20. kayit, cekim sonu
         self.assertTrue(all(cagri.args == ('ai',) for cagri in casus.call_args_list))
 

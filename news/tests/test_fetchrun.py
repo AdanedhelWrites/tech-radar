@@ -205,3 +205,34 @@ class SinyalTests(TestCase):
         self.assertEqual(silinen, 1)
         self.assertTrue(FetchRun.objects.filter(pk=yeni.pk).exists())
         self.assertFalse(FetchRun.objects.filter(pk=eski.pk).exists())
+
+
+class DonusSozlesmesiTests(TestCase):
+    """Alti fetch task'i sinyalin ihtiyac duydugu sayaclari dondurmeli."""
+
+    def test_cve_task_fetched_count_dondurur(self):
+        from unittest import mock
+        from news import tasks
+        yama = mock.patch('news.tasks.MultiCVEScraper')
+        scraper = yama.start()
+        self.addCleanup(yama.stop)
+        scraper.return_value.fetch_all_cves.return_value = []
+
+        sonuc = tasks.fetch_cve_task(days=7)
+
+        self.assertIn('fetched_count', sonuc)
+        self.assertIn('translation_failures', sonuc)
+        self.assertEqual(sonuc['fetched_count'], 0)
+        self.assertIn('success', sonuc, 'mevcut alan korunmali')
+        self.assertIn('count', sonuc, 'mevcut alan korunmali')
+
+    def test_retranslate_task_eski_kayitlari_temizler(self):
+        from unittest import mock
+        from news import tasks
+        eski = FetchRun.objects.create(section='cve', trigger='beat', status='success')
+        FetchRun.objects.filter(pk=eski.pk).update(
+            started_at=timezone.now() - timezone.timedelta(days=31))
+        with mock.patch('news.retranslate.retranslate_pending', return_value={'translated': 0}):
+            tasks.retranslate_pending_task()
+
+        self.assertFalse(FetchRun.objects.filter(pk=eski.pk).exists())
