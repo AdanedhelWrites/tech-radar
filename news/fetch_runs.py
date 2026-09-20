@@ -84,7 +84,8 @@ def tur_bitti(sender=None, task_id=None, retval=None, **kwargs):
             _kapat(task_id, status='success')
             return
 
-        hata = str(retval.get('error') or '')[:HATA_TAVANI]
+        hata_var = 'error' in retval
+        hata = str(retval.get('error') or '')[:HATA_TAVANI] if hata_var else ''
         bolum = _bolum(sender)
         if bolum == 'retranslate':
             sayaclar = {
@@ -103,7 +104,7 @@ def tur_bitti(sender=None, task_id=None, retval=None, **kwargs):
                 'translation_failures': retval.get('translation_failures', 0),
                 'total_after': model.objects.count(),
             }
-        _kapat(task_id, status='failure' if hata else 'success', error=hata, **sayaclar)
+        _kapat(task_id, status='failure' if hata_var else 'success', error=hata, **sayaclar)
     except Exception as hata:
         print(f'  [FetchRun] Satir kapatilamadi ({task_id}): {hata}')
 

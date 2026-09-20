@@ -22,6 +22,9 @@ class AdminKayitTests(TestCase):
 
         self.assertFalse(admin_sinifi.has_add_permission(None))
         self.assertFalse(admin_sinifi.has_change_permission(None))
+        self.assertFalse(admin_sinifi.has_delete_permission(None),
+                         'Denetim tablosu silinebilir olmamali (spec: manuel silme'
+                         ' vakalarindan biri budur)')
 
     def test_alti_modelde_ceviri_filtreleri_var(self):
         for model in (NewsArticle, CVEEntry, KubernetesEntry, SREEntry,
@@ -53,13 +56,13 @@ class AdminKayitTests(TestCase):
 
         html = admin.site._registry[CVEEntry].karsilastirma(kayit)
 
-        # Raw <script> etiketi olmamalı; escaped form olmalı
+        # Raw <script> etiketi olmamali; escaped form olmali
         self.assertNotIn('<script>alert(1)</script>', html)
         self.assertIn('&lt;script&gt;', html)
         self.assertIn('alert(1)', html)
 
     def test_karsilastirma_koseli_ayraclar_format_templateini_bozmaz(self):
-        # Brace: {} iceren JSON/kod ornekleri format() çagrisini cikarmaz (Critical 2)
+        # Brace: {} iceren JSON/kod ornekleri format() cagrisini cikarmaz (Critical 2)
         kayit = CVEEntry.objects.create(
             cve_id='CVE-2026-3', source='NVD',
             original_title='Issue with JSON: {"cve": "CVE-2026-3"}',
@@ -67,10 +70,10 @@ class AdminKayitTests(TestCase):
             turkish_description='Kodlama hatası burada',
             published_date=date(2026, 9, 12), link='https://ornek.test/3')
 
-        # Hata yükseltmez; string bozulmaz (format_html_join tüm karakterleri kaçıyor)
+        # Hata yukseltmez; string bozulmaz (format_html_join tum karakterleri kaciriyor)
         html = admin.site._registry[CVEEntry].karsilastirma(kayit)
 
-        # JSON ve braces iceren metin mevcut; tablo yapısı format() calismadığini kanıtlar
+        # JSON ve braces iceren metin mevcut; tablo yapisi format() calismadigini kanitlar
         self.assertIn('CVE-2026-3', html)
         self.assertIn('{ return y; }', html)
         self.assertIn('<tr>', html)

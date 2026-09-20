@@ -193,6 +193,41 @@ class SinyalTests(TestCase):
         self.assertEqual(kayit.status, 'failure')
         self.assertEqual(len(kayit.error), 2000)
 
+    def test_sinyaller_gercekten_bagli(self):
+        """Sinyal fonksiyonlari sadece dogrudan cagrilabilir olmakla kalmaz,
+        Celery'nin sinyal alicilari listesine de kayitli olmalidir. apps.py'daki
+        'from . import fetch_runs' satiri veya @connect dekoratoru silinirse
+        bu test kirilir; diger tum testler dogrudan cagri yaptigi icin
+        boyle bir silmeyi yakalayamaz."""
+        from celery.signals import task_failure, task_postrun, task_prerun
+        from news import fetch_runs
+
+        prerun_alicilar = [alici() for _, alici in task_prerun.receivers]
+        self.assertIn(fetch_runs.tur_basladi, prerun_alicilar)
+
+        postrun_alicilar = [alici() for _, alici in task_postrun.receivers]
+        self.assertIn(fetch_runs.tur_bitti, postrun_alicilar)
+
+        failure_alicilar = [alici() for _, alici in task_failure.receivers]
+        self.assertIn(fetch_runs.tur_coktu, failure_alicilar)
+
+    def test_coktu_sonrasi_bitti_satiri_yeniden_acmaz(self):
+        """Celery gercek bir hatada once task_failure sonra task_postrun gonderir.
+        _kapat icindeki _acik_turlar.pop(...) None donmesi, postrun'un satiri
+        'success' olarak yeniden acmasini engelleyen tek mekanizmadir (spec 3.3)."""
+        from news import fetch_runs
+        sender = self._sender('news.tasks.fetch_cve_task')
+        fetch_runs.tur_basladi(sender=sender, task_id='t-siralama')
+
+        fetch_runs.tur_coktu(sender=sender, task_id='t-siralama',
+                             exception=ValueError('beklenmedik cokme'))
+        fetch_runs.tur_bitti(sender=sender, task_id='t-siralama',
+                             retval={'success': True, 'count': 5})
+
+        kayit = FetchRun.objects.get()
+        self.assertEqual(kayit.status, 'failure')
+        self.assertEqual(kayit.saved_count, 0)
+
     def test_eski_kayitlar_temizlenir(self):
         from news import fetch_runs
         eski = FetchRun.objects.create(section='cve', trigger='beat', status='success')
@@ -319,3 +354,6 @@ class TetikleyiciTests(TestCase):
         self.assertTrue(gorev.apply_async.called, 'views artik apply_async kullanmali')
         self.assertEqual(gorev.apply_async.call_args.kwargs.get('headers'),
                          {'fetchrun_trigger': 'admin'})
+        self.assertEqual(gorev.apply_async.call_args.kwargs.get('kwargs'),
+                         {'days': 7, 'selected_sources': None},
+                         'days/selected_sources apply_async donusumunde kaybolmamali')
