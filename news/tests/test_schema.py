@@ -127,3 +127,53 @@ class DeltaSemasiTests(V1TestCase):
         # deger olursa yine dusmeli.
         self.assertEqual(set(ms['schema']['enum']),
                          {'low', 'medium', 'high', 'critical'})
+
+
+class DeltaDisiUclarTests(V1TestCase):
+
+    def test_hicbir_uyari_veya_hata_kalmadi(self):
+        sema_uret()
+
+        uyarilar = list(drainage.GENERATOR_STATS._warn_cache)
+        hatalar = list(drainage.GENERATOR_STATS._error_cache)
+        self.assertEqual(uyarilar, [], f'{len(uyarilar)} uyari kaldi')
+        self.assertEqual(hatalar, [], f'{len(hatalar)} hata kaldi')
+
+    def test_delta_disi_uclarin_basari_semasi_var(self):
+        sema = sema_uret()
+
+        # refresh uclari 202 doner (is kuyruga atildi), 200 degil.
+        beklenen = [
+            ('/api/v1/health/', 'get', '200'),
+            ('/api/v1/status/', 'get', '200'),
+            ('/api/v1/jobs/{job_id}/', 'get', '200'),
+            ('/api/v1/refresh/', 'post', '202'),
+            ('/api/v1/{section}/refresh/', 'post', '202'),
+        ]
+        for yol, yontem, kod in beklenen:
+            with self.subTest(yol=yol):
+                govde = sema['paths'][yol][yontem]['responses']
+                self.assertIn(kod, govde, f'{yol} icin {kod} semasi yok')
+
+    def test_status_semasi_operator_alanlarini_icermez(self):
+        sema = sema_uret()
+
+        metin = str(sema['components']['schemas'])
+        # ADR-0006 karar 4: bunlar FetchRun'da ve admin'de yasar, /status/'ta degil
+        for alan in ('by_provider', 'stopped_reason'):
+            self.assertNotIn(alan, metin, f"{alan} dis semaya sizdi")
+
+    def test_operation_id_degerleri_benzersiz(self):
+        sema = sema_uret()
+
+        kimlikler = [op['operationId']
+                     for yol in sema['paths'].values()
+                     for op in yol.values() if isinstance(op, dict) and 'operationId' in op]
+        cakisan = {k for k in kimlikler if kimlikler.count(k) > 1}
+        self.assertEqual(cakisan, set(), f'cakisan operationId: {cakisan}')
+
+    def test_401_hata_sozlesmesi_belgelenir(self):
+        sema = sema_uret()
+
+        yanitlar = sema['paths']['/api/v1/cve/']['get']['responses']
+        self.assertIn('401', yanitlar)

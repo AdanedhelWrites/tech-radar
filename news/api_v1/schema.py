@@ -113,12 +113,117 @@ ZARF_ADLARI = {
 }
 
 
+class HataGovdesiV1Serializer(serializers.Serializer):
+    """ADR-0003 bolum 8'deki kod listesi; message insan okur, code makine."""
+    code = serializers.ChoiceField(choices=[
+        'unauthorized', 'invalid_cursor', 'invalid_parameter', 'not_found',
+        'throttled', 'cooldown', 'internal',
+    ])
+    message = serializers.CharField()
+
+
+class HataV1Serializer(serializers.Serializer):
+    """Tek bicim hata sozlesmesi: {"error": {"code", "message"}} (ADR-0003 bolum 8)."""
+    error = HataGovdesiV1Serializer()
+
+
+# Her ucun gercekten uretebildigi kodlar eklenir; tamami ADR-0003 bolum 8'den.
+# NOT: bu blok _delta_semasi'den once tanimlanir, cunku DELTA_SEMALARI hemen
+# asagida (dict comprehension ile) _delta_semasi'yi cagirir ve DELTA_HATALARI'na
+# o an ihtiyac duyar; dosyanin sonuna eklenseydi NameError olurdu.
+HATA_YANITLARI = {401: HataV1Serializer}
+DELTA_HATALARI = {401: HataV1Serializer, 400: HataV1Serializer, 429: HataV1Serializer}
+REFRESH_HATALARI = {401: HataV1Serializer, 429: HataV1Serializer}
+
+
 def _delta_semasi(bolum):
     return extend_schema_view(get=extend_schema(
         summary=f"'{bolum}' bolumunu imlecli delta ile okur",
         parameters=ORTAK_PARAMETRELER + EK_PARAMETRELER.get(bolum, []),
-        responses={200: zarf_serializer(BOLUM_SERIALIZERLARI[bolum], ZARF_ADLARI[bolum])},
+        responses={
+            200: zarf_serializer(BOLUM_SERIALIZERLARI[bolum], ZARF_ADLARI[bolum]),
+            **DELTA_HATALARI,
+        },
     ))
 
 
 DELTA_SEMALARI = {bolum: _delta_semasi(bolum) for bolum in BOLUM_SERIALIZERLARI}
+
+
+class HealthV1Serializer(serializers.Serializer):
+    status = serializers.CharField()
+    version = serializers.CharField()
+
+
+class BolumDurumuV1Serializer(serializers.Serializer):
+    """ADR-0006 karar 4: bilincli olarak DAR. Operator alanlari buraya girmez."""
+    last_success_at = serializers.DateTimeField(allow_null=True)
+    last_status = serializers.CharField(allow_null=True)
+    last_fetched_count = serializers.IntegerField(allow_null=True)
+    last_saved_count = serializers.IntegerField(allow_null=True)
+    pending_translation = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
+class StatusV1Serializer(serializers.Serializer):
+    generated_at = serializers.DateTimeField()
+    sections = serializers.DictField(child=BolumDurumuV1Serializer())
+
+
+class JobV1Serializer(serializers.Serializer):
+    job_id = serializers.CharField()
+    section = serializers.CharField()
+    status = serializers.ChoiceField(
+        choices=['pending', 'started', 'success', 'failure'])
+    count = serializers.IntegerField(required=False)
+    error = serializers.CharField(required=False)
+
+
+class RefreshV1Serializer(serializers.Serializer):
+    job_id = serializers.CharField(allow_null=True)
+    section = serializers.CharField()
+    status = serializers.ChoiceField(choices=['started', 'already_running'])
+    status_url = serializers.CharField(allow_null=True)
+
+
+class AtlananBolumV1Serializer(serializers.Serializer):
+    section = serializers.CharField()
+    retry_after = serializers.IntegerField()
+
+
+class RefreshAllV1Serializer(serializers.Serializer):
+    started = RefreshV1Serializer(many=True)
+    already_running = RefreshV1Serializer(many=True)
+    skipped = AtlananBolumV1Serializer(many=True)
+
+
+HEALTH_SEMASI = extend_schema_view(get=extend_schema(
+    summary='Servis ayakta mi (tokensiz)',
+    description='Kubernetes probe\'lari token tasiyamaz; bu uc bilincli olarak aciktir.',
+    responses={200: HealthV1Serializer},
+))
+
+STATUS_SEMASI = extend_schema_view(get=extend_schema(
+    summary='Bolum basina veri tazeligi',
+    responses={200: StatusV1Serializer, **HATA_YANITLARI},
+))
+
+JOB_SEMASI = extend_schema_view(get=extend_schema(
+    summary='Manuel tetiklenen isin durumu',
+    operation_id='v1_job_read',
+    responses={200: JobV1Serializer, 404: HataV1Serializer, **HATA_YANITLARI},
+))
+
+REFRESH_SEMASI = extend_schema_view(post=extend_schema(
+    summary='Tek bolum icin manuel cekim tetikler',
+    operation_id='v1_bolum_refresh',
+    request=None,
+    responses={202: RefreshV1Serializer, 404: HataV1Serializer, **REFRESH_HATALARI},
+))
+
+REFRESH_ALL_SEMASI = extend_schema_view(post=extend_schema(
+    summary='Alti bolumu birden tetikler',
+    operation_id='v1_toplu_refresh',
+    request=None,
+    responses={202: RefreshAllV1Serializer, **REFRESH_HATALARI},
+))
