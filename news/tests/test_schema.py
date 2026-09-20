@@ -177,3 +177,22 @@ class DeltaDisiUclarTests(V1TestCase):
 
         yanitlar = sema['paths']['/api/v1/cve/']['get']['responses']
         self.assertIn('401', yanitlar)
+
+    def test_v1_read_throttle_scopeunu_paylasan_uclar_429_belgeler(self):
+        sema = sema_uret()
+
+        # V1APIView.throttle_scope = 'v1_read' (bkz. news/api_v1/views.py);
+        # bu scope'u paylasan her uc gercekten 429 donebilir ve semada
+        # belgelemelidir. HealthView ise throttle_classes = [] ile bilincli
+        # olarak acik oldugundan 429 URETEMEZ ve semaya girmemelidir.
+        v1_read_uclari = list(DELTA_YOLLARI.values()) + [
+            '/api/v1/status/', '/api/v1/jobs/{job_id}/',
+        ]
+        for yol in v1_read_uclari:
+            with self.subTest(yol=yol):
+                yanitlar = sema['paths'][yol]['get']['responses']
+                self.assertIn('429', yanitlar, f'{yol} icin 429 semasi yok')
+
+        saglik_yanitlari = sema['paths']['/api/v1/health/']['get']['responses']
+        self.assertNotIn('429', saglik_yanitlari,
+                          'health tokensiz ve throttle\'suzdur, 429 belgelenmemeli')

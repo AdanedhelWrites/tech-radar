@@ -205,13 +205,18 @@ HEALTH_SEMASI = extend_schema_view(get=extend_schema(
 
 STATUS_SEMASI = extend_schema_view(get=extend_schema(
     summary='Bolum basina veri tazeligi',
-    responses={200: StatusV1Serializer, **HATA_YANITLARI},
+    # v1_read throttle scope'unu paylasir (bkz. V1APIView), dolayisiyla 429
+    # gercekten donebilir; delta uclariyla ayni gerekce.
+    responses={200: StatusV1Serializer, 429: HataV1Serializer, **HATA_YANITLARI},
 ))
 
 JOB_SEMASI = extend_schema_view(get=extend_schema(
     summary='Manuel tetiklenen isin durumu',
     operation_id='v1_job_read',
-    responses={200: JobV1Serializer, 404: HataV1Serializer, **HATA_YANITLARI},
+    # v1_read throttle scope'unu paylasir (bkz. V1APIView), dolayisiyla 429
+    # gercekten donebilir; delta uclariyla ayni gerekce.
+    responses={200: JobV1Serializer, 404: HataV1Serializer, 429: HataV1Serializer,
+               **HATA_YANITLARI},
 ))
 
 REFRESH_SEMASI = extend_schema_view(post=extend_schema(
