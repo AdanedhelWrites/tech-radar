@@ -96,7 +96,8 @@ class TriggerTests(RefreshTestMixin, SimpleTestCase):
         self.assertEqual(sonuc.section, 'cve')
         uuid.UUID(sonuc.job_id)  # gecerli bir uuid olmali
         self.gorevler['cve'].assert_called_once_with(
-            kwargs={'skip_existing': True}, task_id=sonuc.job_id)
+            kwargs={'skip_existing': True}, task_id=sonuc.job_id,
+            headers={'fetchrun_trigger': 'api'})
         self.assertEqual(self.gate.running_job('cve'), sonuc.job_id)
         self.assertEqual(self.gate.job_section(sonuc.job_id), 'cve')
         self.assertGreater(self.gate.cooldown_remaining('cve'), 0)

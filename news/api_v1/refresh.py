@@ -145,7 +145,9 @@ def trigger(section: str, gate: Optional[RefreshGate] = None,
     gate.record_job(job_id, section)
     gate.start_cooldown(section, cooldown)
     try:
-        section_tasks()[section].apply_async(kwargs={'skip_existing': True}, task_id=job_id)
+        # FetchRun'da bu isi 'api' olarak isaretlemek icin header eklenir
+        section_tasks()[section].apply_async(kwargs={'skip_existing': True}, task_id=job_id,
+                                              headers={'fetchrun_trigger': 'api'})
     except Exception:
         gate.rollback(section, job_id)
         raise

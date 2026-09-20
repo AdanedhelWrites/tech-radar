@@ -277,3 +277,45 @@ class DonusSozlesmesiTests(TestCase):
                          'kaynaktan 2 kayit geldi -- dedup ONCESI sayi')
         self.assertEqual(sonuc['count'], 1, 'sadece yeni olan kaydedildi')
         self.assertTrue(CVEEntry.objects.filter(cve_id='CVE-2026-5001').exists())
+
+
+class TetikleyiciTests(TestCase):
+    """Manuel tetiklenen isler FetchRun'da beat'ten ayirt edilebilmeli."""
+
+    def test_v1_refresh_api_header_i_gecer(self):
+        """news/api_v1/refresh.py::trigger(section, gate=None, ...) -> TriggerResult
+
+        RefreshGate'in gercek imzasi (client, prefix='refresh') -- 'redis_client'
+        diye bir parametresi yok. Gercek Redis'e bagimli olmamak icin gate'in
+        kendisi tamamen sahte (Mock) kurulur: trigger() kilit/soguma/kayit
+        adimlarinin hepsini bu sahte gate uzerinden gecer, boylece hicbir gercek
+        Redis baglantisi kurulmaz ve hicbir gercek Celery isi kuyruga atilmaz.
+        """
+        from unittest import mock
+        from news.api_v1 import refresh
+        sahte_gorev = mock.Mock()
+        sahte_kapi = mock.Mock()
+        sahte_kapi.running_job.return_value = None
+        sahte_kapi.cooldown_remaining.return_value = 0
+        sahte_kapi.acquire.return_value = True
+
+        with mock.patch.object(refresh, 'section_tasks', return_value={'cve': sahte_gorev}):
+            sonuc = refresh.trigger('cve', gate=sahte_kapi)
+
+        self.assertEqual(sonuc.status, 'started')
+        self.assertTrue(sahte_gorev.apply_async.called)
+        self.assertEqual(sahte_gorev.apply_async.call_args.kwargs.get('headers'),
+                         {'fetchrun_trigger': 'api'})
+
+    def test_views_admin_header_i_gecer(self):
+        """news/views.py::fetch_cves(request) -- satir 200'deki dagitim."""
+        from unittest import mock
+        from rest_framework.test import APIRequestFactory
+        from news import views
+        istek = APIRequestFactory().post('/api/cve/fetch/', {}, format='json')
+        with mock.patch.object(views, 'fetch_cve_task') as gorev:
+            views.fetch_cves(istek)
+
+        self.assertTrue(gorev.apply_async.called, 'views artik apply_async kullanmali')
+        self.assertEqual(gorev.apply_async.call_args.kwargs.get('headers'),
+                         {'fetchrun_trigger': 'admin'})
