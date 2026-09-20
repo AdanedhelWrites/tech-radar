@@ -75,7 +75,16 @@ ORTAK_PARAMETRELER = [
 SIDDET_PARAMETRELERI = [
     OpenApiParameter(
         'min_severity', str, enum=SEVERITY_ORDER,
-        description='Esik ve uzeri. Siddeti bilinmeyen kayit dahil edilmez.'),
+        description=(
+            'Siddet esigi ve uzeri kayitlari getirir. Siddet sirasi dusukten '
+            'yuksege soyledir: low, medium, high, critical. Verilen deger ve '
+            'ondan yuksek olan tum kayitlar donmeye devam eder; ornegin high '
+            'verilirse hem high hem critical kayitlar gelir, low ve medium '
+            'gelmez. Siddeti bilinmeyen kayit esik ne olursa olsun hicbir '
+            'zaman dahil edilmez. Not: bu semadaki enum listesi kutuphane '
+            'tarafindan alfabetik sirayla yazilir (critical, high, low, '
+            'medium); bu siralama yukaridaki siddet sirasi DEGILDIR, '
+            'yalnizca kutuphanenin enum listeleme bicimidir.')),
     OpenApiParameter(
         'severity', str,
         description='Virgulle ayrilmis tam eslesme, ornegin critical,high.'),

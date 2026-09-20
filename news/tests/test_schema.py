@@ -121,5 +121,9 @@ class DeltaSemasiTests(V1TestCase):
 
         parametreler = self._get(sema, DELTA_YOLLARI['cve'])['parameters']
         ms = next(p for p in parametreler if p['name'] == 'min_severity')
-        self.assertEqual(ms['schema']['enum'],
-                         ['low', 'medium', 'high', 'critical'])
+        # OpenAPI enum sirasiz bir kumedir; drf-spectacular degerleri alfabetik
+        # yazar (build_parameter_type -> sorted(enum, key=str)). Siralama
+        # anlami tasimadigindan kume olarak karsilastiriliyor; eksik/fazla
+        # deger olursa yine dusmeli.
+        self.assertEqual(set(ms['schema']['enum']),
+                         {'low', 'medium', 'high', 'critical'})
