@@ -196,3 +196,26 @@ class DeltaDisiUclarTests(V1TestCase):
         saglik_yanitlari = sema['paths']['/api/v1/health/']['get']['responses']
         self.assertNotIn('429', saglik_yanitlari,
                           'health tokensiz ve throttle\'suzdur, 429 belgelenmemeli')
+
+
+class DocsUcuTests(V1TestCase):
+
+    def test_docs_tokensiz_401(self):
+        yanit = self.client.get('/api/v1/docs/')
+
+        self.assertEqual(yanit.status_code, 401)
+
+    def test_docs_token_ile_200(self):
+        yanit = self.client.get('/api/v1/docs/', **self.token_basligi())
+
+        self.assertEqual(yanit.status_code, 200)
+
+    def test_docs_varliklari_cdn_den_degil_yerelden_gelir(self):
+        yanit = self.client.get('/api/v1/docs/', **self.token_basligi())
+
+        govde = yanit.content.decode()
+        # Sidecar varliklari /static/ altindan sunulur; internetsiz k8s
+        # ortaminda docs sayfasinin bos acilmamasi buna buna bagli.
+        self.assertNotIn('unpkg.com', govde)
+        self.assertNotIn('cdn.jsdelivr.net', govde)
+        self.assertIn('/static/drf_spectacular_sidecar/', govde)

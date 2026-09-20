@@ -1,6 +1,6 @@
 """v1 yol tanimlari."""
 from django.urls import path
-from drf_spectacular.views import SpectacularAPIView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 
@@ -20,8 +20,15 @@ SemaGorunumu = SpectacularAPIView.as_view(
     permission_classes=[IsAuthenticated],
 )
 
+DocsGorunumu = SpectacularSwaggerView.as_view(
+    url_name='v1-schema',
+    authentication_classes=[TokenAuthentication, SessionAuthentication],
+    permission_classes=[IsAuthenticated],
+)
+
 urlpatterns = [
     path('schema/', SemaGorunumu, name='v1-schema'),
+    path('docs/', DocsGorunumu, name='v1-docs'),
     path('health/', HEALTH_SEMASI(views.HealthView).as_view(), name='v1-health'),
     path('status/', STATUS_SEMASI(views.StatusView).as_view(), name='v1-status'),
     path('refresh/', REFRESH_ALL_SEMASI(views.RefreshAllView).as_view(),
