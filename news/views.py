@@ -70,7 +70,10 @@ def fetch_news(request):
         cache.delete('last_update')
 
         # Trigger Celery Task
-        fetch_news_task.delay(days=days, selected_sources=selected_sources, clear_existing=False)
+        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
+        fetch_news_task.apply_async(
+            kwargs={'days': days, 'selected_sources': selected_sources, 'clear_existing': False},
+            headers={'fetchrun_trigger': 'admin'})
 
         return Response({
             'success': True,
@@ -197,7 +200,10 @@ def fetch_cves(request):
         cache.delete('cve_entries')
         cache.delete('cve_last_update')
 
-        fetch_cve_task.delay(days=days, selected_sources=selected_sources)
+        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
+        fetch_cve_task.apply_async(
+            kwargs={'days': days, 'selected_sources': selected_sources},
+            headers={'fetchrun_trigger': 'admin'})
 
         return Response({
             'success': True,
@@ -333,7 +339,10 @@ def fetch_k8s(request):
         cache.delete('k8s_entries')
         cache.delete('k8s_last_update')
 
-        fetch_k8s_task.delay(days=days, selected_sources=selected_sources)
+        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
+        fetch_k8s_task.apply_async(
+            kwargs={'days': days, 'selected_sources': selected_sources},
+            headers={'fetchrun_trigger': 'admin'})
 
         return Response({
             'success': True,
@@ -464,7 +473,10 @@ def fetch_sre(request):
         cache.delete('sre_entries')
         cache.delete('sre_last_update')
 
-        fetch_sre_task.delay(days=days, selected_sources=selected_sources)
+        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
+        fetch_sre_task.apply_async(
+            kwargs={'days': days, 'selected_sources': selected_sources},
+            headers={'fetchrun_trigger': 'admin'})
 
         return Response({
             'success': True,
@@ -588,7 +600,10 @@ def fetch_devtools(request):
         cache.delete('devtools_entries')
         cache.delete('devtools_last_update')
 
-        fetch_devtools_task.delay(days=days, selected_sources=selected_sources)
+        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
+        fetch_devtools_task.apply_async(
+            kwargs={'days': days, 'selected_sources': selected_sources},
+            headers={'fetchrun_trigger': 'admin'})
 
         return Response({
             'success': True,
@@ -717,7 +732,10 @@ def fetch_ai_news(request):
         cache.delete('ai_entries')
         cache.delete('ai_last_update')
 
-        fetch_ai_news_task.delay(days=days, selected_sources=selected_sources)
+        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
+        fetch_ai_news_task.apply_async(
+            kwargs={'days': days, 'selected_sources': selected_sources},
+            headers={'fetchrun_trigger': 'admin'})
 
         return Response({
             'success': True,

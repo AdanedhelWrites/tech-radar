@@ -187,3 +187,40 @@ class AINewsEntry(models.Model):
 
     def __str__(self):
         return self.turkish_title[:100] if self.turkish_title else self.original_title[:100]
+
+
+class FetchRun(models.Model):
+    """Her cekim ve retranslate calistirmasinin birakti kalici iz (spec 2026-09-20-a4).
+
+    Bu model v1 delta akisina GIRMEZ: `updated_at` alani yoktur ve hicbir
+    delta uc noktasi onu dondurmez. Operator teshisi icindir.
+    """
+    BOLUMLER = [
+        ('cve', 'CVE'), ('news', 'Haber'), ('kubernetes', 'Kubernetes'),
+        ('sre', 'SRE'), ('devtools', 'DevTools'), ('ai', 'Yapay Zeka'),
+        ('retranslate', 'Yeniden Ceviri'),
+    ]
+    TETIKLEYICILER = [('beat', 'Zamanlayici'), ('api', 'API'), ('admin', 'Arayuz')]
+    DURUMLAR = [('running', 'Calisiyor'), ('success', 'Basarili'), ('failure', 'Basarisiz')]
+
+    section = models.CharField(max_length=20, choices=BOLUMLER, db_index=True, verbose_name='Bolum')
+    trigger = models.CharField(max_length=10, choices=TETIKLEYICILER, default='beat', verbose_name='Tetikleyici')
+    started_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Baslangic')
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name='Bitis')
+    status = models.CharField(max_length=10, choices=DURUMLAR, default='running', verbose_name='Durum')
+    fetched_count = models.IntegerField(default=0, verbose_name='Kaynaktan Gelen')
+    saved_count = models.IntegerField(default=0, verbose_name='Yazilan')
+    translation_failures = models.IntegerField(default=0, verbose_name='Ceviri Hatasi')
+    total_after = models.IntegerField(default=0, verbose_name='Tur Sonu Toplam')
+    by_provider = models.JSONField(default=dict, blank=True, verbose_name='Saglayici Dagilimi')
+    stopped_reason = models.CharField(max_length=30, blank=True, default='', verbose_name='Durma Sebebi')
+    error = models.TextField(blank=True, default='', verbose_name='Hata')
+
+    class Meta:
+        verbose_name = 'Cekim Kaydi'
+        verbose_name_plural = 'Cekim Kayitlari'
+        ordering = ['-started_at']
+        indexes = [models.Index(fields=['section', '-started_at'])]
+
+    def __str__(self):
+        return f'{self.section} {self.started_at:%Y-%m-%d %H:%M} ({self.status})'

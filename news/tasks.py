@@ -65,13 +65,17 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
 
         scraper = MultiSourceScraper()
         articles = scraper.fetch_all_news(days=days, selected_sources=selected_sources)
+        kaynaktan_gelen = len(articles)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         if skip_existing:
             articles = _drop_existing(articles, NewsArticle, 'link')
         if articles:
             saved_count = 0
             consume_translation_failures()
             consume_translation_providers()
+            ceviri_hatalari = 0
             for article in scraper.process_news(articles):
+                basarisizlik = consume_translation_failures()
+                ceviri_hatalari += basarisizlik
                 NewsArticle.objects.update_or_create(
                     link=article['link'],
                     defaults={
@@ -83,7 +87,7 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
                         'turkish_summary': article.get('turkish_summary', ''),
                         'date': article['date'],
                         'original_date': article.get('original_date', ''),
-                        'needs_translation': consume_translation_failures() > 0,
+                        'needs_translation': basarisizlik > 0,
                         'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
@@ -91,8 +95,10 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('news')
             cache_yenile('news')
-            return {'success': True, 'count': saved_count}
-        return {'success': False, 'count': 0}
+            return {'success': True, 'count': saved_count,
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+        return {'success': False, 'count': 0,
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -105,13 +111,17 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
 
         scraper = MultiCVEScraper()
         cves = scraper.fetch_all_cves(days=days, selected_sources=selected_sources)
+        kaynaktan_gelen = len(cves)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         if skip_existing:
             cves = _drop_existing(cves, CVEEntry, 'cve_id', key='cve_id')
         if cves:
             saved_count = 0
             consume_translation_failures()
             consume_translation_providers()
+            ceviri_hatalari = 0
             for cve in scraper.process_cves(cves):
+                basarisizlik = consume_translation_failures()
+                ceviri_hatalari += basarisizlik
                 CVEEntry.objects.update_or_create(
                     cve_id=cve['cve_id'],
                     defaults={
@@ -128,7 +138,7 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
                         'cwe_ids': cve.get('cwe_ids', []),
                         'references': cve.get('references', []),
                         'affected_products': cve.get('affected_products', ''),
-                        'needs_translation': consume_translation_failures() > 0,
+                        'needs_translation': basarisizlik > 0,
                         'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
@@ -136,8 +146,10 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('cve')
             cache_yenile('cve')
-            return {'success': True, 'count': saved_count}
-        return {'success': False, 'count': 0}
+            return {'success': True, 'count': saved_count,
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+        return {'success': False, 'count': 0,
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -150,13 +162,17 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
 
         scraper = MultiK8sScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         if skip_existing:
             entries = _drop_existing(entries, KubernetesEntry, 'link')
         if entries:
             saved_count = 0
             consume_translation_failures()
             consume_translation_providers()
+            ceviri_hatalari = 0
             for entry in scraper.process_entries(entries):
+                basarisizlik = consume_translation_failures()
+                ceviri_hatalari += basarisizlik
                 KubernetesEntry.objects.update_or_create(
                     link=entry['link'],
                     defaults={
@@ -168,7 +184,7 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
                         'category': entry.get('category', 'blog'),
                         'version': entry.get('version', ''),
                         'published_date': entry['published_date'],
-                        'needs_translation': consume_translation_failures() > 0,
+                        'needs_translation': basarisizlik > 0,
                         'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
@@ -176,8 +192,10 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('kubernetes')
             cache_yenile('kubernetes')
-            return {'success': True, 'count': saved_count}
-        return {'success': False, 'count': 0}
+            return {'success': True, 'count': saved_count,
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+        return {'success': False, 'count': 0,
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -190,13 +208,17 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
 
         scraper = MultiSREScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         if skip_existing:
             entries = _drop_existing(entries, SREEntry, 'link')
         if entries:
             saved_count = 0
             consume_translation_failures()
             consume_translation_providers()
+            ceviri_hatalari = 0
             for entry in scraper.process_entries(entries):
+                basarisizlik = consume_translation_failures()
+                ceviri_hatalari += basarisizlik
                 SREEntry.objects.update_or_create(
                     link=entry['link'],
                     defaults={
@@ -206,7 +228,7 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
                         'original_description': entry.get('original_description', ''),
                         'turkish_description': entry.get('turkish_description', ''),
                         'published_date': entry['published_date'],
-                        'needs_translation': consume_translation_failures() > 0,
+                        'needs_translation': basarisizlik > 0,
                         'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
@@ -214,8 +236,10 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('sre')
             cache_yenile('sre')
-            return {'success': True, 'count': saved_count}
-        return {'success': False, 'count': 0}
+            return {'success': True, 'count': saved_count,
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+        return {'success': False, 'count': 0,
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -228,13 +252,17 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
 
         scraper = MultiDevToolsScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         if skip_existing:
             entries = _drop_existing(entries, DevToolsEntry, 'link')
         if entries:
             saved_count = 0
             consume_translation_failures()
             consume_translation_providers()
+            ceviri_hatalari = 0
             for entry in scraper.process_entries(entries):
+                basarisizlik = consume_translation_failures()
+                ceviri_hatalari += basarisizlik
                 DevToolsEntry.objects.update_or_create(
                     link=entry['link'],
                     defaults={
@@ -246,7 +274,7 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
                         'version': entry.get('version', ''),
                         'entry_type': entry.get('entry_type', 'release'),
                         'published_date': entry['published_date'],
-                        'needs_translation': consume_translation_failures() > 0,
+                        'needs_translation': basarisizlik > 0,
                         'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
@@ -254,8 +282,10 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('devtools')
             cache_yenile('devtools')
-            return {'success': True, 'count': saved_count}
-        return {'success': False, 'count': 0}
+            return {'success': True, 'count': saved_count,
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+        return {'success': False, 'count': 0,
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -268,13 +298,17 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
 
         scraper = MultiAINewsScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         if skip_existing:
             entries = _drop_existing(entries, AINewsEntry, 'link')
         if entries:
             saved_count = 0
             consume_translation_failures()
             consume_translation_providers()
+            ceviri_hatalari = 0
             for entry in scraper.process_entries(entries):
+                basarisizlik = consume_translation_failures()
+                ceviri_hatalari += basarisizlik
                 AINewsEntry.objects.update_or_create(
                     link=entry['link'],
                     defaults={
@@ -284,7 +318,7 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
                         'original_description': entry.get('original_description', ''),
                         'turkish_description': entry.get('turkish_description', ''),
                         'published_date': entry.get('published_date') or entry.get('date'),
-                        'needs_translation': consume_translation_failures() > 0,
+                        'needs_translation': basarisizlik > 0,
                         'translation_provider': kayit_saglayicisi(consume_translation_providers()),
                     }
                 )
@@ -292,8 +326,10 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('ai')
             cache_yenile('ai')
-            return {'success': True, 'count': saved_count}
-        return {'success': False, 'count': 0}
+            return {'success': True, 'count': saved_count,
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+        return {'success': False, 'count': 0,
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -301,5 +337,13 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
 @shared_task
 def retranslate_pending_task():
     """Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir (bkz. news/retranslate.py)."""
+    from .fetch_runs import eski_kayitlari_temizle
     from .retranslate import retranslate_pending
-    return retranslate_pending()
+    sonuc = retranslate_pending()
+    # Saklama temizligi asil isin sonucunu etkilememeli: sinyal katmaniyla ayni
+    # savunmaci kalip (bkz. fetch_runs.py) - burada da task'in donusunu bozmaz.
+    try:
+        eski_kayitlari_temizle()  # 30 gunden eski FetchRun satirlari (spec 3.4)
+    except Exception as e:
+        print(f'  [FetchRun] Eski kayitlar temizlenemedi: {e}')
+    return sonuc
