@@ -7,11 +7,25 @@ Dil varyantlari ic ice verilir (title.original / title.tr). Tuketici
 `title.tr || title.original` yazarak ceviri bekleyen kayitlarda otomatik
 olarak Ingilizceye duser.
 """
+from typing import Optional, TypedDict
+
 from rest_framework import serializers
 
 from news.models import (
     AINewsEntry, CVEEntry, DevToolsEntry, KubernetesEntry, NewsArticle, SREEntry,
 )
+
+
+class DilAlani(TypedDict):
+    """title / description alanlarinin ic bicimi."""
+    original: str
+    tr: str
+
+
+class SiddetAlani(TypedDict):
+    """severity alaninin ic bicimi: kod makine, etiket insan icindir."""
+    code: str
+    label: str
 
 # Veritabani siddeti Turkce saklar; dis sozlesme makine dostu kod kullanir.
 SEVERITY_TR_TO_CODE = {
@@ -41,16 +55,16 @@ class BaseEntrySerializer(serializers.ModelSerializer):
         'published_date', 'needs_translation', 'updated_at', 'translation_provider',
     ]
 
-    def get_type(self, obj):
+    def get_type(self, obj) -> str:
         return self.entry_type_name
 
-    def get_title(self, obj):
+    def get_title(self, obj) -> DilAlani:
         return {'original': obj.original_title, 'tr': obj.turkish_title}
 
-    def get_description(self, obj):
+    def get_description(self, obj) -> DilAlani:
         return {'original': obj.original_description, 'tr': obj.turkish_description}
 
-    def get_translation_provider(self, obj):
+    def get_translation_provider(self, obj) -> Optional[str]:
         # 'google', 'libretranslate', 'gemini' veya ceviri yoksa null. Tuketici
         # 'libretranslate' icin "makine cevirisi" etiketi gosterebilir.
         return obj.translation_provider or None
@@ -78,7 +92,7 @@ class CVEEntryV1Serializer(BaseEntrySerializer):
             'affected_products', 'modified_date',
         ]
 
-    def get_severity(self, obj):
+    def get_severity(self, obj) -> SiddetAlani:
         return {'code': SEVERITY_TR_TO_CODE.get(obj.severity), 'label': obj.severity}
 
 
