@@ -75,6 +75,19 @@ ORTAK_PARAMETRELER = {
     'since_cursor', 'since', 'limit', 'source', 'needs_translation',
 }
 
+# Her bolumun zarfi HANGI kayit bilesenini sarmali (Bulgu 1). Bu esleme
+# yanlissa (ornegin iki bolum ayni kayit tipine isaret ederse) uretilen sema
+# tuketiciye yanlis alan listesi vaat eder -- 0 uyari/0 hata ile bile. Sema
+# 'hicbir sema'dan daha kotudur ilkesinin en yuklu oldugu nokta budur.
+BEKLENEN_KAYIT_BILESENI = {
+    'news': 'NewsArticleV1',
+    'cve': 'CVEEntryV1',
+    'kubernetes': 'KubernetesEntryV1',
+    'sre': 'SREEntryV1',
+    'devtools': 'DevToolsEntryV1',
+    'ai': 'AINewsEntryV1',
+}
+
 
 class DeltaSemasiTests(V1TestCase):
 
@@ -84,6 +97,7 @@ class DeltaSemasiTests(V1TestCase):
     def test_delta_uclari_zarf_dondurur(self):
         sema = sema_uret()
 
+        kayit_bilesenleri = {}
         for bolum, yol in DELTA_YOLLARI.items():
             with self.subTest(bolum=bolum):
                 govde = self._get(sema, yol)['responses']['200']
@@ -93,6 +107,23 @@ class DeltaSemasiTests(V1TestCase):
                 self.assertEqual(
                     sorted(zarf), ['count', 'has_more', 'next_cursor', 'results'])
                 self.assertEqual(zarf['results']['type'], 'array')
+
+                # results.items.$ref hangi kayit tipine isaret ediyor? Bu,
+                # zarfin sekli dogru olsa bile ICINDEKI kaydin yanlis olabilecegi
+                # tek nokta -- ornegin alti zarfin da CVEEntryV1'e isaret etmesi
+                # burada da 'sekil' testlerini gecerdi.
+                kayit_ref = zarf['results']['items']['$ref']
+                kayit_adi = kayit_ref.rsplit('/', 1)[-1]
+                kayit_bilesenleri[bolum] = kayit_adi
+                self.assertEqual(
+                    kayit_adi, BEKLENEN_KAYIT_BILESENI[bolum],
+                    f"'{bolum}' zarfi {kayit_adi} sariyor, "
+                    f"{BEKLENEN_KAYIT_BILESENI[bolum]} sarmali")
+
+        # Ek guvence: alti bolumun hicbiri ayni kayit tipini paylasmamali.
+        self.assertEqual(
+            len(set(kayit_bilesenleri.values())), len(kayit_bilesenleri),
+            f'iki bolum ayni kayit tipini sariyor: {kayit_bilesenleri}')
 
     def test_ortak_parametreler_her_delta_ucunda(self):
         sema = sema_uret()
@@ -139,6 +170,23 @@ class DeltaDisiUclarTests(V1TestCase):
         self.assertEqual(uyarilar, [], f'{len(uyarilar)} uyari kaldi')
         self.assertEqual(hatalar, [], f'{len(hatalar)} hata kaldi')
 
+    def test_sema_tam_11_yol_icerir(self):
+        sema = sema_uret()
+
+        # Bu sayi bilincli sabitlenir: yeni bir /api/v1/... view eklenip
+        # schema.py'ye karsilik gelen extend_schema_view girdisi unutulursa,
+        # yeni yol hicbir uyari uretmeden (belgesiz hata yanitlariyla) semaya
+        # sizar ve suit yesil kalir. Bu test o durumu yakalayan tek guvencedir.
+        # Sayiyi degistiriyorsaniz: (1) once yeni ucun schema.py'de gercek bir
+        # extend_schema_view girdisi oldugundan emin olun, (2) sonra bu sayiyi
+        # BILINCLI olarak guncelleyin -- refleks olarak degil.
+        self.assertEqual(
+            len(sema['paths']), 11,
+            f"sema {len(sema['paths'])} yol iceriyor, 11 bekleniyordu. Yeni bir "
+            f"/api/v1/... ucu eklediyseniz once news/api_v1/schema.py'ye onun "
+            f"extend_schema_view girdisini (ozet, parametreler, hata yanitlari) "
+            f"ekleyin; sonra bu sayiyi bilincli olarak guncelleyin.")
+
     def test_delta_disi_uclarin_basari_semasi_var(self):
         sema = sema_uret()
 
@@ -158,10 +206,20 @@ class DeltaDisiUclarTests(V1TestCase):
     def test_status_semasi_operator_alanlarini_icermez(self):
         sema = sema_uret()
 
-        metin = str(sema['components']['schemas'])
+        # Tasarim belgesindeki dort operator alaninin TAMAMI: by_provider,
+        # stopped_reason, trigger, error. Once yalnizca ikisi kontrol
+        # ediliyordu. Kontrol BolumDurumuV1'in kendi 'properties' listesine
+        # daraltilir; tum bilesenler uzerinde metin arasi yapmak yanlis
+        # pozitif verir -- 'error' sozlesmenin kendi hata govdesinde (HataV1)
+        # MESRU olarak var, dolayisiyla global arama bu alani hicbir zaman
+        # kontrol edemezdi.
+        durum_alanlari = set(
+            sema['components']['schemas']['BolumDurumuV1']['properties'])
         # ADR-0006 karar 4: bunlar FetchRun'da ve admin'de yasar, /status/'ta degil
-        for alan in ('by_provider', 'stopped_reason'):
-            self.assertNotIn(alan, metin, f"{alan} dis semaya sizdi")
+        for alan in ('by_provider', 'stopped_reason', 'trigger', 'error'):
+            self.assertNotIn(
+                alan, durum_alanlari,
+                f"{alan} operator alani BolumDurumuV1'e sizdi (dis semaya)")
 
     def test_operation_id_degerleri_benzersiz(self):
         sema = sema_uret()
@@ -215,7 +273,7 @@ class DocsUcuTests(V1TestCase):
 
         govde = yanit.content.decode()
         # Sidecar varliklari /static/ altindan sunulur; internetsiz k8s
-        # ortaminda docs sayfasinin bos acilmamasi buna buna bagli.
+        # ortaminda docs sayfasinin bos acilmamasi buna bagli.
         self.assertNotIn('unpkg.com', govde)
         self.assertNotIn('cdn.jsdelivr.net', govde)
         self.assertIn('/static/drf_spectacular_sidecar/', govde)

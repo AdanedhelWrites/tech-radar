@@ -10,6 +10,17 @@ view sinifini YERINDE degistirir, yeni bir sinif dondurmez -- yani views.py
 metinsel olarak degismese de calisma zamaninda siniflar dekore edilir.
 """
 
+from drf_spectacular.utils import (
+    OpenApiParameter, extend_schema, extend_schema_view,
+)
+from rest_framework import serializers
+
+from .serializers import (
+    AINewsEntryV1Serializer, CVEEntryV1Serializer, DevToolsEntryV1Serializer,
+    KubernetesEntryV1Serializer, NewsArticleV1Serializer, SEVERITY_ORDER,
+    SREEntryV1Serializer,
+)
+
 V1_ONEKI = '/api/v1/'
 
 
@@ -21,18 +32,6 @@ def yalniz_v1(endpoints):
     haline gelirler.
     """
     return [dortlu for dortlu in endpoints if dortlu[0].startswith(V1_ONEKI)]
-
-
-from drf_spectacular.utils import (
-    OpenApiParameter, extend_schema, extend_schema_view,
-)
-from rest_framework import serializers
-
-from .serializers import (
-    AINewsEntryV1Serializer, CVEEntryV1Serializer, DevToolsEntryV1Serializer,
-    KubernetesEntryV1Serializer, NewsArticleV1Serializer, SEVERITY_ORDER,
-    SREEntryV1Serializer,
-)
 
 
 def zarf_serializer(kayit_serializer, ad):
@@ -71,6 +70,14 @@ ORTAK_PARAMETRELER = [
         'needs_translation', bool,
         description='Cevirisi bekleyen kayitlari suzer.'),
 ]
+
+RETRY_AFTER_BASLIGI = OpenApiParameter(
+    name='Retry-After', type=int, location=OpenApiParameter.HEADER,
+    response=[429],
+    description=(
+        'Kac saniye sonra tekrar denenmeli. Hem soguma (cooldown) hem de hiz '
+        'siniri (throttled) 429 yanitlarinda DRF tarafindan otomatik eklenir; '
+        'runtime dogrulamasiyla teyit edilmistir.'))
 
 SIDDET_PARAMETRELERI = [
     OpenApiParameter(
@@ -131,15 +138,27 @@ class HataV1Serializer(serializers.Serializer):
 # NOT: bu blok _delta_semasi'den once tanimlanir, cunku DELTA_SEMALARI hemen
 # asagida (dict comprehension ile) _delta_semasi'yi cagirir ve DELTA_HATALARI'na
 # o an ihtiyac duyar; dosyanin sonuna eklenseydi NameError olurdu.
-HATA_YANITLARI = {401: HataV1Serializer}
-DELTA_HATALARI = {401: HataV1Serializer, 400: HataV1Serializer, 429: HataV1Serializer}
-REFRESH_HATALARI = {401: HataV1Serializer, 429: HataV1Serializer}
+#
+# 500/internal her ucte var: V1APIView.handle_exception kendi icinde patlarsa
+# (views.py:66-70) hangi uc olursa olsun 'internal' kodlu 500 doner. forbidden
+# (403) ve method_not_allowed (405) DRF_DURUM_KODLARI'nda (views.py:42-49)
+# eslenmis olsa da ADR-0003 bolum 8'deki (tek otorite) kod listesine dahil
+# degildir: 403 mevcut IsAuthenticated+TokenAuthentication kurulumunda hicbir
+# zaman tetiklenmez (DRF PermissionDenied yalnizca basarili kimlik dogrulamasi
+# sonrasi ek bir izin sinifi reddederse firlar; burada boyle bir sinif yok),
+# 405 ise HTTP yontem uyumsuzlugunun genel cerceve davranisidir, ADR'nin
+# tanimladigi is kurallari hata taksonomisinin bir parcasi degildir. Bu ikisi
+# bilincli olarak enum'a ve semaya eklenmedi.
+HATA_YANITLARI = {401: HataV1Serializer, 500: HataV1Serializer}
+DELTA_HATALARI = {401: HataV1Serializer, 400: HataV1Serializer, 429: HataV1Serializer,
+                   500: HataV1Serializer}
+REFRESH_HATALARI = {401: HataV1Serializer, 429: HataV1Serializer, 500: HataV1Serializer}
 
 
 def _delta_semasi(bolum):
     return extend_schema_view(get=extend_schema(
         summary=f"'{bolum}' bolumunu imlecli delta ile okur",
-        parameters=ORTAK_PARAMETRELER + EK_PARAMETRELER.get(bolum, []),
+        parameters=ORTAK_PARAMETRELER + EK_PARAMETRELER.get(bolum, []) + [RETRY_AFTER_BASLIGI],
         responses={
             200: zarf_serializer(BOLUM_SERIALIZERLARI[bolum], ZARF_ADLARI[bolum]),
             **DELTA_HATALARI,
@@ -207,6 +226,7 @@ STATUS_SEMASI = extend_schema_view(get=extend_schema(
     summary='Bolum basina veri tazeligi',
     # v1_read throttle scope'unu paylasir (bkz. V1APIView), dolayisiyla 429
     # gercekten donebilir; delta uclariyla ayni gerekce.
+    parameters=[RETRY_AFTER_BASLIGI],
     responses={200: StatusV1Serializer, 429: HataV1Serializer, **HATA_YANITLARI},
 ))
 
@@ -215,6 +235,7 @@ JOB_SEMASI = extend_schema_view(get=extend_schema(
     operation_id='v1_job_read',
     # v1_read throttle scope'unu paylasir (bkz. V1APIView), dolayisiyla 429
     # gercekten donebilir; delta uclariyla ayni gerekce.
+    parameters=[RETRY_AFTER_BASLIGI],
     responses={200: JobV1Serializer, 404: HataV1Serializer, 429: HataV1Serializer,
                **HATA_YANITLARI},
 ))
@@ -223,6 +244,7 @@ REFRESH_SEMASI = extend_schema_view(post=extend_schema(
     summary='Tek bolum icin manuel cekim tetikler',
     operation_id='v1_bolum_refresh',
     request=None,
+    parameters=[RETRY_AFTER_BASLIGI],
     responses={202: RefreshV1Serializer, 404: HataV1Serializer, **REFRESH_HATALARI},
 ))
 
@@ -230,5 +252,6 @@ REFRESH_ALL_SEMASI = extend_schema_view(post=extend_schema(
     summary='Alti bolumu birden tetikler',
     operation_id='v1_toplu_refresh',
     request=None,
+    parameters=[RETRY_AFTER_BASLIGI],
     responses={202: RefreshAllV1Serializer, **REFRESH_HATALARI},
 ))
