@@ -121,10 +121,19 @@ ZARF_ADLARI = {
 
 
 class HataGovdesiV1Serializer(serializers.Serializer):
-    """ADR-0003 bolum 8'deki kod listesi; message insan okur, code makine."""
+    """ADR-0003 bolum 8'deki kod listesi + gercekte uretilen ek kodlar.
+
+    NOT: code burada bir bilesen sozlesmesidir (butun v1 hatalarinin
+    paylastigi tek HataV1 govdesi), operasyon basina bir 'response' degildir.
+    Dolayisiyla "hangi HTTP metotlari var" gibi operasyona ozgu bilgiyle
+    (405) karistirilmamali: enum'un gorevi govdenin ICINDE gercekten cikan
+    her degeri saymak, response listesinin gorevi ise o govdenin hangi HTTP
+    durumlarinda dondugunu belgelemek. Ikisi ayni geregi paylasmaz -- bkz.
+    HATA_YANITLARI'nin ustundeki yorum.
+    """
     code = serializers.ChoiceField(choices=[
         'unauthorized', 'invalid_cursor', 'invalid_parameter', 'not_found',
-        'throttled', 'cooldown', 'internal',
+        'throttled', 'cooldown', 'internal', 'method_not_allowed',
     ])
     message = serializers.CharField()
 
@@ -140,15 +149,31 @@ class HataV1Serializer(serializers.Serializer):
 # o an ihtiyac duyar; dosyanin sonuna eklenseydi NameError olurdu.
 #
 # 500/internal her ucte var: V1APIView.handle_exception kendi icinde patlarsa
-# (views.py:66-70) hangi uc olursa olsun 'internal' kodlu 500 doner. forbidden
-# (403) ve method_not_allowed (405) DRF_DURUM_KODLARI'nda (views.py:42-49)
-# eslenmis olsa da ADR-0003 bolum 8'deki (tek otorite) kod listesine dahil
-# degildir: 403 mevcut IsAuthenticated+TokenAuthentication kurulumunda hicbir
-# zaman tetiklenmez (DRF PermissionDenied yalnizca basarili kimlik dogrulamasi
-# sonrasi ek bir izin sinifi reddederse firlar; burada boyle bir sinif yok),
-# 405 ise HTTP yontem uyumsuzlugunun genel cerceve davranisidir, ADR'nin
-# tanimladigi is kurallari hata taksonomisinin bir parcasi degildir. Bu ikisi
-# bilincli olarak enum'a ve semaya eklenmedi.
+# (views.py:66-70) hangi uc olursa olsun 'internal' kodlu 500 doner.
+#
+# forbidden (403) ve method_not_allowed (405), DRF_DURUM_KODLARI'nda
+# (views.py:42-49) eslenmis olsa da ikisinin akibeti farkli, canli servise
+# karsi dogrulandi:
+#   - forbidden: enum'da YOK, semada da YOK. Mevcut IsAuthenticated +
+#     TokenAuthentication kurulumunda gercekten tetiklenemez -- DRF
+#     PermissionDenied (403) yalnizca basarili kimlik dogrulamasindan SONRA
+#     ek bir izin sinifi reddederse firlar; burada ikinci bir izin sinifi
+#     yok, kimliksiz istek zaten 401 alir (TokenAuthentication
+#     WWW-Authenticate basligini saglar). Olmayan bir kodu enum'a eklemek
+#     "sema gercegi yanlis anlatir" riskini ters yonde tekrar uretirdi.
+#   - method_not_allowed: enum'a EKLENDI. Canli serviste dogrulandi:
+#     `GET /api/v1/refresh/` ve `DELETE /api/v1/cve/` gercekten
+#     {"error": {"code": "method_not_allowed", ...}} ile 405 donuyor -- v1
+#     katmaninin normal isleyisinde uretilen gercek bir koddur, enum'dan
+#     eksik olmasi govde semasini eksik/yanlis birakirdi (bir tuketici
+#     enum'a karsi dogrulama yapiyorsa gercek bir yaniti reddeder). Buna
+#     ragmen operasyon basina 405 RESPONSE'U eklenmedi: 405, dogru
+#     belgelenmis bir operasyona yanlis HTTP fiiliyle gidilmesidir --
+#     OpenAPI zaten her yol icin hangi metotlarin var oldugunu soyler, bunu
+#     tekrar her operasyonun response listesine eklemek yalnizca gurultu
+#     olurdu. Enum'un tam olmasi gerekiyor cunku code, tum v1 hatalarinin
+#     paylastigi TEK govde bilesenidir; response listesi ise operasyona
+#     ozgudur ve bu geregi paylasmaz.
 HATA_YANITLARI = {401: HataV1Serializer, 500: HataV1Serializer}
 DELTA_HATALARI = {401: HataV1Serializer, 400: HataV1Serializer, 429: HataV1Serializer,
                    500: HataV1Serializer}
