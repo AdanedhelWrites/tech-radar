@@ -6,6 +6,8 @@
 # --- Stage 1: Build ---
 FROM node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e AS builder
 
+RUN apk upgrade --no-cache
+
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -19,6 +21,8 @@ RUN npm run build
 
 # --- Stage 2: Serve ---
 FROM nginx:1.31-alpine@sha256:62ff2089abf5a9ed33bd232895bef5e22f7bb4b200675cec49a5ebc48e3d4ac8
+
+RUN apk upgrade --no-cache
 
 # Custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
