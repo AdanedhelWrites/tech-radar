@@ -58,15 +58,27 @@ jobs:
 
       - name: Uygulama gercekten ayakta mi
         run: |
-          for _ in $(seq 1 45); do
+          set -euo pipefail
+          # entrypoint.sh sirayla redis bekler, migrate + collectstatic calistirir,
+          # sonra gunicorn'u baslatir — port bu asamalar bitene kadar hic acilmaz.
+          # CI runner'i sogukken migrate+collectstatic 90 sn'yi asabiliyor (gozlemlendi:
+          # 12:20 UTC kosusunda 12:22'de migration'lar halen suruyordu). Sure, bu
+          # asamalarin makul en kotu durumda bitecegi kadar (5 dk) genisletildi;
+          # gercek kapi yine /api/v1/health/ 200'u, sabit bir uyku degil.
+          timeout_s=300
+          interval_s=3
+          elapsed=0
+          code=""
+          while [ "${elapsed}" -lt "${timeout_s}" ]; do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/v1/health/ || true)
             if [ "${code}" = "200" ]; then
-              echo "API hazir (/api/v1/health/ HTTP 200)"
+              echo "API hazir (/api/v1/health/ HTTP 200, ${elapsed} sn'de)"
               exit 0
             fi
-            sleep 2
+            sleep "${interval_s}"
+            elapsed=$((elapsed + interval_s))
           done
-          echo "::error::API 90 sn icinde HTTP 200 donmedi (son kod: ${code}); tarama yapilmadan yesil gecilmez."
+          echo "::error::API ${timeout_s} sn icinde HTTP 200 donmedi (son kod: ${code}); tarama yapilmadan yesil gecilmez."
           docker logs api
           exit 1
 
