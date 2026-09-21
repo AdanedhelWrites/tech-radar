@@ -1,5 +1,5 @@
 Django==4.2.30
-djangorestframework==3.18.1
+djangorestframework==3.17.2  # DRF 3.18+ django>=5.2 ister; Django 4.2 LTS hattinda kaliyoruz
 django-redis==5.4.0
 django-cors-headers==4.9.0
 django-celery-beat==2.9.0
