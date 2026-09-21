@@ -35,4 +35,6 @@ RUN chown -R nginx:nginx /usr/share/nginx/html && \
 
 EXPOSE 3000
 
+USER nginx
+
 CMD ["nginx", "-g", "daemon off;"]
