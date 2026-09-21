@@ -3,6 +3,9 @@
 Mevcut /api/* uc noktalari frontend'e hizmet eder ve degistirilmez. Buradaki
 uc noktalar dis tuketici uygulamalar icindir: token ister, cache'e bakmaz,
 her zaman (updated_at, id) sirasinda doner.
+
+Bu view'larin OpenAPI semasi burada degil news/api_v1/schema.py'de tanimlidir
+ve urls.py'de extend_schema_view ile uygulanir (A5b).
 """
 from django.utils.dateparse import parse_date
 from rest_framework import status
