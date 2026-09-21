@@ -18,12 +18,23 @@ spec:
         app.kubernetes.io/name: {{ .Values.frontend.name }}
         app.kubernetes.io/component: {{ .Values.frontend.component }}
     spec:
+      securityContext:
+        {{- include "tech-radar.podSecurityContext" .Values.frontend.securityContext | nindent 8 }}
       containers:
         - name: frontend
           image: {{ include "tech-radar.frontendImage" . }}
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          securityContext:
+            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
           ports:
             - containerPort: {{ .Values.frontend.port }}
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-log
+              mountPath: /var/log/nginx
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           readinessProbe:
@@ -38,6 +49,13 @@ spec:
               port: {{ .Values.frontend.port }}
             initialDelaySeconds: {{ .Values.frontend.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.frontend.probes.liveness.periodSeconds }}
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-log
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

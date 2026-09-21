@@ -21,6 +21,13 @@ global:
   appName: teknoloji-haberleri
   labels:
     partOf: teknoloji-haberleri
+  # Tum container'larda ortak sertlestirme; bilesene gore degisen tek sey
+  # runAsUser/runAsGroup'tur (asagida her bilesenin kendi securityContext'inde).
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
 
 # -------------------------------------------------------
 # Backend (Django REST API + Gunicorn)
@@ -34,6 +41,10 @@ backend:
     pullPolicy: IfNotPresent        # Registry kullaniyorsaniz: Always
   replicas: 2
   port: 8000
+  # Dockerfile'daki appuser (groupadd/useradd -r ile Debian'in verdigi sabit UID/GID)
+  securityContext:
+    runAsUser: 999
+    runAsGroup: 999
   resources:
     requests:
       cpu: 200m
@@ -65,6 +76,10 @@ frontend:
     pullPolicy: IfNotPresent
   replicas: 2
   port: 3000
+  # nginx:alpine imajinin kendi nginx kullanicisi
+  securityContext:
+    runAsUser: 101
+    runAsGroup: 101
   resources:
     requests:
       cpu: 50m
@@ -91,6 +106,9 @@ worker:
   # Backend image'ini kullanir (ayni codebase)
   replicas: 1
   command: ["celery", "-A", "cybernews", "worker", "-l", "info", "--concurrency=2"]
+  securityContext:
+    runAsUser: 999
+    runAsGroup: 999
   resources:
     requests:
       cpu: 200m
@@ -108,7 +126,12 @@ scheduler:
   component: scheduler
   replicas: 1                        # DEGISTIRMEYIN — ayni anda 2 Beat calisamaz
   strategy: Recreate
-  command: ["celery", "-A", "cybernews", "beat", "-l", "info"]
+  # PersistentScheduler varsayilan olarak calisma dizinine (readOnlyRootFilesystem
+  # altinda yazilamaz) celerybeat-schedule yazar; yazilabilir /tmp'e yonlendirildi.
+  command: ["celery", "-A", "cybernews", "beat", "-l", "info", "--schedule=/tmp/celerybeat-schedule"]
+  securityContext:
+    runAsUser: 999
+    runAsGroup: 999
   resources:
     requests:
       cpu: 50m
@@ -133,6 +156,10 @@ postgresql:
     tag: 16-alpine
   port: 5432
   strategy: Recreate
+  # postgres:16-alpine imajinin kendi postgres kullanicisi
+  securityContext:
+    runAsUser: 70
+    runAsGroup: 70
   storage:
     size: 5Gi
     accessMode: ReadWriteOnce
@@ -168,6 +195,10 @@ redis:
     repository: redis
     tag: 7-alpine
   port: 6379
+  # redis:7-alpine imajinin kendi redis kullanicisi
+  securityContext:
+    runAsUser: 999
+    runAsGroup: 1000
   maxmemory: 256mb
   maxmemoryPolicy: allkeys-lru
   appendonly: true
@@ -232,6 +263,9 @@ migration:
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
   restartPolicy: OnFailure
+  securityContext:
+    runAsUser: 999
+    runAsGroup: 999
   resources:
     requests:
       cpu: 100m

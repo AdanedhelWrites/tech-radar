@@ -18,10 +18,21 @@ spec:
         app.kubernetes.io/name: teknoloji-api
         app.kubernetes.io/component: backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: api
           image: teknoloji-haberleri-api:latest
           # imagePullPolicy: Always  # Registry kullaniyorsaniz acin
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           ports:
             - containerPort: 8000
           envFrom:
@@ -43,6 +54,11 @@ spec:
                 secretKeyRef:
                   name: teknoloji-secret
                   key: DB_PASSWORD
+          volumeMounts:
+            - name: staticfiles
+              mountPath: /app/staticfiles
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 200m
@@ -64,6 +80,11 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 5
+      volumes:
+        - name: staticfiles
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

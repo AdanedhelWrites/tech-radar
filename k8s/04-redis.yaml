@@ -25,12 +25,26 @@ spec:
         app.kubernetes.io/name: teknoloji-redis
         app.kubernetes.io/component: cache
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: redis
           image: redis:7-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           ports:
             - containerPort: 6379
           command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
           resources:
             requests:
               cpu: 50m
@@ -52,6 +66,9 @@ spec:
                 - ping
             initialDelaySeconds: 15
             periodSeconds: 10
+      volumes:
+        - name: redis-data
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

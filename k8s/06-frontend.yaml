@@ -18,12 +18,30 @@ spec:
         app.kubernetes.io/name: teknoloji-frontend
         app.kubernetes.io/component: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: frontend
           image: teknoloji-haberleri-frontend:latest
           # imagePullPolicy: Always  # Registry kullaniyorsaniz acin
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           ports:
             - containerPort: 3000
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-log
+              mountPath: /var/log/nginx
           resources:
             requests:
               cpu: 50m
@@ -43,6 +61,13 @@ spec:
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 15
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-log
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

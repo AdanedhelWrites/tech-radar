@@ -21,10 +21,21 @@ spec:
         app.kubernetes.io/name: teknoloji-worker
         app.kubernetes.io/component: worker
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: teknoloji-haberleri-api:latest
           command: ["celery", "-A", "cybernews", "worker", "-l", "info", "--concurrency=2"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           envFrom:
             - configMapRef:
                 name: teknoloji-config
@@ -44,6 +55,9 @@ spec:
                 secretKeyRef:
                   name: teknoloji-secret
                   key: DB_PASSWORD
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 200m
@@ -51,6 +65,9 @@ spec:
             limits:
               cpu: "1"
               memory: 1Gi
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 # ============================================
 # Celery Beat — Periyodik gorev zamanlayici
@@ -78,10 +95,23 @@ spec:
         app.kubernetes.io/name: teknoloji-scheduler
         app.kubernetes.io/component: scheduler
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: scheduler
           image: teknoloji-haberleri-api:latest
-          command: ["celery", "-A", "cybernews", "beat", "-l", "info"]
+          # PersistentScheduler varsayilan olarak calisma dizinine (readOnlyRootFilesystem
+          # altinda yazilamaz) celerybeat-schedule yazar; yazilabilir /tmp'e yonlendirildi.
+          command: ["celery", "-A", "cybernews", "beat", "-l", "info", "--schedule=/tmp/celerybeat-schedule"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           envFrom:
             - configMapRef:
                 name: teknoloji-config
@@ -101,6 +131,9 @@ spec:
                 secretKeyRef:
                   name: teknoloji-secret
                   key: DB_PASSWORD
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 50m
@@ -108,3 +141,6 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -39,9 +39,13 @@ spec:
         app.kubernetes.io/name: {{ .Values.postgresql.name }}
         app.kubernetes.io/component: {{ .Values.postgresql.component }}
     spec:
+      securityContext:
+        {{- include "tech-radar.podSecurityContext" .Values.postgresql.securityContext | nindent 8 }}
       containers:
         - name: postgresql
           image: {{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}
+          securityContext:
+            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
           ports:
             - containerPort: {{ .Values.postgresql.port }}
           env:
@@ -65,6 +69,10 @@ spec:
           volumeMounts:
             - name: postgresql-data
               mountPath: /var/lib/postgresql/data
+            - name: postgresql-run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
           resources:
             {{- toYaml .Values.postgresql.resources | nindent 12 }}
           readinessProbe:
@@ -87,6 +95,10 @@ spec:
         - name: postgresql-data
           persistentVolumeClaim:
             claimName: {{ .Values.postgresql.name }}-pvc
+        - name: postgresql-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

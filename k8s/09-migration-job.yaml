@@ -20,9 +20,20 @@ spec:
         app.kubernetes.io/name: teknoloji-migrate
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: migrate
           image: teknoloji-haberleri-api:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           command:
             - sh
             - -c
@@ -55,6 +66,11 @@ spec:
                 secretKeyRef:
                   name: teknoloji-secret
                   key: DB_PASSWORD
+          volumeMounts:
+            - name: staticfiles
+              mountPath: /app/staticfiles
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -62,3 +78,8 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+      volumes:
+        - name: staticfiles
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

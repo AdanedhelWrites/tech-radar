@@ -19,11 +19,15 @@ spec:
         app.kubernetes.io/name: {{ .Values.worker.name }}
         app.kubernetes.io/component: {{ .Values.worker.component }}
     spec:
+      securityContext:
+        {{- include "tech-radar.podSecurityContext" .Values.worker.securityContext | nindent 8 }}
       containers:
         - name: worker
           image: {{ include "tech-radar.backendImage" . }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           command: {{ .Values.worker.command | toJson }}
+          securityContext:
+            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: teknoloji-config
@@ -43,8 +47,14 @@ spec:
                 secretKeyRef:
                   name: teknoloji-secret
                   key: DB_PASSWORD
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 # Celery Beat — ONEMLI: Her zaman 1 replica olmali!
 apiVersion: apps/v1
@@ -69,11 +79,15 @@ spec:
         app.kubernetes.io/name: {{ .Values.scheduler.name }}
         app.kubernetes.io/component: {{ .Values.scheduler.component }}
     spec:
+      securityContext:
+        {{- include "tech-radar.podSecurityContext" .Values.scheduler.securityContext | nindent 8 }}
       containers:
         - name: scheduler
           image: {{ include "tech-radar.backendImage" . }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           command: {{ .Values.scheduler.command | toJson }}
+          securityContext:
+            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: teknoloji-config
@@ -93,5 +107,11 @@ spec:
                 secretKeyRef:
                   name: teknoloji-secret
                   key: DB_PASSWORD
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             {{- toYaml .Values.scheduler.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}

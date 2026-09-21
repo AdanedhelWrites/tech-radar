@@ -41,3 +41,25 @@ Frontend image
 {{- define "tech-radar.frontendImage" -}}
 {{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}
 {{- end }}
+
+{{/*
+Pod guvenlik baglami — non-root calismayi zorunlu kilar. UID/GID taban
+imajin kendi kullanicisidir (bkz. values.yaml'daki ilgili securityContext).
+Cagiran: include "tech-radar.podSecurityContext" .Values.<bilesen>.securityContext
+*/}}
+{{- define "tech-radar.podSecurityContext" -}}
+runAsNonRoot: true
+runAsUser: {{ .runAsUser }}
+runAsGroup: {{ .runAsGroup }}
+seccompProfile:
+  type: RuntimeDefault
+{{- end }}
+
+{{/*
+Container guvenlik baglami — tum bilesenlerde ayni: ayricalik yukseltme,
+fazla capability ve yazilabilir kok dosya sistemi kapali. Deger
+global.containerSecurityContext'ten gelir, sablona sabit yazilmaz.
+*/}}
+{{- define "tech-radar.containerSecurityContext" -}}
+{{ toYaml .Values.global.containerSecurityContext }}
+{{- end }}

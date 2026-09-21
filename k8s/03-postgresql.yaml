@@ -41,9 +41,20 @@ spec:
         app.kubernetes.io/name: teknoloji-postgresql
         app.kubernetes.io/component: database
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: postgresql
           image: postgres:16-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           ports:
             - containerPort: 5432
           env:
@@ -67,6 +78,10 @@ spec:
           volumeMounts:
             - name: postgresql-data
               mountPath: /var/lib/postgresql/data
+            - name: postgresql-run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -94,6 +109,10 @@ spec:
         - name: postgresql-data
           persistentVolumeClaim:
             claimName: teknoloji-postgresql-pvc
+        - name: postgresql-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

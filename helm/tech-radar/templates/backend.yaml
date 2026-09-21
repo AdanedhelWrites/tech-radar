@@ -18,10 +18,14 @@ spec:
         app.kubernetes.io/name: {{ .Values.backend.name }}
         app.kubernetes.io/component: {{ .Values.backend.component }}
     spec:
+      securityContext:
+        {{- include "tech-radar.podSecurityContext" .Values.backend.securityContext | nindent 8 }}
       containers:
         - name: api
           image: {{ include "tech-radar.backendImage" . }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          securityContext:
+            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
           ports:
             - containerPort: {{ .Values.backend.port }}
           envFrom:
@@ -43,6 +47,11 @@ spec:
                 secretKeyRef:
                   name: teknoloji-secret
                   key: DB_PASSWORD
+          volumeMounts:
+            - name: staticfiles
+              mountPath: /app/staticfiles
+            - name: tmp
+              mountPath: /tmp
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
           readinessProbe:
@@ -59,6 +68,11 @@ spec:
             initialDelaySeconds: {{ .Values.backend.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.backend.probes.liveness.periodSeconds }}
             timeoutSeconds: {{ .Values.backend.probes.liveness.timeoutSeconds }}
+      volumes:
+        - name: staticfiles
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

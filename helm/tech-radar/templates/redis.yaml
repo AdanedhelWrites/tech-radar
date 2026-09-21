@@ -19,9 +19,13 @@ spec:
         app.kubernetes.io/name: {{ .Values.redis.name }}
         app.kubernetes.io/component: {{ .Values.redis.component }}
     spec:
+      securityContext:
+        {{- include "tech-radar.podSecurityContext" .Values.redis.securityContext | nindent 8 }}
       containers:
         - name: redis
           image: {{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}
+          securityContext:
+            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
           ports:
             - containerPort: {{ .Values.redis.port }}
           command:
@@ -32,6 +36,9 @@ spec:
             - {{ .Values.redis.maxmemory }}
             - --maxmemory-policy
             - {{ .Values.redis.maxmemoryPolicy }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
           resources:
             {{- toYaml .Values.redis.resources | nindent 12 }}
           readinessProbe:
@@ -48,6 +55,9 @@ spec:
                 - ping
             initialDelaySeconds: {{ .Values.redis.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.redis.probes.liveness.periodSeconds }}
+      volumes:
+        - name: redis-data
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
