@@ -7,6 +7,8 @@ her zaman (updated_at, id) sirasinda doner.
 Bu view'larin OpenAPI semasi burada degil news/api_v1/schema.py'de tanimlidir
 ve urls.py'de extend_schema_view ile uygulanir (A5b).
 """
+import logging
+
 from django.utils.dateparse import parse_date
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
@@ -31,6 +33,8 @@ from . import refresh
 from celery.result import AsyncResult
 
 from cybernews.celery import app as celery_app
+
+logger = logging.getLogger(__name__)
 
 
 def _hata(kod: str, mesaj: str, http_durum: int):
@@ -66,8 +70,18 @@ class V1APIView(APIView):
         try:
             yanit = super().handle_exception(exc)
         except Exception:
+            logger.exception('v1 API beklenmeyen hata')
             return _hata('internal', 'Beklenmeyen bir sunucu hatasi olustu.',
                          status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        if yanit.status_code >= 500:
+            # 5xx'te DRF'in urettigi detay sunucu icine ait olabilir (ornegin
+            # APIException'i dogrudan bir istisna metniyle yukselten bir cagiran);
+            # istemciye sizdirmadan tek bicim 'internal' hatasina dus.
+            logger.exception('v1 API beklenmeyen hata (durum=%s)', yanit.status_code)
+            return _hata('internal', 'Beklenmeyen bir sunucu hatasi olustu.',
+                         yanit.status_code)
+
         kod = DRF_DURUM_KODLARI.get(yanit.status_code, 'internal')
 
         ayrinti = yanit.data

@@ -3,12 +3,16 @@ Flask Web Application - Cybersecurity News Scraper
 Cache-based, no file storage
 """
 
-from flask import Flask, render_template, jsonify, request
-from flask_caching import Cache
-from scraper_multi import MultiSourceScraper
+import logging
 import os
 import json
 from datetime import datetime
+
+from flask import Flask, render_template, jsonify, request
+from flask_caching import Cache
+from scraper_multi import MultiSourceScraper
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -86,10 +90,11 @@ def fetch_news():
                 'count': 0
             })
             
-    except Exception as e:
+    except Exception:
+        logger.exception('fetch_news basarisiz')
         return jsonify({
             'success': False,
-            'message': f'Hata: {str(e)}',
+            'message': 'Islem sirasinda sunucuda beklenmeyen bir hata olustu.',
             'data': [],
             'count': 0
         }), 500

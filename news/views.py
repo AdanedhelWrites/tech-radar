@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser
@@ -23,6 +25,12 @@ from .k8s_scraper import MultiK8sScraper
 from .sre_scraper import MultiSREScraper
 from .devtools_scraper import MultiDevToolsScraper
 from .ai_scraper import MultiAINewsScraper
+
+logger = logging.getLogger(__name__)
+
+# Istemciye donen genel hata mesaji; gercek istisna sunucu loguna yazilir,
+# yanit govdesine iceri yapisi/dosya yollari/sorgu metnini sizdirmaz.
+GENEL_SUNUCU_HATASI = 'Islem sirasinda sunucuda beklenmeyen bir hata olustu.'
 
 
 @api_view(['GET'])
@@ -81,11 +89,12 @@ def fetch_news(request):
             'count': 0,
             'data': []
         })
-            
-    except Exception as e:
+
+    except Exception:
+        logger.exception('fetch_news basarisiz')
         return Response({
             'success': False,
-            'message': str(e),
+            'message': GENEL_SUNUCU_HATASI,
             'count': 0,
             'data': []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -107,10 +116,11 @@ def clear_cache(request):
             'success': True,
             'message': 'Cache ve veritabani temizlendi'
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('clear_cache basarisiz')
         return Response({
             'success': False,
-            'message': str(e)
+            'message': GENEL_SUNUCU_HATASI
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -211,11 +221,12 @@ def fetch_cves(request):
             'count': 0,
             'data': []
         })
-            
-    except Exception as e:
+
+    except Exception:
+        logger.exception('fetch_cves basarisiz')
         return Response({
             'success': False,
-            'message': str(e),
+            'message': GENEL_SUNUCU_HATASI,
             'count': 0,
             'data': []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -237,10 +248,11 @@ def clear_cve_cache(request):
             'success': True,
             'message': 'CVE cache ve veritabani temizlendi'
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('clear_cve_cache basarisiz')
         return Response({
             'success': False,
-            'message': str(e)
+            'message': GENEL_SUNUCU_HATASI
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -351,10 +363,11 @@ def fetch_k8s(request):
             'data': []
         })
 
-    except Exception as e:
+    except Exception:
+        logger.exception('fetch_k8s basarisiz')
         return Response({
             'success': False,
-            'message': str(e),
+            'message': GENEL_SUNUCU_HATASI,
             'count': 0,
             'data': []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -374,10 +387,11 @@ def clear_k8s_cache(request):
             'success': True,
             'message': 'Kubernetes cache ve veritabani temizlendi'
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('clear_k8s_cache basarisiz')
         return Response({
             'success': False,
-            'message': str(e)
+            'message': GENEL_SUNUCU_HATASI
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -485,10 +499,11 @@ def fetch_sre(request):
             'data': []
         })
 
-    except Exception as e:
+    except Exception:
+        logger.exception('fetch_sre basarisiz')
         return Response({
             'success': False,
-            'message': str(e),
+            'message': GENEL_SUNUCU_HATASI,
             'count': 0,
             'data': []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -508,10 +523,11 @@ def clear_sre_cache(request):
             'success': True,
             'message': 'SRE cache ve veritabani temizlendi'
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('clear_sre_cache basarisiz')
         return Response({
             'success': False,
-            'message': str(e)
+            'message': GENEL_SUNUCU_HATASI
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -612,10 +628,11 @@ def fetch_devtools(request):
             'data': []
         })
 
-    except Exception as e:
+    except Exception:
+        logger.exception('fetch_devtools basarisiz')
         return Response({
             'success': False,
-            'message': str(e),
+            'message': GENEL_SUNUCU_HATASI,
             'count': 0,
             'data': []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -635,10 +652,11 @@ def clear_devtools_cache(request):
             'success': True,
             'message': 'DevTools cache ve veritabani temizlendi'
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('clear_devtools_cache basarisiz')
         return Response({
             'success': False,
-            'message': str(e)
+            'message': GENEL_SUNUCU_HATASI
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -744,10 +762,11 @@ def fetch_ai_news(request):
             'data': []
         })
 
-    except Exception as e:
+    except Exception:
+        logger.exception('fetch_ai_news basarisiz')
         return Response({
             'success': False,
-            'message': str(e),
+            'message': GENEL_SUNUCU_HATASI,
             'count': 0,
             'data': []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -766,10 +785,11 @@ def clear_ai_cache(request):
             'success': True,
             'message': 'AI cache ve veritabani temizlendi'
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('clear_ai_cache basarisiz')
         return Response({
             'success': False,
-            'message': str(e)
+            'message': GENEL_SUNUCU_HATASI
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
