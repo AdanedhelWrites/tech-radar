@@ -42,7 +42,7 @@ jobs:
           persist-credentials: false
 
       - name: Trivy kur
-        uses: $/.github/actions/setup-trivy
+        uses: ./.github/actions/setup-trivy
 
       - name: Tara
         run: |
@@ -134,7 +134,7 @@ jobs:
         run: docker build -t "tech-radar-${NAME}:${GITHUB_SHA}" "${CONTEXT}"
 
       - name: Trivy kur
-        uses: $/.github/actions/setup-trivy
+        uses: ./.github/actions/setup-trivy
 
       - name: Tara
         env:
