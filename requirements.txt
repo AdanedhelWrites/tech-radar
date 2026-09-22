@@ -1,5 +1,5 @@
-Django==4.2.30
-djangorestframework==3.17.2  # DRF 3.18+ django>=5.2 ister; Django 4.2 LTS hattinda kaliyoruz
+Django==5.2.16
+djangorestframework==3.18.1
 django-redis==5.4.0
 django-cors-headers==4.9.0
 django-celery-beat==2.9.0
@@ -11,5 +11,5 @@ gunicorn==22.0.0
 celery==5.6.3
 python-dateutil==2.9.0.post0
 whitenoise==6.12.0
-psycopg2-binary==2.9.12
+psycopg2-binary==2.9.13
 drf-spectacular[sidecar]==0.30.0
