@@ -981,4 +981,5 @@ kubectl delete namespace teknoloji-haberleri
 
 ## Lisans
 
-MIT License
+Bu proje MIT lisansi ile yayimlanmistir. Tam metin icin [LICENSE](LICENSE)
+dosyasina bakin.
