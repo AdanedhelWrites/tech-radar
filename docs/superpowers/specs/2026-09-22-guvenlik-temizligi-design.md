@@ -1,7 +1,12 @@
 # Guvenlik Temizligi — Tasarim
 
 - **Tarih:** 2026-09-22
-- **Durum:** Onaylandi, uygulama plani bekleniyor
+- **Durum:** UYGULANDI (2026-09-22). Sonuc: Dependabot 14 -> **0**,
+  code scanning 89 -> **11**. Kalan 11'in tamami bolum 7'deki bilinerek
+  kabul edilenlerdir; ikisi bu is sirasinda eklendi (setuptools yukseltmesi
+  iki `pip install` satiri getirdi, Scorecard bunlari "pipCommand not pinned
+  by hash" sayiyor — ayni kategoride zaten kabul edilmis bir bulgu turu).
+  `VulnerabilitiesID` 15 acikten 1'e dustu (skor 0 -> 9).
 - **Kapsam:** Depodaki tum acik guvenlik bulgularinin (Dependabot + GitHub code
   scanning) kapatilmasi ya da bilinerek kabul edilmesi
 - **Baslangic durumu:** Dependabot 14 acik, code scanning 89 acik
