@@ -4,7 +4,7 @@
 # ============================================
 
 # --- Stage 1: Build ---
-FROM node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e AS builder
+FROM node:22-alpine@sha256:b6f26b36c8ff49624cfdac716b8ea1138d606df02586a77d364bb5536a634f85 AS builder
 
 RUN apk upgrade --no-cache
 
