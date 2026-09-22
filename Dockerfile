@@ -13,6 +13,12 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Taban imajin getirdigi setuptools'a gomulu paketlerde (jaraco.context, wheel)
+# acik var; bunlar requirements.txt'te olmadigi icin ancak boyle kapanir.
+# pip BILEREK yukseltilmiyor: pip 26.x kendi _vendor agacinda acikli msgpack
+# tasiyor ve trivy onu da sayiyor, yani yukseltmek net kazanc birakmiyor.
+RUN pip install --no-cache-dir --upgrade setuptools wheel
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
@@ -24,6 +30,9 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libpq5 \
     netcat-traditional \
     && rm -rf /var/lib/apt/lists/*
+
+# Son imajda kalan setuptools bu asamadan gelir; builder'i yukseltmek yetmez.
+RUN pip install --no-cache-dir --upgrade setuptools wheel
 
 # Non-root user
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
