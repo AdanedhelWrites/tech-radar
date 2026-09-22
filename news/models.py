@@ -8,7 +8,9 @@ class NewsArticle(models.Model):
     original_description = models.TextField(verbose_name='Orijinal Aciklama', blank=True)
     turkish_description = models.TextField(verbose_name='Turkce Aciklama', blank=True)
     turkish_summary = models.TextField(verbose_name='Turkce Ozet', blank=True)
-    link = models.URLField(verbose_name='Link')
+    # Yazma yolu update_or_create(link=...) ile calisiyor, yani tekilligi zaten
+    # varsayiyor; kisit semada da olmali (ADR-0005 upsert anahtari).
+    link = models.URLField(unique=True, verbose_name='Link')
     date = models.DateField(verbose_name='Tarih')
     original_date = models.CharField(max_length=100, verbose_name='Orijinal Tarih')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
