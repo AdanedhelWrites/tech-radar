@@ -12,7 +12,7 @@ import {
   FaEnvelope, FaSearch, FaBolt, FaGraduationCap,
   FaToolbox, FaTag
 } from 'react-icons/fa'
-import { devtoolsApi } from '../services/api'
+import { devtoolsApi, istekHataMesaji } from '../services/api'
 
 const sources = [
   { id: 'dt_source1', name: 'MinIO', value: 'MinIO', icon: FaDatabase, color: '#c72c48' },
@@ -109,7 +109,7 @@ function DevToolsComponent() {
         setError(response.data.message)
       }
     } catch (err) {
-      setError('DevTools güncellemeleri getirilirken hata oluştu: ' + err.message)
+      setError(istekHataMesaji(err, 'DevTools güncellemeleri getirilirken hata oluştu'))
     } finally {
       setFetching(false)
     }

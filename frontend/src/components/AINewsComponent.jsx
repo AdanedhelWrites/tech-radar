@@ -10,7 +10,7 @@ import {
   FaChartBar, FaCogs, FaExternalLinkAlt,
   FaRobot, FaMicrochip
 } from 'react-icons/fa'
-import { aiApi } from '../services/api'
+import { aiApi, istekHataMesaji } from '../services/api'
 
 const sources = [
   { id: 'ai_source1', name: 'Hugging Face', value: 'Hugging Face', icon: FaRobot, color: '#ffb300' },
@@ -104,7 +104,7 @@ function AINewsComponent() {
         setError(response.data.message)
       }
     } catch (err) {
-      setError('AI haberleri getirilirken hata oluştu: ' + err.message)
+      setError(istekHataMesaji(err, 'AI haberleri getirilirken hata oluştu'))
     } finally {
       setFetching(false)
     }

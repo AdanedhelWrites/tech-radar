@@ -11,7 +11,7 @@ import {
   FaCalendarWeek, FaInfoCircle, FaServer,
   FaBell, FaGoogle, FaCode
 } from 'react-icons/fa'
-import { sreApi } from '../services/api'
+import { sreApi, istekHataMesaji } from '../services/api'
 
 const sources = [
   { id: 'sre_source1', name: 'SRE Weekly', value: 'SRE Weekly', icon: FaCalendarWeek, color: '#e74c3c' },
@@ -103,7 +103,7 @@ function SREComponent() {
         setError(response.data.message)
       }
     } catch (err) {
-      setError('SRE haberleri getirilirken hata oluştu: ' + err.message)
+      setError(istekHataMesaji(err, 'SRE haberleri getirilirken hata oluştu'))
     } finally {
       setFetching(false)
     }

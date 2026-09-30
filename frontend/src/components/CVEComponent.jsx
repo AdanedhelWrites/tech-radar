@@ -11,7 +11,7 @@ import {
   FaCalendar, FaExternalLinkAlt,
   FaDatabase, FaGithub, FaShieldVirus, FaGlobe, FaClock
 } from 'react-icons/fa'
-import { cveApi } from '../services/api'
+import { cveApi, istekHataMesaji } from '../services/api'
 
 const sources = [
   { id: 'source1', name: 'NVD', value: 'NVD', icon: FaDatabase, color: '#3498db' },
@@ -106,7 +106,7 @@ function CVEComponent() {
         setError(response.data.message)
       }
     } catch (err) {
-      setError('CVE verileri getirilirken hata oluştu: ' + err.message)
+      setError(istekHataMesaji(err, 'CVE verileri getirilirken hata oluştu'))
     } finally {
       setFetching(false)
     }

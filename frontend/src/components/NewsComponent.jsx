@@ -10,7 +10,7 @@ import {
   FaNewspaper, FaChartBar, FaCogs,
   FaSkullCrossbones, FaLaptopCode, FaShieldAlt, FaMoon, FaUserSecret
 } from 'react-icons/fa'
-import { newsApi } from '../services/api'
+import { newsApi, istekHataMesaji } from '../services/api'
 
 const sources = [
   { id: 'source1', name: 'The Hacker News', value: 'The Hacker News', icon: FaSkullCrossbones, color: '#e74c3c' },
@@ -98,7 +98,7 @@ function NewsComponent() {
         setError(response.data.message)
       }
     } catch (err) {
-      setError('Siber güvenlik haberleri getirilirken hata oluştu: ' + err.message)
+      setError(istekHataMesaji(err, 'Siber güvenlik haberleri getirilirken hata oluştu'))
     } finally {
       setFetching(false)
     }
