@@ -52,6 +52,7 @@ jobs:
             --severity HIGH,CRITICAL \
             --list-all-pkgs \
             --skip-dirs _arsiv \
+            --helm-set secrets.secretKey=trivy-tarama-icin-sahte-deger \
             --no-progress --skip-db-update \
             --format json --output trivy-fs.json
 

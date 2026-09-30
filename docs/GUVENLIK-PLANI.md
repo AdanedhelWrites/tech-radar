@@ -1,6 +1,6 @@
 # Güvenlik Hattı ve Bekleyen İşler Planı
 
-> Son güncelleme: 2026-09-14 (P0 tamamlandı). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
+> Son güncelleme: 2026-09-30 (P1, P2, P4 SECRET_KEY tamamlandı). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
 > Bir iş bitince kutusunu işaretle ve ilgili PR numarasını yanına yaz.
 
 ## 1. Hatlar ne zaman çalışır?
@@ -65,39 +65,40 @@ gh api "repos/AdanedhelWrites/tech-radar/dependabot/alerts?state=open&per_page=1
 
 > Not: P1 bitene kadar Dependabot, python-minor-patch grubunu her pazartesi aynı çelişkiyle yeniden açabilir. Kırmızıysa kapat; kalıcı çözüm P1.
 
-### P1: Django 4.2 → 5.2 yükseltmesi (mecburi, öncelikli)
+### P1: Django 4.2 → 5.2 yükseltmesi ✅ (2026-09-22)
+Uygulandı: Django 5.2.16 (2026-09-22), 5.2.17 PR #43 (2026-09-30). Ayrıntı: superpowers/specs/2026-09-22-guvenlik-temizligi-design.md.
 Django 4.2 LTS'nin desteği Nisan 2026'da bitti. Açık Dependabot alert'lerinin çoğu Django'ya ait (2 critical, 14 high).
 Dependabot PR #5 tek başına kırıldı, çünkü `django-celery-beat 2.5.0` `Django<5.0` istiyor.
 
-- [ ] `chore/django-5.2` branch'i aç (PR #5 ve #25 kapatıldı, işler burada)
-- [ ] `requirements.txt` içinde birlikte yükselt (sürümleri uygularken PyPI'dan tekrar kontrol et; 2026-09-13 itibarıyla):
-  - [ ] `Django` 4.2.7 → 5.2.x
-  - [ ] `django-celery-beat` 2.5.0 → 2.9.x
-  - [ ] `django-redis` 5.4.0 → 7.x (**major**, changelog oku)
-  - [ ] `django-cors-headers` 4.3.1 → 4.9.x
-  - [ ] `whitenoise` 6.6.0 → 6.12.x
-  - [ ] `celery` 5.3.4 → 5.6.x
-  - [ ] `gunicorn` 21.2.0 → güncel (2 high alert)
-  - [ ] `requests` 2.31.0 → güncel (3 medium alert)
-  - [ ] `djangorestframework` 3.17.2 → 3.18.x (Django 5.2 ister)
-  - [ ] `redis` (py) 5.0.1 → django-redis 7 ile uyumlu sürüm
-- [ ] `cybernews/settings.py`: `STATICFILES_STORAGE` Django 5.1'de kaldırıldı, `STORAGES`'a geç:
+- [x] `chore/django-5.2` branch'i aç (PR #5 ve #25 kapatıldı, işler burada)
+- [x] `requirements.txt` içinde birlikte yükselt (sürümleri uygularken PyPI'dan tekrar kontrol et; 2026-09-13 itibarıyla):
+  - [x] `Django` 4.2.7 → 5.2.x
+  - [x] `django-celery-beat` 2.5.0 → 2.9.x
+  - [x] `django-redis` 5.4.0 → 7.x (**major**, changelog oku)
+  - [x] `django-cors-headers` 4.3.1 → 4.9.x
+  - [x] `whitenoise` 6.6.0 → 6.12.x
+  - [x] `celery` 5.3.4 → 5.6.x
+  - [x] `gunicorn` 21.2.0 → güncel (2 high alert)
+  - [x] `requests` 2.31.0 → güncel (3 medium alert)
+  - [x] `djangorestframework` 3.17.2 → 3.18.x (Django 5.2 ister)
+  - [x] `redis` (py) 5.0.1 → django-redis 7 ile uyumlu sürüm
+- [x] `cybernews/settings.py`: `STATICFILES_STORAGE` Django 5.1'de kaldırıldı, `STORAGES`'a geç:
   ```python
   STORAGES = {
       "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
       "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
   }
   ```
-- [ ] CI yeşil olmalı: 140+ test, `makemigrations --check`. celery-beat yeni migration getirir; migration'ı commit'le
-- [ ] Lokal `docker compose` smoke testi: API, worker, beat ayağa kalkıyor mu
-- [ ] Canlıya alırken migration sonrası **api / worker / scheduler restart** (migration 0008 dersi)
+- [x] CI yeşil olmalı: 140+ test, `makemigrations --check`. celery-beat yeni migration getirir; migration'ı commit'le
+- [x] Lokal `docker compose` smoke testi: API, worker, beat ayağa kalkıyor mu
+- [x] Canlıya alırken migration sonrası **api / worker / scheduler restart** (migration 0008 dersi)
 
 ### P2: Frontend bağımlılıkları ve taban imajlar
 - [x] npm: `axios` 1.20.0, `react-router-dom` 6.30.6 (PR #24)
-- [ ] npm: kalan alert'ler için Security → Dependabot'a bak (`vite` 5.4.21, `postcss` 8.5.6 şu anki sürümler); major gerekenler (vite 6+, react 19, react-router 7) ayrı iş
-- [ ] `frontend/Dockerfile`: `node:18-alpine` (EOL) → `node:22-alpine`
+- [x] npm: kalan alert'ler için Security → Dependabot'a bak (`vite` 5.4.21, `postcss` 8.5.6 şu anki sürümler); major gerekenler (vite 6+, react 19, react-router 7) ayrı iş
+- [x] `frontend/Dockerfile`: `node:18-alpine` (EOL) → `node:22-alpine`
 - [x] `frontend/Dockerfile`: `nginx:1.25-alpine` → `nginx:1.31-alpine` (PR #11)
-- [ ] `docker-compose.yml`: `node:18-alpine` → `node:22-alpine`
+- [x] `docker-compose.yml`: `node:18-alpine` → `node:22-alpine`
 - [x] `trivy` → `Imaj (frontend)`: OS EOSL=false (PR #11 koşusunda doğrulandı)
 
 ### P3: Zorunlu status check'ler
@@ -109,12 +110,12 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapanacak; triaj kalanlara yap
 - [ ] Security → Code scanning → Tool status: eski Trivy yapılandırmasını (kategorisiz, ~76 alert) sil. Yeni kategoriler `trivy-fs`, `trivy-image-backend`, `trivy-image-frontend`
 - [ ] CodeQL'deki 16 açık alert'i incele: düzelt ya da gerekçesiyle "dismiss" et
 - [ ] Trivy misconfig bulguları (Helm/k8s: securityContext, resource limit vb.) → Faz B Kubernetes doğrulamasıyla birlikte ele al
-- [ ] `docker-compose.yml` içindeki `SECRET_KEY=your-secret-key-here...` placeholder'ını `.env` dosyasına taşı
-- [ ] **Varsayılan SECRET_KEY ile deploy riski:** `helm/tech-radar/values.yaml`, `values.yaml`, `k8s/02-secret.yaml` ve README'de örnek (Türkçe cümle) `SECRET_KEY` değerleri var. Bunlarla deploy edilirse anahtar herkesçe bilinir (session/CSRF imzası taklit edilebilir). Çözüm:
-  - helm: `secretKey`'i boş bırak, template'te `required "secretKey zorunlu"` kullan
-  - k8s: `02-secret.yaml`'ı örnek dosyaya (`02-secret.example.yaml`) çevir
-  - `settings.py`: `DEBUG=False` iken `SECRET_KEY` yoksa ya da bilinen placeholder ise başlatmayı reddet
-  - Bu 5 örnek değer `.gitleaksignore`'da baseline olarak duruyor; değerler kaldırılınca baseline'dan da silinmeli
+- [x] `docker-compose.yml` içindeki `SECRET_KEY=your-secret-key-here...` placeholder'ını `.env` dosyasına taşı
+- [x] **Varsayılan SECRET_KEY ile deploy riski:** `helm/tech-radar/values.yaml`, `values.yaml`, `k8s/02-secret.yaml` ve README'de örnek (Türkçe cümle) `SECRET_KEY` değerleri var. Bunlarla deploy edilirse anahtar herkesçe bilinir (session/CSRF imzası taklit edilebilir). Çözüm:
+  - helm: `secretKey` boş, template'te `required` ✅
+  - k8s: `02-secret.yaml` → `02-secret.yaml.example` ✅ (uzantı `.yaml` ile bitmez: `kubectl apply -f k8s/` onu atlar)
+  - `settings.py`: `DEBUG=False` iken boş/örnek/zayıf `SECRET_KEY` ile açılmayı reddeder ✅ (`cybernews/ayar_dogrulama.py`)
+  - `.gitleaksignore` **değiştirilmedi**: girdiler geçmiş commit'lere sabitli; silinirse geçmiş taraması yeniden kırmızı olur. (İlk plandaki "baseline'dan da silinmeli" maddesi bu yüzden geçersiz.)
 
 ### P5: Görünürlük
 - [ ] ZAP sonucunu SARIF'e çevirip Security sekmesine yükle; tek kontrol yeri Security olsun
@@ -127,3 +128,5 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapanacak; triaj kalanlara yap
 - **2026-09-14:** PR #4 (`djangorestframework` 3.14.0 → 3.17.2) ve PR #6 (`lxml` 5.3.0 → 6.1.0, XXE düzeltmesi) yeni CI ile, birlikte 140/140 test yeşil doğrulanıp merge edildi.
 - **2026-09-14:** P0 triajı tamamlandı: #24 ve #11 merge edildi, #5 ve #25 kapatıldı → P1.
 - **2026-09-14:** gitleaks `main`'de #3'ten beri her push'ta kırmızıydı. Sebep workflow hatası: runner `bash -e` ile koştuğu için rapor modunda sızıntı bulununca adım erken ölüyordu. `set +e` ile düzeltildi. Bulunan 5 bulgunun hepsi placeholder `SECRET_KEY`; `.gitleaksignore`'a baseline olarak eklendi, deploy riski P4'te.
+- **2026-09-22:** Güvenlik temizliği: P1 ve P2 uygulandı, Dependabot 14 → 0, code scanning 89 → 11 (ayrıntı: superpowers/specs/2026-09-22-guvenlik-temizligi-design.md).
+- **2026-09-30:** PR #43 (Django 5.2.17) merge. P4 SECRET_KEY/ALLOWED_HOSTS koruması (superpowers/specs/2026-09-30-hizli-isler-design.md).

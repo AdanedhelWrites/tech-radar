@@ -299,7 +299,9 @@ config:
 # external-secrets, sealed-secrets veya vault kullanin.
 # -------------------------------------------------------
 secrets:
-  secretKey: "buraya-guclu-rastgele-secret-key-yazin-min-50-karakter"
+  # Zorunlu; bos birakilirsa `helm install` hata verir. Uretmek icin: openssl rand -hex 32
+  # Ornek: helm install ... --set secrets.secretKey="$(openssl rand -hex 32)"
+  secretKey: ""
   dbUser: "cybernews"
   dbPassword: "buraya-guclu-sifre-yazin"
   postgresPassword: "buraya-guclu-sifre-yazin"

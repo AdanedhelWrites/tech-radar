@@ -465,7 +465,7 @@ cybersecurity_news/
 ├── k8s/                        # Kubernetes manifest'leri (kubectl apply)
 │   ├── 00-namespace.yaml
 │   ├── 01-configmap.yaml       # Uygulama ayarlari
-│   ├── 02-secret.yaml          # Gizli bilgiler (placeholder)
+│   ├── 02-secret.yaml.example  # Secret ornegi (dogrudan uygulanmaz)
 │   ├── 03-postgresql.yaml      # PostgreSQL (opsiyonel)
 │   ├── 04-redis.yaml           # Redis (opsiyonel)
 │   ├── 05-backend.yaml         # Django API Deployment + Service
@@ -492,7 +492,6 @@ cybersecurity_news/
 │       ├── migration-job.yaml  # post-install/post-upgrade hook
 │       └── NOTES.txt           # helm install sonrasi bilgi mesaji
 │
-├── values.yaml                 # Root-level values referansi (Helm chart'a kopyasi)
 ├── docker-compose.yml          # 5 servis (lokal gelistirme)
 ├── Dockerfile                  # Backend multi-stage build
 ├── entrypoint.sh               # Startup: wait-for-db + migrate
@@ -641,11 +640,11 @@ Registry kullandiginizda K8s manifest'lerindeki `image:` degerlerini ve `imagePu
 
 #### Adim 2 — Secret'lari Olusturun
 
-`k8s/02-secret.yaml` dosyasindaki placeholder degerleri gercek degerlerle degistirin:
+`k8s/02-secret.yaml.example` dosyasini `k8s/02-secret.yaml` olarak kopyalayip degerleri doldurun (`k8s/02-secret.yaml` gitignore'dadir):
 
 ```yaml
 stringData:
-  SECRET_KEY: "min-50-karakter-rastgele-guclu-bir-key"
+  SECRET_KEY: ""  # openssl rand -hex 32 — bos, ornek veya 32 karakterden kisa deger uygulamayi acmaz
   DB_USER: "cybernews"
   DB_PASSWORD: "guclu-veritabani-sifresi"
   POSTGRES_PASSWORD: "guclu-veritabani-sifresi"
@@ -720,7 +719,7 @@ Helm chart `helm/tech-radar/` dizininde bulunur. Tum K8s kaynaklarini tek komutl
 ```yaml
 # Onemli degerler:
 secrets:
-  secretKey: "min-50-karakter-rastgele-guclu-bir-key"
+  secretKey: ""  # Zorunlu: openssl rand -hex 32 (bos birakilirsa helm install hata verir)
   dbUser: "cybernews"
   dbPassword: "guclu-veritabani-sifresi"
   postgresPassword: "guclu-veritabani-sifresi"
@@ -873,9 +872,9 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 
 | Degisken | Varsayilan | Aciklama |
 |----------|-----------|----------|
-| `SECRET_KEY` | `django-insecure-...` | Django secret key (production'da mutlaka degistirin) |
+| `SECRET_KEY` | (yok) | Zorunlu (`DEBUG=False` iken). Bos, depodaki ornek degerler, `django-insecure` onekli veya 32 karakterden kisa anahtar uygulamayi acmaz. Compose `.env`'den okur. Uretmek icin `openssl rand -hex 32` |
 | `DEBUG` | `False` | Django debug modu |
-| `ALLOWED_HOSTS` | `*` | Virgulle ayrilmis izinli host listesi |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Virgulle ayrilmis izinli host listesi. Compose `localhost,127.0.0.1,teknoloji-api` verir. Kubernetes probe'lari pod IP'siyle geldigi icin K8s'te acikca ayarlanmali |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,...` | Frontend origin'leri |
 | `CSRF_TRUSTED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Admin oturumuyla POST yapabilecek frontend origin'leri (Vite proxy `changeOrigin` kullandigi icin gerekli) |
 | `GEMINI_API_KEY` | (bos) | Google AI Studio anahtari; bos ise Gemini hic denenmez |
@@ -900,6 +899,10 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `DB_PASSWORD` | _(bos)_ | Veritabani sifresi |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis baglantisi (cache) |
 | `CELERY_BROKER_URL` | `redis://127.0.0.1:6379/1` | Redis baglantisi (Celery broker) |
+
+> **Hostta `manage.py` calistirmak:** `DEBUG` varsayilani `False` oldugu icin anahtarsiz
+> `python manage.py ...` artik reddedilir. Yerelde `DEBUG=True python manage.py ...`
+> kullanin ya da komutu konteynerde calistirin (`docker compose exec teknoloji-api ...`).
 
 ---
 
