@@ -8,3 +8,8 @@
 689581f05dc4553b439d29777b8eb857baf46a9b:k8s/02-secret.yaml:generic-api-key:11
 d4538871e599ef3a2c9f7d6e1d7ccfbd12f024bc:README.md:generic-api-key:483
 d4538871e599ef3a2c9f7d6e1d7ccfbd12f024bc:helm/tech-radar/values.yaml:generic-api-key:268
+
+# 2026-09-30: hizli isler planindaki "eski -> yeni" duzenleme bloklari yukaridaki
+# placeholder'lari alintiliyor (P4'te kaldirilan degerler); gercek secret degil.
+8cf9c8cd6a6d28f9a7855c32f4c4dd8bccf4005f:docs/superpowers/plans/2026-09-30-hizli-isler.md:generic-api-key:553
+8cf9c8cd6a6d28f9a7855c32f4c4dd8bccf4005f:docs/superpowers/plans/2026-09-30-hizli-isler.md:generic-api-key:633
