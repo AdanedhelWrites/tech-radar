@@ -317,3 +317,32 @@ class TopluRefreshTests(RefreshTestMixin, V1TestCase):
 
     def test_tokensiz_401(self):
         self.assertEqual(self.client.post('/api/v1/refresh/').status_code, 401)
+
+
+class TriggerGorevParametreleriTest(RefreshTestMixin, V1TestCase):
+    """Eski /api/*/fetch/ uclari trigger()'a gun/kaynak ve etiket gecirir (2026-09-30)."""
+
+    def test_task_kwargs_skip_existing_ile_birlesir(self):
+        refresh.trigger('cve', task_kwargs={'days': 3, 'selected_sources': ['NVD Guncel']},
+                        trigger_label='admin')
+
+        cagri = self.gorevler['cve'].call_args
+        self.assertEqual(cagri.kwargs['kwargs'],
+                         {'skip_existing': True, 'days': 3, 'selected_sources': ['NVD Guncel']})
+        self.assertEqual(cagri.kwargs['headers'], {'fetchrun_trigger': 'admin'})
+
+    def test_parametresiz_cagri_v1_davranisini_korur(self):
+        refresh.trigger('cve')
+
+        cagri = self.gorevler['cve'].call_args
+        self.assertEqual(cagri.kwargs['kwargs'], {'skip_existing': True})
+        self.assertEqual(cagri.kwargs['headers'], {'fetchrun_trigger': 'api'})
+
+    def test_task_kwargs_soguma_ve_kilidi_atlatmaz(self):
+        ilk = refresh.trigger('sre', task_kwargs={'days': 1})
+        ikinci = refresh.trigger('sre', task_kwargs={'days': 1})
+
+        self.assertEqual(ilk.status, 'started')
+        self.assertEqual(ikinci.status, 'already_running')
+        self.assertEqual(ikinci.job_id, ilk.job_id)
+        self.assertEqual(self.gorevler['sre'].call_count, 1)
