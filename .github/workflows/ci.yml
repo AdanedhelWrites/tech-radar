@@ -136,11 +136,13 @@ jobs:
       - name: helm lint + template
         run: |
           set -euo pipefail
-          helm lint helm/tech-radar
-          helm template tech-radar helm/tech-radar > rendered.yaml
+          # secrets.secretKey bilincli olarak bos ve `required`; CI sahte deger verir
+          helm lint helm/tech-radar --set secrets.secretKey=ci-dogrulama-icin-sahte-deger
+          helm template tech-radar helm/tech-radar --set secrets.secretKey=ci-dogrulama-icin-sahte-deger > rendered.yaml
           kinds=$(grep -cE '^kind:' rendered.yaml || true)
           echo "Helm render: ${kinds} kaynak"
           [ "${kinds}" -ge 5 ] || { echo "::error::Helm chart beklenenden az kaynak uretti (${kinds})"; exit 1; }
 
       - name: docker compose config
-        run: docker compose -f docker-compose.yml config --quiet
+        # SECRET_KEY compose'da `:?` ile zorunlu; CI sahte deger verir
+        run: SECRET_KEY=ci-dogrulama-icin-sahte-deger docker compose -f docker-compose.yml config --quiet
