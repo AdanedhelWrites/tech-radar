@@ -11,7 +11,7 @@ import {
   FaExternalLinkAlt, FaTag, FaCodeBranch,
   FaGithub, FaCloud, FaBug, FaStar, FaCode
 } from 'react-icons/fa'
-import { k8sApi } from '../services/api'
+import { k8sApi, istekHataMesaji } from '../services/api'
 
 const sources = [
   { id: 'k8s_source1', name: 'K8s Blog', value: 'K8s Blog', icon: FaDharmachakra, color: '#326ce5' },
@@ -110,7 +110,7 @@ function KubernetesComponent() {
         setError(response.data.message)
       }
     } catch (err) {
-      setError('Kubernetes haberleri getirilirken hata oluştu: ' + err.message)
+      setError(istekHataMesaji(err, 'Kubernetes haberleri getirilirken hata oluştu'))
     } finally {
       setFetching(false)
     }

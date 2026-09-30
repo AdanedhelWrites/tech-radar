@@ -74,14 +74,14 @@ Dependabot PR #5 tek başına kırıldı, çünkü `django-celery-beat 2.5.0` `D
 - [x] `requirements.txt` içinde birlikte yükselt (sürümleri uygularken PyPI'dan tekrar kontrol et; 2026-09-13 itibarıyla):
   - [x] `Django` 4.2.7 → 5.2.x
   - [x] `django-celery-beat` 2.5.0 → 2.9.x
-  - [x] `django-redis` 5.4.0 → 7.x (**major**, changelog oku)
+  - [ ] `django-redis` 5.4.0 → 7.x (**major**, changelog oku) — ertelendi: 5.4.0 Django 5.2 ile temiz çözülüyor (2026-09-22 dry-run), major yükseltme gerekmedi
   - [x] `django-cors-headers` 4.3.1 → 4.9.x
   - [x] `whitenoise` 6.6.0 → 6.12.x
   - [x] `celery` 5.3.4 → 5.6.x
   - [x] `gunicorn` 21.2.0 → güncel (2 high alert)
   - [x] `requests` 2.31.0 → güncel (3 medium alert)
   - [x] `djangorestframework` 3.17.2 → 3.18.x (Django 5.2 ister)
-  - [x] `redis` (py) 5.0.1 → django-redis 7 ile uyumlu sürüm
+  - [ ] `redis` (py) 5.0.1 → django-redis 7 ile uyumlu sürüm — 5.3.1'de; django-redis 7 yükseltmesine bağlı, ertelendi
 - [x] `cybernews/settings.py`: `STATICFILES_STORAGE` Django 5.1'de kaldırıldı, `STORAGES`'a geç:
   ```python
   STORAGES = {

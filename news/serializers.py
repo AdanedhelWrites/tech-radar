@@ -18,24 +18,28 @@ class CVEEntrySerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+def _kaynak_listesi():
+    """Eski fetch uclarinin kaynak secimi. Bilinmeyen adlari scraper'lar zaten eler;
+    burada yalnizca boyut sinirlanir (anonim istek, 2026-09-30)."""
+    return serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        required=False,
+        allow_empty=True,
+        max_length=20,
+    )
+
+
 class FetchNewsRequestSerializer(serializers.Serializer):
     """Haber çekme isteği serializer"""
     days = serializers.IntegerField(default=7, min_value=1, max_value=30)
-    sources = serializers.ListField(
-        child=serializers.CharField(),
-        required=False,
-        allow_empty=True
-    )
+    sources = _kaynak_listesi()
 
 
 class FetchCVERequestSerializer(serializers.Serializer):
     """CVE çekme isteği serializer"""
-    days = serializers.IntegerField(default=30, min_value=1, max_value=90)
-    sources = serializers.ListField(
-        child=serializers.CharField(),
-        required=False,
-        allow_empty=True
-    )
+    # Varsayilan 7: fetch_cves'in eski davranisi ve fetch_cve_task varsayilani ile ayni
+    days = serializers.IntegerField(default=7, min_value=1, max_value=90)
+    sources = _kaynak_listesi()
 
 
 class KubernetesEntrySerializer(serializers.ModelSerializer):
@@ -49,11 +53,7 @@ class KubernetesEntrySerializer(serializers.ModelSerializer):
 class FetchK8sRequestSerializer(serializers.Serializer):
     """Kubernetes haber cekme istegi serializer"""
     days = serializers.IntegerField(default=30, min_value=1, max_value=90)
-    sources = serializers.ListField(
-        child=serializers.CharField(),
-        required=False,
-        allow_empty=True
-    )
+    sources = _kaynak_listesi()
 
 
 class SREEntrySerializer(serializers.ModelSerializer):
@@ -67,11 +67,7 @@ class SREEntrySerializer(serializers.ModelSerializer):
 class FetchSRERequestSerializer(serializers.Serializer):
     """SRE haber cekme istegi serializer"""
     days = serializers.IntegerField(default=30, min_value=1, max_value=90)
-    sources = serializers.ListField(
-        child=serializers.CharField(),
-        required=False,
-        allow_empty=True
-    )
+    sources = _kaynak_listesi()
 
 
 class DevToolsEntrySerializer(serializers.ModelSerializer):
@@ -85,11 +81,7 @@ class DevToolsEntrySerializer(serializers.ModelSerializer):
 class FetchDevToolsRequestSerializer(serializers.Serializer):
     """DevTools guncelleme cekme istegi serializer"""
     days = serializers.IntegerField(default=60, min_value=1, max_value=120)
-    sources = serializers.ListField(
-        child=serializers.CharField(),
-        required=False,
-        allow_empty=True
-    )
+    sources = _kaynak_listesi()
 
 
 class StatsSerializer(serializers.Serializer):
@@ -111,8 +103,4 @@ class AINewsEntrySerializer(serializers.ModelSerializer):
 class FetchAINewsRequestSerializer(serializers.Serializer):
     """AI Haber cekme istegi serializer"""
     days = serializers.IntegerField(default=30, min_value=1, max_value=90)
-    sources = serializers.ListField(
-        child=serializers.CharField(),
-        required=False,
-        allow_empty=True
-    )
+    sources = _kaynak_listesi()

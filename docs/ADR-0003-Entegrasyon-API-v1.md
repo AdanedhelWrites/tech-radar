@@ -50,6 +50,18 @@ Mevcut `/api/*` uc noktalari bu is icin uygun degildi (2026-09-12 tespiti):
 | Webhook ile push | Delta cekme yeterli goruldu; ertelendi |
 | Retranslate icin `translation_attempted_at` alani | Migration gerektirirdi; 2026-09-12 migration regresyonundan sonra Redis imleci tercih edildi |
 
+### Degisiklik (2026-09-30) — eski fetch uclari v1 kapisindan gecer
+
+Karar 1'in "`news/views.py` dokunulmaz" maddesinden ikinci bilincli sapma
+(birincisi [ADR-0006](ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md) karar 5).
+Eski `POST /api/*/fetch/` uclari anonim kullanima acik kaldi ama artik
+`refresh.trigger()` uzerinden gecer: karar 5'teki bolum kilidi ve 15 dk soguma
+**v1 ile paylasilir**, yani arayuz butonu ve v1 tuketicisi ayni sinira tabidir.
+URL'ler ve basari yaniti zarfi degismedi; yeni olanlar `429 + Retry-After`,
+`job_id` ve `retry_after` alanlaridir. `days`/`sources` alti bolumde de
+serializer ile dogrulanir. Tasarim:
+[`superpowers/specs/2026-09-30-hizli-isler-design.md`](superpowers/specs/2026-09-30-hizli-isler-design.md).
+
 ### Uygulama sirasinda duzeltilen varsayimlar
 
 - **Celery uygulamasi Django surecinde yuklenmiyordu** (`cybernews/__init__.py` bos); `jobs` uc noktasi `DisabledBackend` goruyordu. A2'de duzeltildi, `CELERY_TASK_TRACK_STARTED` eklendi.

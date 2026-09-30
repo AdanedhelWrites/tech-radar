@@ -116,8 +116,13 @@ def get_gate() -> RefreshGate:
 
 
 def trigger(section: str, gate: Optional[RefreshGate] = None,
-            cooldown: Optional[int] = None, lock_ttl: Optional[int] = None) -> TriggerResult:
+            cooldown: Optional[int] = None, lock_ttl: Optional[int] = None,
+            task_kwargs: Optional[dict] = None, trigger_label: str = 'api') -> TriggerResult:
     """Bir bolum icin manuel cekimi baslatir.
+
+    task_kwargs task'a `skip_existing=True` ile birlikte gecer (eski /api/*/fetch/
+    uclarinin gun ve kaynak secimi). trigger_label FetchRun'daki tetikleyicidir.
+    Kilit ve soguma bolum basinadir: parametreler ne olursa olsun paylasilir.
 
     Kontrol sirasi onemlidir: once kilit, sonra soguma. Soguma tetikleme aninda
     baslar; sira ters olsaydi calisan her is icin 'already_running' yerine
@@ -145,9 +150,10 @@ def trigger(section: str, gate: Optional[RefreshGate] = None,
     gate.record_job(job_id, section)
     gate.start_cooldown(section, cooldown)
     try:
-        # FetchRun'da bu isi 'api' olarak isaretlemek icin header eklenir
-        section_tasks()[section].apply_async(kwargs={'skip_existing': True}, task_id=job_id,
-                                              headers={'fetchrun_trigger': 'api'})
+        # FetchRun tetikleyiciyi bu header'dan okur (news/fetch_runs.py)
+        section_tasks()[section].apply_async(kwargs={'skip_existing': True, **(task_kwargs or {})},
+                                              task_id=job_id,
+                                              headers={'fetchrun_trigger': trigger_label})
     except Exception:
         gate.rollback(section, job_id)
         raise

@@ -66,4 +66,9 @@ export const aiApi = {
   exportAINews: () => api.get('/ai/export/'),
 }
 
+// Sunucunun dondurdugu mesaji tercih eder (ornegin soguma: 429 "... N dk sonra tekrar deneyin").
+// Mesaj yoksa (ag hatasi vb.) varsayilan metin + axios hatasi gosterilir.
+export const istekHataMesaji = (err, varsayilan) =>
+  err.response?.data?.message || `${varsayilan}: ${err.message}`
+
 export default api

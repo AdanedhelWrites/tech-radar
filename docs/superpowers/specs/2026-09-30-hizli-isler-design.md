@@ -1,7 +1,7 @@
 # Hizli Isler — Tasarim
 
 - **Tarih:** 2026-09-30
-- **Durum:** Onaylandi (2026-09-30). Plan: [`../plans/2026-09-30-hizli-isler.md`](../plans/2026-09-30-hizli-isler.md)
+- **Durum:** UYGULANDI (2026-09-30). Plan: [`../plans/2026-09-30-hizli-isler.md`](../plans/2026-09-30-hizli-isler.md)
 - **Kapsam:** 2026-09-30 durum raporunun "hizli isler" listesi: eski
   `/api/*/fetch/` uclarinin korunmasi, `SECRET_KEY`/`ALLOWED_HOSTS` korumasi
   (GUVENLIK-PLANI P4), acik Dependabot PR'lari #44 ve #45

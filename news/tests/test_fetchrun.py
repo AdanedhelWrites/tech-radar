@@ -341,19 +341,3 @@ class TetikleyiciTests(TestCase):
         self.assertTrue(sahte_gorev.apply_async.called)
         self.assertEqual(sahte_gorev.apply_async.call_args.kwargs.get('headers'),
                          {'fetchrun_trigger': 'api'})
-
-    def test_views_admin_header_i_gecer(self):
-        """news/views.py::fetch_cves(request) -- satir 200'deki dagitim."""
-        from unittest import mock
-        from rest_framework.test import APIRequestFactory
-        from news import views
-        istek = APIRequestFactory().post('/api/cve/fetch/', {}, format='json')
-        with mock.patch.object(views, 'fetch_cve_task') as gorev:
-            views.fetch_cves(istek)
-
-        self.assertTrue(gorev.apply_async.called, 'views artik apply_async kullanmali')
-        self.assertEqual(gorev.apply_async.call_args.kwargs.get('headers'),
-                         {'fetchrun_trigger': 'admin'})
-        self.assertEqual(gorev.apply_async.call_args.kwargs.get('kwargs'),
-                         {'days': 7, 'selected_sources': None},
-                         'days/selected_sources apply_async donusumunde kaybolmamali')
