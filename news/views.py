@@ -9,7 +9,7 @@ from datetime import datetime
 from .models import (
     NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
 )
-from .tasks import fetch_news_task, fetch_cve_task, fetch_k8s_task, fetch_sre_task, fetch_devtools_task, fetch_ai_news_task
+from .api_v1 import refresh
 from .serializers import (
     NewsArticleSerializer, FetchNewsRequestSerializer,
     CVEEntrySerializer, FetchCVERequestSerializer,
@@ -31,6 +31,65 @@ logger = logging.getLogger(__name__)
 # Istemciye donen genel hata mesaji; gercek istisna sunucu loguna yazilir,
 # yanit govdesine iceri yapisi/dosya yollari/sorgu metnini sizdirmaz.
 GENEL_SUNUCU_HATASI = 'Islem sirasinda sunucuda beklenmeyen bir hata olustu.'
+
+
+# Eski /api/*/fetch/ uclari: bolum -> (istek serializer'i, silinecek frontend cache
+# anahtarlari, mesajdaki ad). Bolum adlari news/api_v1/refresh.py::SECTIONS ile ayni.
+_FETCH_BOLUMLERI = {
+    'news': (FetchNewsRequestSerializer, ('cybersecurity_news', 'last_update'), 'Haber'),
+    'cve': (FetchCVERequestSerializer, ('cve_entries', 'cve_last_update'), 'CVE'),
+    'kubernetes': (FetchK8sRequestSerializer, ('k8s_entries', 'k8s_last_update'), 'K8s haber'),
+    'sre': (FetchSRERequestSerializer, ('sre_entries', 'sre_last_update'), 'SRE haber'),
+    'devtools': (FetchDevToolsRequestSerializer, ('devtools_entries', 'devtools_last_update'), 'DevTools'),
+    'ai': (FetchAINewsRequestSerializer, ('ai_entries', 'ai_last_update'), 'AI haber'),
+}
+
+
+def _tetikle(request, bolum):
+    """Eski fetch uclarinin ortak govdesi: dogrula, v1 kapisindan gecir, yanitla.
+
+    Kilit ve 15 dk soguma v1 (/api/v1/<bolum>/refresh/) ile paylasilir; kaynak
+    sitelere giden yuk tetikleyenden bagimsiz sinirlanir (ADR-0003 karar 5).
+    """
+    serializer_sinifi, cache_anahtarlari, ad = _FETCH_BOLUMLERI[bolum]
+    serializer = serializer_sinifi(data=request.data)
+    if not serializer.is_valid():
+        return Response({'success': False, 'message': 'Gecersiz istek'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        sonuc = refresh.trigger(
+            bolum,
+            task_kwargs={'days': serializer.validated_data['days'],
+                         'selected_sources': serializer.validated_data.get('sources')},
+            # FetchRun.TETIKLEYICILER'de 'admin' "Arayuz" olarak gosterilir
+            trigger_label='admin',
+        )
+    except Exception:
+        logger.exception('%s cekimi tetiklenemedi', bolum)
+        return Response({'success': False, 'message': GENEL_SUNUCU_HATASI, 'count': 0, 'data': []},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    if sonuc.status == 'cooldown':
+        dakika = -(-sonuc.retry_after // 60)  # yukari yuvarla
+        yanit = Response({
+            'success': False,
+            'message': f'{ad} cekimi az once yapildi; {dakika} dk sonra tekrar deneyin.',
+            'retry_after': sonuc.retry_after,
+            'count': 0,
+            'data': [],
+        }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        yanit['Retry-After'] = str(sonuc.retry_after)
+        return yanit
+
+    if sonuc.status == 'started':
+        # Yalniz yeni is basladiysa: calisan is ya da soguma varken silmek listeyi bosaltirdi
+        cache.delete_many(cache_anahtarlari)
+        mesaj = f'{ad} cekimi baslatildi. Otomatik yansiyacak.'
+    else:
+        mesaj = f'{ad} cekimi zaten suruyor. Kayitlar otomatik yansiyacak.'
+    return Response({'success': True, 'message': mesaj, 'job_id': sonuc.job_id,
+                     'count': 0, 'data': []})
 
 
 @api_view(['GET'])
@@ -67,37 +126,8 @@ def get_news(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_news(request):
-    """Yeni Siber Guvenlik Haberlerini cek - ASYNC"""
-    try:
-        days = request.data.get('days', 7)
-        selected_sources = request.data.get('sources', None)
-        
-        # Cache'i hemen temizle - task baslamadan once bosalt ki
-        # polling yeni gelen haberleri direkt gorulsun
-        cache.delete('cybersecurity_news')
-        cache.delete('last_update')
-
-        # Trigger Celery Task
-        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
-        fetch_news_task.apply_async(
-            kwargs={'days': days, 'selected_sources': selected_sources, 'clear_existing': False},
-            headers={'fetchrun_trigger': 'admin'})
-
-        return Response({
-            'success': True,
-            'message': 'Haber cekimi baslatildi. Haberler ekrana otomatik yansiyacak.',
-            'count': 0,
-            'data': []
-        })
-
-    except Exception:
-        logger.exception('fetch_news basarisiz')
-        return Response({
-            'success': False,
-            'message': GENEL_SUNUCU_HATASI,
-            'count': 0,
-            'data': []
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """Siber guvenlik haberi cekimini tetikler (bolum kilidi + soguma, v1 ile ortak)."""
+    return _tetikle(request, 'news')
 
 
 @api_view(['POST'])
@@ -202,34 +232,8 @@ def get_cves(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_cves(request):
-    """Yeni CVE'leri cek - ASYNC"""
-    try:
-        days = request.data.get('days', 7)
-        selected_sources = request.data.get('sources', None)
-
-        cache.delete('cve_entries')
-        cache.delete('cve_last_update')
-
-        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
-        fetch_cve_task.apply_async(
-            kwargs={'days': days, 'selected_sources': selected_sources},
-            headers={'fetchrun_trigger': 'admin'})
-
-        return Response({
-            'success': True,
-            'message': 'CVE cekimi baslatildi. Otomatik yansiyacak.',
-            'count': 0,
-            'data': []
-        })
-
-    except Exception:
-        logger.exception('fetch_cves basarisiz')
-        return Response({
-            'success': False,
-            'message': GENEL_SUNUCU_HATASI,
-            'count': 0,
-            'data': []
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """CVE cekimini tetikler (bolum kilidi + soguma, v1 ile ortak)."""
+    return _tetikle(request, 'cve')
 
 
 @api_view(['POST'])
@@ -339,38 +343,8 @@ def get_k8s(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_k8s(request):
-    """Yeni K8s Haberlerini cek - ASYNC"""
-    serializer = FetchK8sRequestSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'success': False, 'message': 'Gecersiz istek'}, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        days = serializer.validated_data.get('days', 30)
-        selected_sources = serializer.validated_data.get('sources', None)
-
-        cache.delete('k8s_entries')
-        cache.delete('k8s_last_update')
-
-        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
-        fetch_k8s_task.apply_async(
-            kwargs={'days': days, 'selected_sources': selected_sources},
-            headers={'fetchrun_trigger': 'admin'})
-
-        return Response({
-            'success': True,
-            'message': 'K8s haber cekimi baslatildi. Otomatik yansiyacak.',
-            'count': 0,
-            'data': []
-        })
-
-    except Exception:
-        logger.exception('fetch_k8s basarisiz')
-        return Response({
-            'success': False,
-            'message': GENEL_SUNUCU_HATASI,
-            'count': 0,
-            'data': []
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """Kubernetes haber cekimini tetikler (bolum kilidi + soguma, v1 ile ortak)."""
+    return _tetikle(request, 'kubernetes')
 
 
 @api_view(['POST'])
@@ -475,38 +449,8 @@ def get_sre(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_sre(request):
-    """Yeni SRE Haberlerini cek - ASYNC"""
-    serializer = FetchSRERequestSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'success': False, 'message': 'Gecersiz istek'}, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        days = serializer.validated_data.get('days', 30)
-        selected_sources = serializer.validated_data.get('sources', None)
-
-        cache.delete('sre_entries')
-        cache.delete('sre_last_update')
-
-        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
-        fetch_sre_task.apply_async(
-            kwargs={'days': days, 'selected_sources': selected_sources},
-            headers={'fetchrun_trigger': 'admin'})
-
-        return Response({
-            'success': True,
-            'message': 'SRE haber cekimi baslatildi. Otomatik yansiyacak.',
-            'count': 0,
-            'data': []
-        })
-
-    except Exception:
-        logger.exception('fetch_sre basarisiz')
-        return Response({
-            'success': False,
-            'message': GENEL_SUNUCU_HATASI,
-            'count': 0,
-            'data': []
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """SRE haber cekimini tetikler (bolum kilidi + soguma, v1 ile ortak)."""
+    return _tetikle(request, 'sre')
 
 
 @api_view(['POST'])
@@ -604,38 +548,8 @@ def get_devtools(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_devtools(request):
-    """Yeni DevTools Haberlerini cek - ASYNC"""
-    serializer = FetchDevToolsRequestSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'success': False, 'message': 'Gecersiz istek'}, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        days = serializer.validated_data.get('days', 30)
-        selected_sources = serializer.validated_data.get('sources', None)
-
-        cache.delete('devtools_entries')
-        cache.delete('devtools_last_update')
-
-        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
-        fetch_devtools_task.apply_async(
-            kwargs={'days': days, 'selected_sources': selected_sources},
-            headers={'fetchrun_trigger': 'admin'})
-
-        return Response({
-            'success': True,
-            'message': 'DevTools cekimi baslatildi. Otomatik yansiyacak.',
-            'count': 0,
-            'data': []
-        })
-
-    except Exception:
-        logger.exception('fetch_devtools basarisiz')
-        return Response({
-            'success': False,
-            'message': GENEL_SUNUCU_HATASI,
-            'count': 0,
-            'data': []
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """DevTools cekimini tetikler (bolum kilidi + soguma, v1 ile ortak)."""
+    return _tetikle(request, 'devtools')
 
 
 @api_view(['POST'])
@@ -738,38 +652,9 @@ def get_ai_news(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def fetch_ai_news(request):
-    """Yeni AI Haberlerini cek - ASYNC"""
-    serializer = FetchAINewsRequestSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'success': False, 'message': 'Gecersiz istek'}, status=status.HTTP_400_BAD_REQUEST)
+    """AI haber cekimini tetikler (bolum kilidi + soguma, v1 ile ortak)."""
+    return _tetikle(request, 'ai')
 
-    try:
-        days = serializer.validated_data.get('days', 30)
-        selected_sources = serializer.validated_data.get('sources', None)
-
-        cache.delete('ai_entries')
-        cache.delete('ai_last_update')
-
-        # .delay header kabul etmiyor; FetchRun'da isaretlemek icin apply_async kullanilir
-        fetch_ai_news_task.apply_async(
-            kwargs={'days': days, 'selected_sources': selected_sources},
-            headers={'fetchrun_trigger': 'admin'})
-
-        return Response({
-            'success': True,
-            'message': 'AI haber cekimi baslatildi. Otomatik yansiyacak.',
-            'count': 0,
-            'data': []
-        })
-
-    except Exception:
-        logger.exception('fetch_ai_news basarisiz')
-        return Response({
-            'success': False,
-            'message': GENEL_SUNUCU_HATASI,
-            'count': 0,
-            'data': []
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
