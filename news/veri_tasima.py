@@ -1,0 +1,75 @@
+"""Faz B1: SQLite <-> PostgreSQL kayipsiz veri tasima yardimcilari (spec 2.3-2.4, 5.3).
+
+Django'nun hazir serilestiricileri kayiplidir: JSON datetime'i milisaniyeye
+kirpar (v1 imleci mikrosaniye tasir), XML metin alanlarini strip eder ve CR'i
+kaybeder. Burada yazim JSON'dur ama datetime isoformat() ile tam yazilir; yukleme
+standart `loaddata`'dir (raw=True: auto_now updated_at'i ezmez; sequence'leri
+kendisi sifirlar).
+
+Ozet serilestiriciden bagimsizdir: iki veritabaninda ayni cikiyorsa tasima kayipsizdir.
+"""
+import hashlib
+import json
+from datetime import datetime
+
+from django.apps import apps
+from django.core import serializers
+from django.core.serializers.json import DjangoJSONEncoder
+
+# migrate'in kendisinin urettigi ya da tasinmasi anlamsiz tablolar
+HARIC = frozenset({
+    'contenttypes.contenttype', 'auth.permission', 'sessions.session', 'admin.logentry',
+})
+
+
+class TamHassasKodlayici(DjangoJSONEncoder):
+    """DjangoJSONEncoder'in datetime'i milisaniyeye kirpmasini engeller."""
+
+    def default(self, o):
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
+
+
+def tasinacak_modeller():
+    """Tasinacak modeller, yukleme sirasina gore (bagimlilar sonra)."""
+    adaylar = [
+        model for model in apps.get_models()
+        if not model._meta.proxy and model._meta.managed
+        and model._meta.label_lower not in HARIC
+    ]
+    return serializers.sort_dependencies([(None, adaylar)], allow_cycles=True)
+
+
+def _kanonik(deger):
+    if isinstance(deger, datetime):
+        return deger.isoformat()
+    if isinstance(deger, (dict, list)):
+        # jsonb nesne anahtar sirasini korumaz; listeler sirayi korur
+        return json.dumps(deger, sort_keys=True, ensure_ascii=False)
+    return deger
+
+
+def ozet():
+    """Model basina (etiket, satir sayisi, tum alanlarin sha256'si, delta sha256'si).
+
+    Delta ozeti v1 imlec sirasidir: updated_at ASC, id ASC. updated_at alani
+    olmayan modelde '-'.
+    """
+    satirlar = []
+    for model in tasinacak_modeller():
+        alanlar = [alan.attname for alan in model._meta.concrete_fields]
+        alan_ozeti = hashlib.sha256()
+        sayi = 0
+        for satir in model._default_manager.order_by('pk').values_list(*alanlar).iterator():
+            sayi += 1
+            alan_ozeti.update(repr(tuple(_kanonik(v) for v in satir)).encode('utf-8'))
+        delta = '-'
+        if any(alan.name == 'updated_at' for alan in model._meta.concrete_fields):
+            delta_ozeti = hashlib.sha256()
+            sirali = model._default_manager.order_by('updated_at', 'id')
+            for guncellendi, kimlik in sirali.values_list('updated_at', 'id').iterator():
+                delta_ozeti.update(f'{guncellendi.isoformat()}|{kimlik};'.encode('utf-8'))
+            delta = delta_ozeti.hexdigest()
+        satirlar.append((model._meta.label, sayi, alan_ozeti.hexdigest(), delta))
+    return satirlar
