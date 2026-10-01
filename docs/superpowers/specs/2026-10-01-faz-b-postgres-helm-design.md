@@ -162,6 +162,15 @@ gibi gorunmemeli; hata acilista gorunur olmali.
 
 ### 5.2 Compose
 
+> **Degisiklik (2026-10-02, kullanici karari):** CyberNews kendi PostgreSQL servisini tasimaz.
+> Ayri repo `yerel-platform` kullanicinin kisisel uygulamalari icin tek bir PostgreSQL 16.15
+> calistirir (`yerel-postgres`, ag `yerel-platform`, `127.0.0.1:5432`, uygulama basina DB +
+> kullanici). Compose `DB_HOST=yerel-postgres`, dis ag `yerel-platform` ve `.env`'deki
+> `DB_PASSWORD`'u kullanir. Kubernetes'te chart varsayilani yine kendi PostgreSQL'idir
+> (baskalari icin degisiklik yok); yerel kurulum `postgresql.enabled=false` ile platforma
+> baglanabilir, ancak compose yigini ile ayni anda ayni veritabanina degil (iki Beat):
+> Kubernetes icin ayri `cybernews_k8s` acilir. Asagidaki ilk tasarim tarihcedir.
+
 - Yeni servis `teknoloji-postgres`: `postgres:16-alpine@sha256:<digest>` (plan digest'i yazar),
   `POSTGRES_DB=cybernews`, `POSTGRES_USER=cybernews`,
   `POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?...}`, isimli volume `teknoloji-postgres-data`,
