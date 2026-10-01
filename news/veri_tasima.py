@@ -73,3 +73,27 @@ def ozet():
             delta = delta_ozeti.hexdigest()
         satirlar.append((model._meta.label, sayi, alan_ozeti.hexdigest(), delta))
     return satirlar
+
+
+def yaz(akis):
+    """Tasinacak tum modelleri `akis`'a tam hassasiyetli JSON olarak yazar.
+
+    pk'ler aynen yazilir (dogal birincil anahtar kullanilmaz; auth.User pk'si
+    korunur). Dogal yabanci anahtarlar ContentType/Permission referanslari
+    icindir: hedefte bu tablolari migrate yeniden uretir.
+    Donus: model etiketi -> yazilan nesne sayisi.
+    """
+    sayilar = {}
+
+    def nesneler():
+        for model in tasinacak_modeller():
+            sayi = 0
+            for nesne in model._default_manager.order_by('pk').iterator():
+                sayi += 1
+                yield nesne
+            sayilar[model._meta.label] = sayi
+
+    serializers.serialize(
+        'json', nesneler(), stream=akis, cls=TamHassasKodlayici, indent=1,
+        use_natural_foreign_keys=True, use_natural_primary_keys=False)
+    return sayilar

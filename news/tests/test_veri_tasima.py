@@ -5,13 +5,17 @@ eklenir: yazilan dosya standart loaddata ile yuklenince ozet birebir ayni kalmal
 """
 import io
 import json
+import os
+import tempfile
 from datetime import date, datetime, timezone
 
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.serializers.json import DjangoJSONEncoder
 from django.test import SimpleTestCase, TestCase
+from rest_framework.authtoken.models import Token
 
-from news.models import CVEEntry, FetchRun
+from news.models import CVEEntry, FetchRun, NewsArticle
 from news.veri_tasima import TamHassasKodlayici, ozet, tasinacak_modeller
 
 AN = datetime(2026, 9, 18, 12, 41, 6, 25667, tzinfo=timezone.utc)
@@ -94,3 +98,64 @@ class OzetTests(TestCase):
         for satir in satirlar:
             self.assertEqual(len(satir.split(' ')), 4, satir)
         self.assertIn('news.CVEEntry 1 ', cikti.getvalue())
+
+
+class GidisDonusTests(TestCase):
+    """dump -> tabloyu bosalt -> loaddata: ozet birebir ayni (spec 2.4)."""
+
+    def setUp(self):
+        kullanici = get_user_model().objects.create_user('tasima')
+        Token.objects.create(user=kullanici)
+        NewsArticle.objects.create(
+            source='Ornek', original_title='Baslik ', turkish_title='Baslik',
+            link='https://ornek.com/haber-1', date=date(2026, 9, 18), original_date='18 Sep 2026')
+        cve = cve_olustur()
+        CVEEntry.objects.filter(pk=cve.pk).update(updated_at=AN)
+        FetchRun.objects.create(section='cve', status='success',
+                                by_provider={'libretranslate': 2, 'gemini': 1})
+
+    def _dump(self):
+        yol = os.path.join(tempfile.mkdtemp(), 'dump.json')
+        call_command('veri_tasi_dump', yol, stderr=io.StringIO())
+        return yol
+
+    def _hepsini_sil(self):
+        for model in reversed(tasinacak_modeller()):
+            model._default_manager.all().delete()
+
+    def test_gidis_donus_ozet_birebir(self):
+        once = ozet()
+        yol = self._dump()
+        self._hepsini_sil()
+        self.assertEqual(CVEEntry.objects.count(), 0)
+        call_command('loaddata', yol, verbosity=0)
+        self.assertEqual(ozet(), once)
+
+    def test_metin_ve_mikrosaniye_aynen_doner(self):
+        yol = self._dump()
+        with open(yol, encoding='utf-8') as dosya:
+            self.assertIn('2026-09-18T12:41:06.025667+00:00', dosya.read())
+        self._hepsini_sil()
+        call_command('loaddata', yol, verbosity=0)
+        cve = CVEEntry.objects.get(cve_id='CVE-2026-0001')
+        self.assertEqual(cve.original_description, 'Satir bir\r\n \r\nSatir iki ')
+        self.assertEqual(cve.updated_at, AN)
+        self.assertEqual(cve.cwe_ids, ['CWE-79'])
+        self.assertEqual(NewsArticle.objects.get().original_title, 'Baslik ')
+
+    def test_kullanici_pk_ve_token_korunur(self):
+        kullanici = get_user_model().objects.get(username='tasima')
+        pk, anahtar = kullanici.pk, Token.objects.get(user=kullanici).key
+        yol = self._dump()
+        self._hepsini_sil()
+        call_command('loaddata', yol, verbosity=0)
+        self.assertEqual(get_user_model().objects.get(username='tasima').pk, pk)
+        self.assertEqual(Token.objects.get(user__username='tasima').key, anahtar)
+
+    def test_komut_sayilari_stderr_e_yazar(self):
+        hata = io.StringIO()
+        yol = os.path.join(tempfile.mkdtemp(), 'alt', 'dump.json')
+        call_command('veri_tasi_dump', yol, stderr=hata)
+        self.assertTrue(os.path.exists(yol))
+        self.assertIn('news.CVEEntry 1', hata.getvalue())
+        self.assertIn('toplam ', hata.getvalue())
