@@ -1,5 +1,6 @@
 services:
   # Django Backend API
+  # Veritabani: yerel-platform reposundaki paylasilan PostgreSQL (yerel-postgres:5432, DB/kullanici cybernews)
   teknoloji-api:
     build: .
     image: teknoloji-haberleri-api:latest
@@ -11,6 +12,11 @@ services:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY .env icinde tanimli olmali (openssl rand -hex 32)}
       - ALLOWED_HOSTS=localhost,127.0.0.1,teknoloji-api
+      - DB_HOST=yerel-postgres
+      - DB_PORT=5432
+      - DB_NAME=cybernews
+      - DB_USER=cybernews
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD .env icinde tanimli olmali (yerel-platform/scripts/uygulama_ekle.sh cybernews)}
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
@@ -18,12 +24,14 @@ services:
       - RETENTION_DAYS=90
       - GEMINI_CVE_RESERVE=0.5
     depends_on:
-      - teknoloji-redis
+      teknoloji-redis:
+        condition: service_started
     volumes:
       - ./:/app
     restart: unless-stopped
     networks:
       - teknoloji-network
+      - yerel-platform
 
   # React Frontend (Vite Dev Server)
   teknoloji-frontend:
@@ -90,6 +98,11 @@ services:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY .env icinde tanimli olmali (openssl rand -hex 32)}
       - ALLOWED_HOSTS=localhost,127.0.0.1,teknoloji-api
+      - DB_HOST=yerel-postgres
+      - DB_PORT=5432
+      - DB_NAME=cybernews
+      - DB_USER=cybernews
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD .env icinde tanimli olmali (yerel-platform/scripts/uygulama_ekle.sh cybernews)}
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
@@ -97,13 +110,16 @@ services:
       - RETENTION_DAYS=90
       - GEMINI_CVE_RESERVE=0.5
     depends_on:
-      - teknoloji-redis
-      - teknoloji-api
+      teknoloji-redis:
+        condition: service_started
+      teknoloji-api:
+        condition: service_started
     volumes:
       - ./:/app
     restart: unless-stopped
     networks:
       - teknoloji-network
+      - yerel-platform
 
   # Celery Beat Scheduler (Zamanlayıcı)
   teknoloji-scheduler:
@@ -116,16 +132,24 @@ services:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY .env icinde tanimli olmali (openssl rand -hex 32)}
       - ALLOWED_HOSTS=localhost,127.0.0.1,teknoloji-api
+      - DB_HOST=yerel-postgres
+      - DB_PORT=5432
+      - DB_NAME=cybernews
+      - DB_USER=cybernews
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD .env icinde tanimli olmali (yerel-platform/scripts/uygulama_ekle.sh cybernews)}
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
     depends_on:
-      - teknoloji-redis
-      - teknoloji-api
+      teknoloji-redis:
+        condition: service_started
+      teknoloji-api:
+        condition: service_started
     volumes:
       - ./:/app
     restart: unless-stopped
     networks:
       - teknoloji-network
+      - yerel-platform
 
 volumes:
   teknoloji-redis-data:
@@ -134,3 +158,6 @@ volumes:
 networks:
   teknoloji-network:
     driver: bridge
+  # Paylasilan yerel PostgreSQL (ayri repo: yerel-platform). Once orada `docker compose up -d`.
+  yerel-platform:
+    external: true

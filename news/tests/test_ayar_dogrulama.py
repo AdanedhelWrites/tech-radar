@@ -2,11 +2,14 @@
 
 Test kesfi yalniz `news` altinda calistigi icin (manage.py test news) test burada durur.
 """
+from pathlib import Path
+
 from django.core.exceptions import ImproperlyConfigured
+from django.db import connection
 from django.test import SimpleTestCase
 
 from cybernews.ayar_dogrulama import (
-    BILINEN_ORNEKLER, GELISTIRME_ANAHTARI, dogrulanmis_secret_key,
+    BILINEN_ORNEKLER, GELISTIRME_ANAHTARI, dogrulanmis_secret_key, veritabani_ayari,
 )
 
 GUCLU = 'a3f1' * 16  # 64 karakter, openssl rand -hex 32 ciktisi uzunlugunda
@@ -58,3 +61,55 @@ class GelistirmedeEsneklikTest(SimpleTestCase):
 
     def test_debug_verilen_anahtari_dogrulamadan_kullanir(self):
         self.assertEqual(dogrulanmis_secret_key('kisa', debug=True), 'kisa')
+
+
+KOK = Path('/uygulama')
+
+
+class VeritabaniAyariTest(SimpleTestCase):
+    """Faz B1 (spec 5.1): DB_HOST doluysa PostgreSQL; bossa yalniz DEBUG=True iken SQLite."""
+
+    def test_db_host_doluysa_postgresql(self):
+        ayar = veritabani_ayari({
+            'DB_HOST': 'teknoloji-postgres', 'DB_NAME': 'ad', 'DB_USER': 'kul',
+            'DB_PASSWORD': 'p', 'DB_PORT': '6543',
+        }, debug=False, base_dir=KOK)['default']
+        self.assertEqual(ayar['ENGINE'], 'django.db.backends.postgresql')
+        self.assertEqual(
+            (ayar['HOST'], ayar['NAME'], ayar['USER'], ayar['PASSWORD'], ayar['PORT']),
+            ('teknoloji-postgres', 'ad', 'kul', 'p', '6543'))
+        self.assertEqual(ayar['CONN_MAX_AGE'], 600)
+        self.assertTrue(ayar['CONN_HEALTH_CHECKS'])
+        self.assertEqual(ayar['OPTIONS'], {'connect_timeout': 10})
+
+    def test_postgresql_varsayilanlari(self):
+        ayar = veritabani_ayari({'DB_HOST': 'h'}, debug=False, base_dir=KOK)['default']
+        self.assertEqual(
+            (ayar['NAME'], ayar['USER'], ayar['PASSWORD'], ayar['PORT']),
+            ('cybernews', 'cybernews', '', '5432'))
+
+    def test_uretimde_db_host_yoksa_reddedilir(self):
+        for ortam in ({}, {'DB_HOST': ''}, {'DB_HOST': '   '}):
+            with self.subTest(ortam=ortam), self.assertRaises(ImproperlyConfigured):
+                veritabani_ayari(ortam, debug=False, base_dir=KOK)
+
+    def test_hata_mesaji_parolayi_icermez(self):
+        with self.assertRaises(ImproperlyConfigured) as baglam:
+            veritabani_ayari({'DB_PASSWORD': 'cok-gizli-parola'}, debug=False, base_dir=KOK)
+        self.assertNotIn('cok-gizli-parola', str(baglam.exception))
+
+    def test_gelistirmede_sqlite(self):
+        ayar = veritabani_ayari({}, debug=True, base_dir=KOK)['default']
+        self.assertEqual(ayar['ENGINE'], 'django.db.backends.sqlite3')
+        self.assertEqual(ayar['NAME'], KOK / 'db.sqlite3')
+
+    def test_database_url_okunmaz(self):
+        """Eski settings DATABASE_URL doluysa PostgreSQL'e geciyor ama degerini hic okumuyordu."""
+        ayar = veritabani_ayari({'DATABASE_URL': 'postgresql'}, debug=True, base_dir=KOK)['default']
+        self.assertEqual(ayar['ENGINE'], 'django.db.backends.sqlite3')
+        with self.assertRaises(ImproperlyConfigured):
+            veritabani_ayari({'DATABASE_URL': 'postgresql'}, debug=False, base_dir=KOK)
+
+    def test_test_ortami_postgresql(self):
+        """settings.py fonksiyona bagli mi: testler yalniz PostgreSQL'de kosar (CI, pg_test.sh)."""
+        self.assertEqual(connection.vendor, 'postgresql')

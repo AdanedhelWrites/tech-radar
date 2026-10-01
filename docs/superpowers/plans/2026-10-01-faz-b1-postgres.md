@@ -32,6 +32,23 @@
 4. **Prova `-p fazb-prova` ile yapilamaz:** `docker-compose.yml`'de `container_name` ve host portlari sabit oldugu icin ikinci bir compose projesi canli konteynerlerle cakisir. Prova (Task 7) `scripts/pg_test.sh`'in kendi konteynerleriyle yapilir ve geri donus yonunu de (PostgreSQL -> SQLite) prova eder.
 5. **Yeni yardimci `scripts/pg_test.sh`** (spec'te yok): tek kullanimlik PostgreSQL + Redis'e karsi `manage.py` calistirir; B2'de de kullanilir.
 
+## Plan Degisikligi (2026-10-02) — paylasilan yerel-platform PostgreSQL
+
+Kullanici karari: CyberNews kendi PostgreSQL servisini tasimaz. Ayri repo
+`C:/Users/Adanedhel/Desktop/OpenCodeProjects/yerel-platform` kullanicinin kisisel uygulamalari
+icin tek bir PostgreSQL 16.15 calistirir: konteyner `yerel-postgres`, ag `yerel-platform`,
+host portu `127.0.0.1:5432`, uygulama basina veritabani + ayni adli kullanici
+(`scripts/uygulama_ekle.sh <ad>`; CREATEDB, CONNECT PUBLIC'ten alinmis). CyberNews icin
+`cybernews` / `cybernews` olusturuldu; parolasi canli kopyanin `.env`'inde **`DB_PASSWORD`**.
+
+- **Task 5b** (commit `a24822a`) Task 5/6'nin ciktisini buna uyarladi: compose'daki
+  `teknoloji-postgres` servisi ve volume'u kalkti; api/worker/scheduler `DB_HOST=yerel-postgres`,
+  `DB_PASSWORD=${DB_PASSWORD:?}` ve dis ag `yerel-platform` kullanir; `.env.example`, README ve
+  CI compose adimi `DB_PASSWORD`'a gecti. Task 5 ve 6'nin asagidaki metni tarihcedir.
+- Prova platformda tekrarlandi (gecici `cybernews_prova` DB'si, sonra silindi): 5223 nesne,
+  ozet ayni, sequence 7/7, ayni kullanici yetkileriyle (CREATEDB) 375 test OK.
+- Test sayisi artik **375** (Task 4 fix turlari +5).
+
 ## Dosya Haritasi
 
 | Dosya | Sorumluluk | Gorev |
@@ -1383,7 +1400,7 @@ Expected: `temizlendi`; `git status` bos. Step 2-3'teki `time` surelerini ve top
 
 > **KONTROL NOKTASI — kullanicidan acik onay al.** Bu gorev canli yigini durdurur. Baslamadan once kullaniciya (a) Task 7 sonuclarini, (b) onerilen pencereyi (asagidaki kurala uyan bir saat) bildir ve "evet" bekle. Onay yoksa durma noktasi burasidir.
 
-**Files:** canli kopyada `git merge` (Task 0-6 commit'leri), `.env` (yalniz `POSTGRES_PASSWORD` eklenir), gecici `.fazb/`
+**Files:** canli kopyada `git merge` (Task 0-6 + 5b commit'leri), gecici `.fazb/` (`.env`'deki `DB_PASSWORD` 2026-10-02'de yazildi)
 
 **Interfaces:**
 - Consumes: `feat/faz-b1-postgres` dali (Task 0-6), Task 7 notlari
@@ -1395,14 +1412,15 @@ Bu gorevdeki TUM komutlar canli kopyada calisir:
 cd C:/Users/Adanedhel/Desktop/OpenCodeProjects/CyberNews/cybersecurity_news
 ```
 
-- [ ] **Step 1: `.env`'e `POSTGRES_PASSWORD` (deger basilmaz)**
+- [ ] **Step 1: On kosullar — platform ayakta, `cybernews` bos, parola `.env`'de (deger basilmaz)**
 
 ```bash
-if grep -qE '^POSTGRES_PASSWORD=.+' .env; then echo VAR; else printf '\nPOSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 24)" >> .env; echo EKLENDI; fi
-grep -c '^POSTGRES_PASSWORD=' .env
+grep -c '^DB_PASSWORD=.\+' .env
+docker inspect -f '{{.State.Health.Status}}' yerel-postgres
+docker exec yerel-postgres psql -U postgres -d cybernews -tAc "select count(*) from information_schema.tables where table_schema='public'"
 ```
 
-Expected: `EKLENDI` (ya da `VAR`); sayi `1`.
+Expected: `1`; `healthy`; `0` (veritabani bos). `yerel-postgres` ayakta degilse yerel-platform'da `docker compose up -d`.
 
 - [ ] **Step 2: Pencere kontrolu (Adim 1)**
 
@@ -1465,8 +1483,7 @@ Expected: toplam nesne sayisi Task 7 ile tutarli (arada yazilan kayitlar kadar f
 - [ ] **Step 6: PostgreSQL'e yukle ve karsilastir (Adim 5)**
 
 ```bash
-docker compose up -d teknoloji-postgres
-until [ "$(docker inspect -f '{{.State.Health.Status}}' teknoloji-postgres)" = healthy ]; do sleep 2; done; echo pg_healthy
+until [ "$(docker inspect -f '{{.State.Health.Status}}' yerel-postgres)" = healthy ]; do sleep 2; done; echo pg_healthy
 docker compose run --rm -T --no-deps --entrypoint python teknoloji-api manage.py migrate --noinput
 docker compose run --rm -T --no-deps --entrypoint python teknoloji-api manage.py loaddata /app/.fazb/dump.json
 docker compose run --rm -T --no-deps --entrypoint python teknoloji-api manage.py veri_ozeti > .fazb/ozet_pg.txt
@@ -1485,7 +1502,7 @@ with connection.cursor() as c:
 "
 ```
 
-Expected: `pg_healthy`; migrate `Applying news.0013_link_max_length_500... OK` dahil; `Installed N object(s)`; `OZET_AYNI`; yedi satir `OK`. **`diff` bos degilse ya da bir satir `HATA` ise: DUR, Step 9'daki "Adim 7'den once" geri donusunu kullaniciya oner.**
+Expected: `pg_healthy` (yerel-platform'un `yerel-postgres`'i); migrate `Applying news.0013_link_max_length_500... OK` dahil; `Installed N object(s)`; `OZET_AYNI`; yedi satir `OK`. **`diff` bos degilse ya da bir satir `HATA` ise: DUR, Step 9'daki "Adim 7'den once" geri donusunu kullaniciya oner.**
 
 - [ ] **Step 7: Asili satirlari kapat (Adim 6)**
 
@@ -1525,7 +1542,7 @@ curl -s -o /dev/null -w "frontend:%{http_code}\n" http://localhost:3000/
 docker compose exec -T teknoloji-api python manage.py shell -v 0 -c "from django.db import connection; print(connection.vendor)"
 ```
 
-Expected: 7 servis `Up` (postgres `healthy`); `Ran 370 tests` `OK`; `warnings: {}` `errors: {}`; `health:200` `schema:401` `admin:200` `frontend:200`; `postgresql`.
+Expected: 6 servis `Up` (+ `yerel-postgres` `healthy`); `Ran 375 tests` `OK`; `warnings: {}` `errors: {}`; `health:200` `schema:401` `admin:200` `frontend:200`; `postgresql`.
 
 Uctan uca istemci:
 
@@ -1571,10 +1588,11 @@ Kapilardan biri dusarse: DUR, ciktiyi kullaniciya raporla ve Step 9'daki "Adim 7
 *Adim 7'den once* (Step 8 calismadiysa; SQLite'a dokunulmadi, kayip sifir):
 
 ```bash
-docker compose stop teknoloji-postgres
 git reset --hard "$ONCEKI"        # merge push edilmedi; kullanici onayi sart
-docker rm -f teknoloji-postgres   # eski compose bu servisi tanimaz; volume korunur
 docker compose up -d --force-recreate teknoloji-api teknoloji-worker teknoloji-scheduler
+# yeniden denemeden once platformdaki cybernews'i bosalt (parola .env'deki DB_PASSWORD, basilmaz):
+docker exec yerel-postgres psql -U postgres -q -c 'DROP DATABASE cybernews'
+UYGULAMA_PAROLASI="$(sed -n 's/^DB_PASSWORD=//p' .env)" ../../yerel-platform/scripts/uygulama_ekle.sh cybernews
 ```
 
 *Adim 7'den sonra* (PostgreSQL'e yeni kayit yazildiysa): servisleri durdur (Step 3 sirasiyla), `veri_tasi_dump`'i PostgreSQL'den al (Step 5 komutu, `-e DEBUG=True -e DB_HOST=` OLMADAN), `db.sqlite3`'u kenara al, `git reset --hard "$ONCEKI"`, bos SQLite'i `docker compose run --rm -T --no-deps teknoloji-api python manage.py migrate --noinput` ile kur, `loaddata` ile yukle, iki ozeti karsilastir, sonra `up -d --force-recreate`. Bu yol Task 7 Step 4'te prova edildi.
@@ -1625,7 +1643,7 @@ Tasarim sirasindaki problar (2026-09-30) yontemi belirledi:
 
 ## Decision
 1. **Veritabani `DB_HOST`'tan secilir** (`cybernews/ayar_dogrulama.py::veritabani_ayari`). Bossa yalniz `DEBUG=True` iken SQLite; `DEBUG=False` iken acilis reddedilir. `DATABASE_URL` okunmaz.
-2. **Compose'a `teknoloji-postgres`** (16.15, digest'e sabit, isimli volume, hosta port yok); parola `.env`'deki `POSTGRES_PASSWORD`.
+2. **Paylasilan yerel PostgreSQL** (ayri repo `yerel-platform`: `yerel-postgres`, 16.15 digest'e sabit, isimli volume, yalniz `127.0.0.1:5432`, uygulama basina DB + kullanici). CyberNews compose kendi PostgreSQL'ini tasimaz; `DB_HOST=yerel-postgres`, parola `.env`'deki `DB_PASSWORD`.
 3. **Tasima `veri_tasi_dump` + `loaddata`, dogrulama `veri_ozeti`.** Ozet serilestiriciden bagimsizdir (model basina satir sayisi, tum alanlarin ve delta sirasinin sha256'si). Dogal birincil anahtar kullanilmaz: `pk`'ler aynen korunur.
 4. **Migration 0013:** `news`/`cve`/`kubernetes` `link` 200 -> 500 (PostgreSQL `max_length` uygular).
 5. **CI testleri yalniz PostgreSQL'de.**
@@ -1650,6 +1668,7 @@ Tasarim sirasindaki problar (2026-09-30) yontemi belirledi:
 | Ozet farki | yok |
 | Sequence kontrolu | 7/7 OK |
 | Kapatilan asili satir | [olcum] |
+| Prova (platform, cybernews_prova) | 5223 nesne, ozet ayni, sequence 7/7, 375 test OK |
 | Tam kapi | [olcum: test sayisi] test OK, health 200, schema 401, istemci uctan uca |
 | Ilk PostgreSQL cekimi | FetchRun [olcum: id] `success` |
 

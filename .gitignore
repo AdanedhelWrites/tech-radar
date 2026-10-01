@@ -18,6 +18,9 @@ env/
 # Django
 db.sqlite3
 db.sqlite3-journal
+# Faz B1 gecisi: SQLite yedekleri ve hassas tasima dosyalari (dump, ozet)
+db.sqlite3.*
+.fazb/
 staticfiles/
 media/
 *.log
