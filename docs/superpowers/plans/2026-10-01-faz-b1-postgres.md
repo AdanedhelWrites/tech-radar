@@ -1406,7 +1406,7 @@ Expected: `temizlendi`; `git status` bos. Step 2-3'teki `time` surelerini ve top
 - Consumes: `feat/faz-b1-postgres` dali (Task 0-6), Task 7 notlari
 - Produces: PostgreSQL'de calisan canli yigin; `ONCEKI` SHA (geri donus icin); Task 9 icin olcumler (nesne sayilari, sureler, kapatilan satir sayisi, eski en buyuk FetchRun id)
 
-Bu gorevdeki TUM komutlar canli kopyada calisir:
+Bu gorevdeki TUM komutlar canli kopyada calisir. **`export MSYS_NO_PATHCONV=1` sart** (2026-10-02 gecisinde Git Bash `/app/...` yolunu `C:/Program Files/Git/app/...` yapti ve ilk dump konteyner icinde kayboldu):
 
 ```bash
 cd C:/Users/Adanedhel/Desktop/OpenCodeProjects/CyberNews/cybersecurity_news
