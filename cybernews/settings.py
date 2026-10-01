@@ -8,7 +8,7 @@ Docker Compose ve Kubernetes ortamlarında çalışır.
 import os
 from pathlib import Path
 
-from cybernews.ayar_dogrulama import dogrulanmis_secret_key
+from cybernews.ayar_dogrulama import dogrulanmis_secret_key, veritabani_ayari
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -122,34 +122,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'cybernews.wsgi.application'
 
-# Database — PostgreSQL (Kubernetes/Production) veya SQLite (lokal geliştirme)
-# DATABASE_URL set edilmişse PostgreSQL, yoksa SQLite kullanılır
-DATABASE_URL = os.environ.get('DATABASE_URL')
-if DATABASE_URL:
-    # PostgreSQL: DATABASE_URL=postgres://user:pass@host:port/dbname
-    # Veya ayrı ayrı env var'lar ile
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get('DB_NAME', 'cybernews'),
-            'USER': os.environ.get('DB_USER', 'cybernews'),
-            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-            'HOST': os.environ.get('DB_HOST', 'localhost'),
-            'PORT': os.environ.get('DB_PORT', '5432'),
-            'CONN_MAX_AGE': 600,
-            'OPTIONS': {
-                'connect_timeout': 10,
-            },
-        }
-    }
-else:
-    # Lokal geliştirme için SQLite
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+# Database — DB_HOST doluysa PostgreSQL; bossa yalniz DEBUG=True iken SQLite (Faz B1)
+DATABASES = veritabani_ayari(os.environ, DEBUG, BASE_DIR)
 
 # Cache — Redis
 CACHES = {

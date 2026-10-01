@@ -3,7 +3,8 @@
 settings.py bu modulu import eder; Django henuz kurulmamisken calistigi icin
 yalniz django.core.exceptions kullanir.
 """
-from typing import Optional
+from pathlib import Path
+from typing import Mapping, Optional
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -42,3 +43,39 @@ def dogrulanmis_secret_key(anahtar: Optional[str], debug: bool) -> str:
         raise ImproperlyConfigured(
             f'SECRET_KEY en az {MIN_UZUNLUK} karakter olmali. {_URETIM_IPUCU}')
     return anahtar
+
+
+def veritabani_ayari(ortam: Mapping[str, str], debug: bool, base_dir: Path) -> dict:
+    """DATABASES sozlugunu dondurur (Faz B1, spec 5.1).
+
+    DB_HOST doluysa PostgreSQL. Bossa yalniz DEBUG=True iken SQLite: env'i eksik
+    bir pod veya konteyner sessizce gecici bir SQLite yaratip "calisiyormus" gibi
+    gorunmesin, hata acilista gorunsun. DATABASE_URL bilincli olarak okunmaz.
+    Hata mesaji parolayi asla icermez.
+    """
+    host = (ortam.get('DB_HOST') or '').strip()
+    if host:
+        return {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': ortam.get('DB_NAME') or 'cybernews',
+                'USER': ortam.get('DB_USER') or 'cybernews',
+                'PASSWORD': ortam.get('DB_PASSWORD', ''),
+                'HOST': host,
+                'PORT': ortam.get('DB_PORT') or '5432',
+                'CONN_MAX_AGE': 600,
+                'CONN_HEALTH_CHECKS': True,
+                'OPTIONS': {'connect_timeout': 10},
+            }
+        }
+    if not debug:
+        raise ImproperlyConfigured(
+            "DB_HOST tanimli degil: DEBUG=False iken SQLite'a dusulmez. PostgreSQL "
+            "baglantisini DB_HOST, DB_NAME, DB_USER, DB_PASSWORD ile verin "
+            "(yerel gelistirmede DEBUG=True ile SQLite kullanilir).")
+    return {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': base_dir / 'db.sqlite3',
+        }
+    }
