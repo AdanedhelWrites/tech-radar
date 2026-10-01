@@ -468,6 +468,12 @@ degildir.
 
 ## 14. Kapsam disi
 
+- **B3 — Terraform + Argo CD (ayri CD reposu)**, ayri tasarim turu (kullanici karari 2026-10-01).
+  Ekip Terraform ve git'ten yonetilen Argo CD kullaniyor; Ansible kullanmiyor. B3 yalniz yerel
+  `docker-desktop`'ta yapilir (Terraform provider'inda `config_context` sabit; `aks-gokbulut`
+  hic gecmez). Taslak: Terraform Argo CD'yi kurar, Argo CD tech-radar'i CD reposundaki ortam
+  values'undan ceker (K7 surumlemesiyle uyumlu). Sira B1 -> B2 -> B3; yeni GitHub reposu
+  acmak ayrica kullanici onayi ister.
 - Gercek veriyi Kubernetes'e tasimak; registry, imaj yayinlama, gercek kume kurulumu.
 - `django_celery_beat` `DatabaseScheduler` karari (entegrasyon spec'i 16, ertelenen madde 1).
 - Compose worker `--concurrency` ayari (PostgreSQL ile kilit sorunu ortadan kalkar; ayri olcum).
