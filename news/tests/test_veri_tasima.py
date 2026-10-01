@@ -97,10 +97,16 @@ class OzetTests(TestCase):
         self.assertNotEqual(self._delta('news.CVEEntry'), '-')
 
     def test_m2m_degisikligini_yakalar(self):
+        """Grup ve izin onceden olusur: yalniz iliski degisikligi ozeti oynatmali."""
         kullanici = get_user_model().objects.create_user('m2m')
+        grup = Group.objects.create(name='ekip')
+        izin = Permission.objects.get(codename='view_cveentry')
         once = ozet()
-        kullanici.groups.add(Group.objects.create(name='ekip'))
+        kullanici.groups.add(grup)
         self.assertNotEqual(ozet(), once)
+        ara = ozet()
+        kullanici.user_permissions.add(izin)
+        self.assertNotEqual(ozet(), ara)
 
     def test_komut_cikti_bicimi(self):
         cikti = io.StringIO()
@@ -172,6 +178,21 @@ class GidisDonusTests(TestCase):
         kullanici = get_user_model().objects.get(username='tasima')
         self.assertEqual([g.name for g in kullanici.groups.all()], ['ekip'])
         self.assertEqual([p.codename for p in kullanici.user_permissions.all()], ['view_cveentry'])
+
+    def _kayip_iliski_ozeti_degistirir(self, ara_model):
+        once = ozet()
+        yol = self._dump()
+        self._hepsini_sil()
+        call_command('loaddata', yol, verbosity=0)
+        self.assertEqual(ozet(), once)
+        ara_model.objects.all().delete()  # kayipli tasimayi taklit eder
+        self.assertNotEqual(ozet(), once)
+
+    def test_kayip_grup_iliskisi_ozette_gorunur(self):
+        self._kayip_iliski_ozeti_degistirir(get_user_model().groups.through)
+
+    def test_kayip_izin_iliskisi_ozette_gorunur(self):
+        self._kayip_iliski_ozeti_degistirir(get_user_model().user_permissions.through)
 
     @skipIf(os.name == 'nt', 'POSIX dosya izinleri (testler Linux konteynerinde kosar)')
     def test_dump_dosyasi_yalniz_sahibine_acik(self):
