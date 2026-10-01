@@ -33,10 +33,29 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      postgres:
+        image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+        env:
+          POSTGRES_USER: cybernews
+          POSTGRES_PASSWORD: ci-gecici-test
+          POSTGRES_DB: cybernews
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U cybernews -d cybernews"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     env:
       DEBUG: "False"
       REDIS_URL: redis://127.0.0.1:6379/0
       CELERY_BROKER_URL: redis://127.0.0.1:6379/1
+      # Faz B1: testler PostgreSQL'de kosar; DEBUG=False iken DB_HOST zorunludur
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: cybernews
+      DB_USER: cybernews
+      DB_PASSWORD: ci-gecici-test
       # Test suite'i bu sayinin altina duserse test kesfi bozulmus demektir
       # (ornegin import hatasi yuzunden modul atlanmasi). Test silindiginde guncelle.
       MIN_TESTS: "100"
@@ -144,5 +163,5 @@ jobs:
           [ "${kinds}" -ge 5 ] || { echo "::error::Helm chart beklenenden az kaynak uretti (${kinds})"; exit 1; }
 
       - name: docker compose config
-        # SECRET_KEY compose'da `:?` ile zorunlu; CI sahte deger verir
-        run: SECRET_KEY=ci-dogrulama-icin-sahte-deger docker compose -f docker-compose.yml config --quiet
+        # SECRET_KEY ve POSTGRES_PASSWORD compose'da :? ile zorunlu; CI sahte deger verir
+        run: SECRET_KEY=ci-dogrulama-icin-sahte-deger POSTGRES_PASSWORD=ci-dogrulama-icin-sahte-parola docker compose -f docker-compose.yml config --quiet

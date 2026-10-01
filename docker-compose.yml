@@ -11,6 +11,11 @@ services:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY .env icinde tanimli olmali (openssl rand -hex 32)}
       - ALLOWED_HOSTS=localhost,127.0.0.1,teknoloji-api
+      - DB_HOST=teknoloji-postgres
+      - DB_PORT=5432
+      - DB_NAME=cybernews
+      - DB_USER=cybernews
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env icinde tanimli olmali (openssl rand -hex 24)}
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
@@ -18,7 +23,10 @@ services:
       - RETENTION_DAYS=90
       - GEMINI_CVE_RESERVE=0.5
     depends_on:
-      - teknoloji-redis
+      teknoloji-postgres:
+        condition: service_healthy
+      teknoloji-redis:
+        condition: service_started
     volumes:
       - ./:/app
     restart: unless-stopped
@@ -67,6 +75,27 @@ services:
     networks:
       - teknoloji-network
 
+  # PostgreSQL (Faz B1: SQLite'in yerine). Veri isimli volume'da; hosta port acilmaz.
+  # POSTGRES_USER konteyner icinde superuser'dir: test calistiricisi test_cybernews'i acabilir.
+  teknoloji-postgres:
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    container_name: teknoloji-postgres
+    environment:
+      - POSTGRES_DB=cybernews
+      - POSTGRES_USER=cybernews
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env icinde tanimli olmali (openssl rand -hex 24)}
+    volumes:
+      - teknoloji-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U cybernews -d cybernews"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - teknoloji-network
+
   # Redis Cache & Message Broker
   teknoloji-redis:
     image: redis:7-alpine
@@ -90,6 +119,11 @@ services:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY .env icinde tanimli olmali (openssl rand -hex 32)}
       - ALLOWED_HOSTS=localhost,127.0.0.1,teknoloji-api
+      - DB_HOST=teknoloji-postgres
+      - DB_PORT=5432
+      - DB_NAME=cybernews
+      - DB_USER=cybernews
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env icinde tanimli olmali (openssl rand -hex 24)}
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
@@ -97,8 +131,12 @@ services:
       - RETENTION_DAYS=90
       - GEMINI_CVE_RESERVE=0.5
     depends_on:
-      - teknoloji-redis
-      - teknoloji-api
+      teknoloji-postgres:
+        condition: service_healthy
+      teknoloji-redis:
+        condition: service_started
+      teknoloji-api:
+        condition: service_started
     volumes:
       - ./:/app
     restart: unless-stopped
@@ -116,11 +154,20 @@ services:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY .env icinde tanimli olmali (openssl rand -hex 32)}
       - ALLOWED_HOSTS=localhost,127.0.0.1,teknoloji-api
+      - DB_HOST=teknoloji-postgres
+      - DB_PORT=5432
+      - DB_NAME=cybernews
+      - DB_USER=cybernews
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env icinde tanimli olmali (openssl rand -hex 24)}
       - REDIS_URL=redis://teknoloji-redis:6379/0
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
     depends_on:
-      - teknoloji-redis
-      - teknoloji-api
+      teknoloji-postgres:
+        condition: service_healthy
+      teknoloji-redis:
+        condition: service_started
+      teknoloji-api:
+        condition: service_started
     volumes:
       - ./:/app
     restart: unless-stopped
@@ -130,6 +177,7 @@ services:
 volumes:
   teknoloji-redis-data:
   teknoloji-translate-models:
+  teknoloji-postgres-data:
 
 networks:
   teknoloji-network:
