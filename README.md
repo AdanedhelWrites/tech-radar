@@ -130,7 +130,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 |--------|-------------|
 | **Backend** | Python 3.11, Django 4.2, Django REST Framework 3.14, Celery 5.3, Gunicorn |
 | **Frontend** | React 18, Vite 5, React Bootstrap 2.9, React Router DOM 6, Axios |
-| **Veri** | SQLite (lokal), PostgreSQL 16 (K8s), Redis 7 (cache + broker) |
+| **Veri** | PostgreSQL 16 (compose ve K8s; SQLite yalniz `DEBUG=True` ile hostta), Redis 7 (cache + broker) |
 | **Scraping** | BeautifulSoup4, lxml, Requests |
 | **Ceviri** | Cekim aninda yerel LibreTranslate (aninda Turkce, rozetli); retranslate 2 saatte bir bekleyen ve LibreTranslate kayitlarini Gemini API (gemini-3.5-flash-lite, ucretsiz katman, kayit basina tek istek) ile yukseltir + merkezi post-processing |
 | **Altyapi** | Docker Compose, Kubernetes, Nginx 1.25, Whitenoise |
@@ -146,7 +146,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 
 ### Hizli Baslangic
 
-`.env.example`'i `.env` olarak kopyalayin ve isterseniz `GEMINI_API_KEY` degerini girin (bos birakilirsa Gemini hic denenmez, sistem LibreTranslate ile calisir):
+`.env.example`'i `.env` olarak kopyalayin. `SECRET_KEY` (`openssl rand -hex 32`) ve `POSTGRES_PASSWORD` (`openssl rand -hex 24`) zorunludur; `GEMINI_API_KEY` istege baglidir (bos birakilirsa Gemini hic denenmez, sistem LibreTranslate ile calisir):
 
 ```bash
 git clone https://github.com/AdanedhelWrites/tech-radar.git
@@ -165,9 +165,10 @@ docker compose up -d --build
 
 | Container | Image | Port | Gorev |
 |-----------|-------|------|-------|
-| `teknoloji-api` | `teknoloji-haberleri-api:latest` | 8000 | Django REST API, scraping, ceviri, veritabani |
+| `teknoloji-api` | `teknoloji-haberleri-api:latest` | 8000 | Django REST API, scraping, ceviri |
 | `teknoloji-frontend` | `node:18-alpine` | 3000 | React arayuz (Vite dev server, hot-reload) |
 | `teknoloji-redis` | `redis:7-alpine` | 6379 | Cache + Celery message broker |
+| `teknoloji-postgres` | `postgres:16.15-alpine` | — | Veritabani; veri `teknoloji-postgres-data` volume'unda, hosta port acilmaz |
 | `teknoloji-worker` | `teknoloji-haberleri-api:latest` | — | Arka plan scraping + ceviri |
 | `teknoloji-scheduler` | `teknoloji-haberleri-api:latest` | — | Periyodik gorev zamanlayici (Celery Beat) |
 
@@ -189,12 +190,31 @@ docker compose logs -f teknoloji-worker
 # Redis cache temizle
 docker compose exec teknoloji-redis redis-cli FLUSHDB
 
+# PostgreSQL shell
+docker compose exec teknoloji-postgres psql -U cybernews -d cybernews
+
 # Django shell
 docker compose exec teknoloji-api python manage.py shell
 
 # Sifirdan baslat (volume'lar dahil)
 docker compose down -v && docker compose up -d --build
 ```
+
+### Veri tasima (SQLite -> PostgreSQL)
+
+2026-10'da canli veri SQLite'tan PostgreSQL'e tasindi ([ADR-0007](docs/ADR-0007-PostgreSQL-Gecisi-ve-Helm-Dogrulamasi.md)). Ayni araclar her iki yonde calisir:
+
+```bash
+# Tam hassasiyetli dump (mikrosaniye ve metin bosluklari korunur). Dosya HASSASTIR:
+# parola hash'leri ve API token'lari icerir; commit etmeyin, is bitince silin.
+python manage.py veri_tasi_dump .fazb/dump.json
+# Hedefte: migrate, sonra standart loaddata
+python manage.py loaddata .fazb/dump.json
+# Iki veritabaninda calistirip ciktilari karsilastirin; fark yoksa tasima kayipsizdir
+python manage.py veri_ozeti
+```
+
+Django'nun `dumpdata` komutu bu is icin kullanilmaz: JSON bicimi tarihleri milisaniyeye kirpar (v1 imleci mikrosaniye tasir), XML bicimi metin bosluklarini kaybeder.
 
 ### Yonetici Hesabi
 
@@ -492,7 +512,7 @@ cybersecurity_news/
 │       ├── migration-job.yaml  # post-install/post-upgrade hook
 │       └── NOTES.txt           # helm install sonrasi bilgi mesaji
 │
-├── docker-compose.yml          # 5 servis (lokal gelistirme)
+├── docker-compose.yml          # 7 servis (lokal; PostgreSQL dahil)
 ├── Dockerfile                  # Backend multi-stage build
 ├── entrypoint.sh               # Startup: wait-for-db + migrate
 ├── requirements.txt            # Python bagimliliklari
@@ -891,8 +911,8 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `RETENTION_DAYS` | `90` | Saklama penceresi; `updated_at` bundan eski kayitlar cekim basinda silinir (cekim penceresinden ayridir) |
 | `REFRESH_COOLDOWN` | `900` | `/api/v1/*/refresh/` sonrasi bolum sogumasi (sn) — **tum token'lar arasinda paylasilir** |
 | `REFRESH_LOCK_TTL` | `3600` | Bolum cekim kilidinin omru (sn); worker olurse kilit bu surede kendiliginden duser |
-| `DATABASE_URL` | _(bos)_ | Herhangi bir deger atanirsa PostgreSQL aktif olur, bossa SQLite |
-| `DB_HOST` | `localhost` | PostgreSQL host |
+| `DB_HOST` | _(bos)_ | Doluysa PostgreSQL kullanilir. Bossa yalniz `DEBUG=True` iken SQLite (`db.sqlite3`); `DEBUG=False` iken uygulama acilmaz. Compose `teknoloji-postgres` verir |
+| `POSTGRES_PASSWORD` | (yok) | Yalniz compose: `.env`'den okunur; `teknoloji-postgres` servisi ve uygulamanin `DB_PASSWORD`'u bu degeri kullanir |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_NAME` | `cybernews` | Veritabani adi |
 | `DB_USER` | `cybernews` | Veritabani kullanicisi |
@@ -903,6 +923,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 > **Hostta `manage.py` calistirmak:** `DEBUG` varsayilani `False` oldugu icin anahtarsiz
 > `python manage.py ...` artik reddedilir. Yerelde `DEBUG=True python manage.py ...`
 > kullanin ya da komutu konteynerde calistirin (`docker compose exec teknoloji-api ...`).
+> `DB_HOST` vermezseniz hostta `DEBUG=True` ile yerel `db.sqlite3` kullanilir.
 
 ---
 
