@@ -10,7 +10,7 @@ class NewsArticle(models.Model):
     turkish_summary = models.TextField(verbose_name='Turkce Ozet', blank=True)
     # Yazma yolu update_or_create(link=...) ile calisiyor, yani tekilligi zaten
     # varsayiyor; kisit semada da olmali (ADR-0005 upsert anahtari).
-    link = models.URLField(unique=True, verbose_name='Link')
+    link = models.URLField(unique=True, max_length=500, verbose_name='Link')
     date = models.DateField(verbose_name='Tarih')
     original_date = models.CharField(max_length=100, verbose_name='Orijinal Tarih')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
@@ -43,7 +43,7 @@ class CVEEntry(models.Model):
     cvss_score = models.FloatField(null=True, blank=True, verbose_name='CVSS Skoru')
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     modified_date = models.DateField(null=True, blank=True, verbose_name='Guncelleme Tarihi')
-    link = models.URLField(verbose_name='Link')
+    link = models.URLField(max_length=500, verbose_name='Link')
     cwe_ids = models.JSONField(default=list, blank=True, verbose_name='CWE IDleri')
     references = models.JSONField(default=list, blank=True, verbose_name='Referanslar')
     affected_products = models.TextField(blank=True, verbose_name='Etkilenen Urunler')
@@ -80,7 +80,7 @@ class KubernetesEntry(models.Model):
     turkish_title = models.TextField(verbose_name='Turkce Baslik', blank=True)
     original_description = models.TextField(verbose_name='Orijinal Aciklama')
     turkish_description = models.TextField(verbose_name='Turkce Aciklama', blank=True)
-    link = models.URLField(verbose_name='Link', unique=True)
+    link = models.URLField(verbose_name='Link', max_length=500, unique=True)
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='blog', verbose_name='Kategori')
     version = models.CharField(max_length=30, blank=True, verbose_name='Surum')
