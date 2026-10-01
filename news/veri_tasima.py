@@ -50,9 +50,19 @@ def _kanonik(deger):
     return deger
 
 
+def _hedef_kanonik(hedef):
+    """M2M hedefi: dogal anahtar varsa o (Permission id'leri veritabanlari arasinda
+    farklidir), yoksa pk."""
+    if hasattr(hedef, 'natural_key'):
+        return repr(hedef.natural_key())
+    return repr(hedef.pk)
+
+
 def ozet():
     """Model basina (etiket, satir sayisi, tum alanlarin sha256'si, delta sha256'si).
 
+    Alan ozeti, otomatik olusan many-to-many iliskileri de kapsar (User.groups,
+    User.user_permissions, Group.permissions): hedefler dogal anahtarla ozetlenir.
     Delta ozeti v1 imlec sirasidir: updated_at ASC, id ASC. updated_at alani
     olmayan modelde '-'.
     """
@@ -64,6 +74,13 @@ def ozet():
         for satir in model._default_manager.order_by('pk').values_list(*alanlar).iterator():
             sayi += 1
             alan_ozeti.update(repr(tuple(_kanonik(v) for v in satir)).encode('utf-8'))
+        for alan in model._meta.many_to_many:
+            if not alan.remote_field.through._meta.auto_created:
+                continue
+            nesneler = model._default_manager.order_by('pk').prefetch_related(alan.name)
+            for nesne in nesneler.iterator(chunk_size=500):
+                hedefler = sorted(_hedef_kanonik(h) for h in getattr(nesne, alan.name).all())
+                alan_ozeti.update(f'{nesne.pk}|{alan.name}|{hedefler};'.encode('utf-8'))
         delta = '-'
         if any(alan.name == 'updated_at' for alan in model._meta.concrete_fields):
             delta_ozeti = hashlib.sha256()

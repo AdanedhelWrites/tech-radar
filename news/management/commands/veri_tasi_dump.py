@@ -3,6 +3,7 @@
 Cikti standart `manage.py loaddata <dosya>` ile yuklenir. Dosya HASSASTIR: parola
 hash'leri ve API token'lari icerir; commit edilmez, is bitince silinir.
 """
+import os
 from pathlib import Path
 
 from django.core.management.base import BaseCommand
@@ -20,7 +21,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         yol = Path(options['cikti'])
         yol.parent.mkdir(parents=True, exist_ok=True)
-        with yol.open('w', encoding='utf-8') as akis:
+        # parola hash'i ve token icerir: yalniz sahibi okuyabilsin, yaratilirken
+        fd = os.open(str(yol), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as akis:
             sayilar = yaz(akis)
         for etiket, sayi in sayilar.items():
             self.stderr.write(f'{etiket} {sayi}')
