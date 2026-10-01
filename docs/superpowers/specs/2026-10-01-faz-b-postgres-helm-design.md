@@ -89,6 +89,9 @@ use_natural_foreign_keys=True, use_natural_primary_keys=True)` ile yazilan dosya
 - Probe'lar `/api/news/` (cache-first eski uc); `/api/v1/health/` kullanilmiyor.
 - Eksik: LibreTranslate Deployment/Service/PVC, `GEMINI_API_KEY`, `RETENTION_DAYS`,
   `GEMINI_CVE_RESERVE`, `REFRESH_*`, `TRANSLATE_MIN_RATIO`, `RETRANSLATE_*`, `LIBRETRANSLATE_*`.
+- Values surumlenmiyor: kendi imajlarimiz `tag: latest`, ucuncu taraf imajlar kayan
+  etiketli (`postgres:16-alpine`, `redis:7-alpine`); `Chart.yaml` `version: 1.0.0` hic
+  degismemis, chart'in degisiklik kaydi yok.
 - `namespace.yaml` + `global.namespace` Helm'in `-n`/`--create-namespace` kalibiyla celisiyor.
 - `k8s/` ham manifest'leri chart'in elle tutulan, kaymis bir kopyasi. `helm;C` ve
   `helm/tech-radar;C` bos cop dizinler.
@@ -135,6 +138,7 @@ use_natural_foreign_keys=True, use_natural_primary_keys=True)` ile yazilan dosya
 | K4 | Veri tasima: **tam hassasiyetli JSON dump + standart `loaddata` + ayri ozet komutu** | bkz. bolum 13 |
 | K5 | Is **B1 (PostgreSQL) -> B2 (Helm)** olarak bolunur; tek spec, iki plan | B1 canli olayi cozer ve tek basina deger uretir; B2 PostgreSQL'de kanitlanmis kodun uzerine kurulur |
 | K6 | 5 asili `running` FetchRun satiri gecis sirasinda `failure` olarak kapatilir | Bilinen kilit kurbanlari; acik kalirlarsa "asili tur" sinyalini kalici kirletirler |
+| K7 | **Helm values ve chart surumlenir** (bolum 7.11): SemVer chart surumu + `CHANGELOG.md`, values'ta kayan imaj etiketi yok, CI surum kapisi | Kullanici istegi (spec incelemesi, 2026-10-01) |
 
 ## 5. B1 — Bilesenler
 
@@ -304,7 +308,26 @@ compose PostgreSQL'inde `test_cybernews` acilir), sema 0 uyari, `/api/v1/health/
 8. **Namespace.** `templates/namespace.yaml` ve `global.namespace` kalkar; her kaynak
    `{{ .Release.Namespace }}` kullanir. `NOTES.txt` ayni sekilde guncellenir.
 9. **Temizlik.** `k8s/`, `helm;C`, `helm/tech-radar;C` silinir.
-10. **Bilincli olarak degismeyenler:** Redis `emptyDir` (bkz. bolum 12); Postgres `Deployment`
+10. **Surumleme (K7).**
+    - **Chart surumu SemVer'dir.** `Chart.yaml` `version` chart dizinindeki (`templates/`,
+      `values.yaml`, `ci/`, `Chart.yaml`) her degisiklikte artar: geriye uyumsuz values/
+      sablon degisikligi MAJOR, yeni istege bagli deger veya bilesen MINOR, davranisi
+      degistirmeyen duzeltme PATCH. Bu faz `1.0.0 -> 2.0.0`'dir (`postgresPassword`,
+      `global.namespace`, `config.django.allowedHosts` kalkti; `dbPassword` zorunlu oldu).
+    - **`appVersion`** uygulama imajinin surumudur. `backend.image.tag` ve
+      `frontend.image.tag` varsayilani `""`; bossa sablon `.Chart.AppVersion`'i kullanir
+      (Helm'in standart kalibi). Boylece "hangi chart surumu hangi uygulama surumunu kurar"
+      tek dosyadan okunur. Yerel dogrulama `ci/yerel-values.yaml` ile `fazb-yerel` etiketini verir.
+    - **Values'ta kayan etiket yoktur.** `latest`, `16-alpine`, `7-alpine` gibi etiketler
+      kalkar. Ucuncu taraf imajlar (`postgres`, `redis`, `libretranslate`) tam surum etiketi
+      ve `digest` alaniyla sabitlenir; ortak `tech-radar.image` yardimcisi `repo:tag@digest`
+      (digest bossa `repo:tag`) uretir. Digest'ler plan yazilirken yerel imajlardan okunur.
+    - **`helm/tech-radar/CHANGELOG.md`:** her chart surumu icin tarih, surum, `appVersion`
+      ve degisiklik maddeleri; MAJOR surumde yukseltme notu (hangi values anahtari kalkti /
+      neyle degisti). Ilk giris `2.0.0`, `1.0.0` "hic deploy edilmedi" notuyla.
+    - **Ortama ozgu values dosyalari git'te tutulur** (`ci/yerel-values.yaml`); gizli
+      degerler hicbir values dosyasina yazilmaz, yalniz `--set`/harici secret ile verilir.
+11. **Bilincli olarak degismeyenler:** Redis `emptyDir` (bkz. bolum 12); Postgres `Deployment`
     + `Recreate` + PVC (StatefulSet'e gecilmez); ingress sablonu ve yollari.
 
 ## 8. B2 — `docker-desktop` dogrulamasi
@@ -368,6 +391,13 @@ Dogrulamanin tamami tekrar kosulabilir tek betikte:
 - **Negatif test:** `dbPassword` verilmeden render hata vermeli (verirse is kirmizi).
 - Cikti kontrolleri: render'da `ALLOWED_HOSTS: "*"`, `postgresPassword`, `DATABASE_URL`
   gecmemeli; `teknoloji-translate` Deployment'i bulunmali.
+- **Surum kapisi (K7):** `scripts/chart_surum_kontrol.sh <taban-ref>` chart dizini taban
+  ref'e gore degistiyse ve `Chart.yaml` `version` artmadiysa (SemVer karsilastirmasi) is
+  kirmizi olur; `CHANGELOG.md`'de yeni surumun basligi yoksa da kirmizi. Taban ref:
+  `pull_request`'te `github.event.pull_request.base.sha`, `push`'ta `github.event.before`
+  (checkout `fetch-depth: 0`). Yerel olarak ayni betik `main`'e karsi kosulur.
+- **Kayan etiket kapisi:** render ciktisinda `image:` satirlarinin hicbiri `:latest` ile
+  bitmez ve etiketsiz imaj yoktur.
 - `docker compose config` `SECRET_KEY` ve `POSTGRES_PASSWORD` sahte degerleriyle.
 
 ## 10. Belgeler
@@ -380,6 +410,8 @@ Dogrulamanin tamami tekrar kosulabilir tek betikte:
 - **Yeni ADR-0007** "PostgreSQL Gecisi ve Helm Dogrulamasi": kararlar (bolum 4), prob
   bulgulari (bolum 2), elenen yollar (bolum 13), gecis ve 48 saatlik olcum sonucu, S1-S7 sonucu.
 - **ADR-0003...0006:** "Faz B" acik is satirlari tamamlandi olarak guncellenir.
+- **`helm/tech-radar/CHANGELOG.md`** (yeni, bolum 7.10); README'nin Helm bolumu surum
+  kuralini ve yukseltme notlarinin yerini gosterir.
 - **`docs/GUVENLIK-PLANI.md`:** `dbPassword` `required` maddesi kapanir.
 
 ## 11. Sira ve kapilar
@@ -389,7 +421,7 @@ Dogrulamanin tamami tekrar kosulabilir tek betikte:
 | 1 | B1 kod | `feat/faz-b1-postgres` (worktree) | Tek kullanimlik PostgreSQL'de tum testler + yeni testler; `makemigrations --check`; prova (adim 0) |
 | 2 | B1 gecis | `main` (canli kopya) | Bolum 6 tablosu; tam kapi |
 | 3 | B1 gozlem | — | 48 saat sonra adim 9 |
-| 4 | B2 | `feat/faz-b2-helm` (worktree) | `helm lint/template`, kubeconform, betik S1-S7 yesil; compose tam kapi (entrypoint/Dockerfile degisti) |
+| 4 | B2 | `feat/faz-b2-helm` (worktree) | `helm lint/template`, kubeconform, surum ve kayan etiket kapilari (`main`'e karsi), betik S1-S7 yesil; compose tam kapi (entrypoint/Dockerfile degisti) |
 | 5 | Belgeler | ayni dallar | — |
 
 Her is ayri dal, `--no-ff` merge (depo kalibi). Kapiyi gecemeyen is geri alinir, push
