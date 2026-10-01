@@ -163,5 +163,5 @@ jobs:
           [ "${kinds}" -ge 5 ] || { echo "::error::Helm chart beklenenden az kaynak uretti (${kinds})"; exit 1; }
 
       - name: docker compose config
-        # SECRET_KEY ve POSTGRES_PASSWORD compose'da :? ile zorunlu; CI sahte deger verir
-        run: SECRET_KEY=ci-dogrulama-icin-sahte-deger POSTGRES_PASSWORD=ci-dogrulama-icin-sahte-parola docker compose -f docker-compose.yml config --quiet
+        # SECRET_KEY ve DB_PASSWORD compose'da :? ile zorunlu; CI sahte deger verir
+        run: SECRET_KEY=ci-dogrulama-icin-sahte-deger DB_PASSWORD=ci-dogrulama-icin-sahte-parola docker compose -f docker-compose.yml config --quiet

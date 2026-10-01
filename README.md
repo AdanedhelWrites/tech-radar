@@ -143,10 +143,11 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 
 - Docker ve Docker Compose
 - Internet baglantisi (kaynak sitelere ve Gemini API'ye erisim icin; LibreTranslate yerel container'da calisir)
+- Paylasilan yerel PostgreSQL (`yerel-platform` reposu) ayakta ve `cybernews` veritabani olusturulmus
 
 ### Hizli Baslangic
 
-`.env.example`'i `.env` olarak kopyalayin. `SECRET_KEY` (`openssl rand -hex 32`) ve `POSTGRES_PASSWORD` (`openssl rand -hex 24`) zorunludur; `GEMINI_API_KEY` istege baglidir (bos birakilirsa Gemini hic denenmez, sistem LibreTranslate ile calisir):
+`.env.example`'i `.env` olarak kopyalayin. `SECRET_KEY` (`openssl rand -hex 32`) ve `DB_PASSWORD` (yerel-platform'daki `cybernews` kullanicisinin parolasi) zorunludur; `GEMINI_API_KEY` istege baglidir (bos birakilirsa Gemini hic denenmez, sistem LibreTranslate ile calisir). Veritabani ayri `yerel-platform` reposundaki paylasilan PostgreSQL'dir; compose'dan once orada `docker compose up -d` calismis olmalidir:
 
 ```bash
 git clone https://github.com/AdanedhelWrites/tech-radar.git
@@ -168,7 +169,7 @@ docker compose up -d --build
 | `teknoloji-api` | `teknoloji-haberleri-api:latest` | 8000 | Django REST API, scraping, ceviri |
 | `teknoloji-frontend` | `node:18-alpine` | 3000 | React arayuz (Vite dev server, hot-reload) |
 | `teknoloji-redis` | `redis:7-alpine` | 6379 | Cache + Celery message broker |
-| `teknoloji-postgres` | `postgres:16.15-alpine` | — | Veritabani; veri `teknoloji-postgres-data` volume'unda, hosta port acilmaz |
+| `yerel-postgres` (ayri repo: `yerel-platform`) | `postgres:16.15-alpine` | 127.0.0.1:5432 | Paylasilan yerel PostgreSQL; CyberNews `cybernews` veritabanini ve kullanicisini kullanir |
 | `teknoloji-worker` | `teknoloji-haberleri-api:latest` | — | Arka plan scraping + ceviri |
 | `teknoloji-scheduler` | `teknoloji-haberleri-api:latest` | — | Periyodik gorev zamanlayici (Celery Beat) |
 
@@ -191,7 +192,7 @@ docker compose logs -f teknoloji-worker
 docker compose exec teknoloji-redis redis-cli FLUSHDB
 
 # PostgreSQL shell
-docker compose exec teknoloji-postgres psql -U cybernews -d cybernews
+docker exec -it yerel-postgres psql -U cybernews -d cybernews
 
 # Django shell
 docker compose exec teknoloji-api python manage.py shell
@@ -512,7 +513,7 @@ cybersecurity_news/
 │       ├── migration-job.yaml  # post-install/post-upgrade hook
 │       └── NOTES.txt           # helm install sonrasi bilgi mesaji
 │
-├── docker-compose.yml          # 7 servis (lokal; PostgreSQL dahil)
+├── docker-compose.yml          # 6 servis (PostgreSQL ayri: yerel-platform)
 ├── Dockerfile                  # Backend multi-stage build
 ├── entrypoint.sh               # Startup: wait-for-db + migrate
 ├── requirements.txt            # Python bagimliliklari
@@ -911,12 +912,11 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `RETENTION_DAYS` | `90` | Saklama penceresi; `updated_at` bundan eski kayitlar cekim basinda silinir (cekim penceresinden ayridir) |
 | `REFRESH_COOLDOWN` | `900` | `/api/v1/*/refresh/` sonrasi bolum sogumasi (sn) — **tum token'lar arasinda paylasilir** |
 | `REFRESH_LOCK_TTL` | `3600` | Bolum cekim kilidinin omru (sn); worker olurse kilit bu surede kendiliginden duser |
-| `DB_HOST` | _(bos)_ | Doluysa PostgreSQL kullanilir. Bossa yalniz `DEBUG=True` iken SQLite (`db.sqlite3`); `DEBUG=False` iken uygulama acilmaz. Compose `teknoloji-postgres` verir |
-| `POSTGRES_PASSWORD` | (yok) | Yalniz compose: `.env`'den okunur; `teknoloji-postgres` servisi ve uygulamanin `DB_PASSWORD`'u bu degeri kullanir |
+| `DB_HOST` | _(bos)_ | Doluysa PostgreSQL kullanilir. Bossa yalniz `DEBUG=True` iken SQLite (`db.sqlite3`); `DEBUG=False` iken uygulama acilmaz. Compose `yerel-postgres` verir |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_NAME` | `cybernews` | Veritabani adi |
 | `DB_USER` | `cybernews` | Veritabani kullanicisi |
-| `DB_PASSWORD` | _(bos)_ | Veritabani sifresi |
+| `DB_PASSWORD` | _(bos)_ | Veritabani sifresi. Compose: `.env`'deki `DB_PASSWORD` (yerel-platform `cybernews` kullanicisi) |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis baglantisi (cache) |
 | `CELERY_BROKER_URL` | `redis://127.0.0.1:6379/1` | Redis baglantisi (Celery broker) |
 
