@@ -1,5 +1,5 @@
 # DAST: OWASP ZAP baseline (pasif, blackbox) — SOOS DAST'in yerine, ucretsiz.
-# Uygulama CI icinde ayaga kaldirilir (backend imaji + redis), ZAP localhost'u tarar.
+# Uygulama CI icinde ayaga kaldirilir (backend imaji + redis + postgresql), ZAP localhost'u tarar.
 # Hedef: backend kokunde sayfa yok (/ -> 404); HTML yuzeyi admin login. A5 OpenAPI semasi
 # hazir olunca zaproxy/action-api-scan ile /api/v1/ tamamen taranmali.
 #
@@ -48,10 +48,21 @@ jobs:
           set -euo pipefail
           docker network create dast
           docker run -d --name redis --network dast redis:7-alpine
+          # Faz B1: DEBUG=False iken DB_HOST zorunlu (SQLite'a dusulmez); tek kullanimlik PostgreSQL
+          docker run -d --name postgres --network dast \
+            -e POSTGRES_USER=cybernews -e POSTGRES_PASSWORD=dast-gecici -e POSTGRES_DB=cybernews \
+            postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+          # -h 127.0.0.1: ilk acilistaki gecici sunucu yalniz unix soketini dinler
+          for _ in $(seq 1 60); do
+            docker exec postgres pg_isready -h 127.0.0.1 -U cybernews -d cybernews >/dev/null 2>&1 && break
+            sleep 1
+          done
+          docker exec postgres pg_isready -h 127.0.0.1 -U cybernews -d cybernews
           docker run -d --name api --network dast -p 127.0.0.1:8000:8000 \
             -e SECRET_KEY="$(openssl rand -hex 32)" \
             -e DEBUG=False \
             -e ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e DB_HOST=postgres -e DB_NAME=cybernews -e DB_USER=cybernews -e DB_PASSWORD=dast-gecici \
             -e REDIS_URL=redis://redis:6379/0 \
             -e CELERY_BROKER_URL=redis://redis:6379/1 \
             tech-radar-api:dast
