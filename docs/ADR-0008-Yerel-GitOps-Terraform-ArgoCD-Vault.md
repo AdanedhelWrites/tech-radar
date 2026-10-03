@@ -1,7 +1,7 @@
 # ADR 0008: Yerel GitOps — Terraform, Argo CD ve Vault (B3)
 
 ## Status
-Accepted (tasarim) — 2026-10-03. Uygulanmadi.
+Accepted — 2026-10-03; uygulandi 2026-10-04 (B3a + B3b).
 
 Tasarim: [`superpowers/specs/2026-10-03-b3-terraform-argocd-vault-design.md`](superpowers/specs/2026-10-03-b3-terraform-argocd-vault-design.md). Planlar: `superpowers/plans/2026-10-03-b3a-platform.md`, `superpowers/plans/2026-10-03-b3b-gitops.md`.
 
@@ -41,3 +41,23 @@ Bkz. spec bolum 2 ve 11 (CI'dan `helm upgrade`, Terraform ile uygulama dagitimi,
   `set -e` + `pipefail` altinda cagirani sessizce dusuruyordu (`sir_yaz.sh`); birim testi `-e`'siz
   kostugu icin kacirmisti. Duzeltme `af5aa91` (`{ grep ... || true; }` + `set -e` altinda test);
   B3a plan dokumanindaki eski satir duzeltilmedi, repo esastir.
+- **Sonuc (B3b, 2026-10-04):** chart 2.1.0 (`chart-2.1.0`, tech-radar `3b508e0`), `yerel-gitops`
+  tech-radar Application'i (`1aca3e0`); T6-T12 GECTI (yerel-platform `main` @ `bfbf723`).
+
+  | # | Sonuc |
+  |---|---|
+  | T6 | Application Synced+Healthy; `teknoloji-secret` VSO'dan; migration hook Complete; uygulama `cybernews_k8s`'te; health 200, schema 401, frontend/admin/static 200; SRE cekimi `success`; scheduler 0 replika |
+  | T7 | `yerel-gitops` `2315cb9` (`retentionDays: "91"`) senkronlandi; worker `RETENTION_DAYS=91`; migration hook ikinci kez olustu ve Complete |
+  | T8 | `git revert` (`e046038`) senkronlandi; `RETENTION_DAYS=90` |
+  | T9 | Elle `scale 3` -> self-heal ile 60 sn icinde 1 |
+  | T10 | `cybernews_k8s` parolasi degisti -> Vault -> Secret guncellendi (VSS annotation ile aninda) -> pod'lar yeniden basladi; health 200, DB sorgusu calisiyor |
+  | T11 | `vault-0` silindi -> kilitliyken Secret, kok Application ve tech-radar (health 200) ayakta; kilit acilinca VSO yeniden okudu |
+  | T12 | Sokum (Application'lar, namespace'ler, Vault PV'si, Argo CD CRD'leri) + ayni komutlarla yeniden kurulum (yeni Vault anahtarlari, deploy key yenilendi); T1-T6 ve T11 yeniden GECTI |
+
+  Bulgular: (1) `.env` api imajina giriyordu: `.dockerignore` duzeltildi; compose `:latest` imaji
+  `.env`'siz yeniden derlendi ve eski imaj silindi. (2) T11'in onkosulu eksikti: sifirdan kurulumdan
+  hemen sonra uygulama pod'lari Ready olmadan Vault yeniden baslatiliyordu (health 000); T11 artik
+  once Application'in Healthy olmasini bekler (`bfbf723`). (3) Plan hatasi: `yerel-gitops`
+  yamllint'i is akisi dosyasini da tariyordu; `.github/` yamllint disina alindi (actionlint denetler).
+  (4) VSO aninda yenileme belgelenmis bir annotation degil, VSS annotation degisikliginin reconcile
+  tetiklemesi (`yerel-platform/yenile`). Compose canli ortami (`cybernews`) hicbir adimda etkilenmedi.

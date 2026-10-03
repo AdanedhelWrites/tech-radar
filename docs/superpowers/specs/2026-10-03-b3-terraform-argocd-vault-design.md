@@ -1,7 +1,7 @@
 # B3 — Terraform + Argo CD + Vault ile Yerel GitOps — Tasarim
 
 - **Tarih:** 2026-10-03
-- **Durum:** Tasarim onaylandi (bolum 1-5 kullanici onayindan gecti). Uygulanmadi.
+- **Durum:** Uygulandi (B3a + B3b, 2026-10-04); sonuc ADR-0008'de.
 - **Planlar:** `../plans/2026-10-03-b3a-platform.md` (B3a), `../plans/2026-10-03-b3b-gitops.md` (B3b)
 - **Kapsam:** Yerel Docker Desktop Kubernetes kumesine (`docker-desktop`) Terraform ile Argo CD,
   HashiCorp Vault ve Vault Secrets Operator (VSO) kurmak; ayri bir GitOps reposundan tech-radar'i
