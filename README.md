@@ -617,11 +617,11 @@ helm upgrade --install tech-radar ./helm/tech-radar \
   --wait --wait-for-jobs --timeout 15m
 ```
 
-`secrets.secretKey` ve `secrets.dbPassword` zorunludur (bos birakilirsa render reddedilir); PostgreSQL ve uygulama ayni `dbPassword`'u kullanir. `secrets.geminiApiKey` istege baglidir. Uretimde harici secret yonetimi (external-secrets, sealed-secrets, vault) tercih edin.
+`secrets.secretKey` ve `secrets.dbPassword` zorunludur (bos birakilirsa render reddedilir); PostgreSQL ve uygulama ayni `dbPassword`'u kullanir. `secrets.geminiApiKey` istege baglidir. Uretimde harici secret yonetimi (external-secrets, sealed-secrets, vault) tercih edin: Secret'i chart disinda yonetiyorsaniz `secrets.existingSecret=<ad>` verin; chart Secret olusturmaz, `secrets.*` zorunlu olmaz. Secret `SECRET_KEY`, `DB_USER`, `DB_PASSWORD`, `GEMINI_API_KEY` anahtarlarini icermelidir.
 
 ### Nasil calisir
 
-- Her revizyonda `teknoloji-migrate-r<revizyon>` Job'u migration'lari uygular; api, worker ve scheduler `migrasyon-bekle` initContainer'inda `migrate --check` gecene kadar bekler. `helm rollback` sema geri almaz.
+- `migration.mode=helm` (varsayilan): her revizyonda `teknoloji-migrate-r<revizyon>` Job'u migration'lari uygular. `migration.mode=argocd`: Argo CD `helm template` kullandigi icin Job sabit adli (`teknoloji-migrate`) bir Sync hook'udur ve her senkronda yeniden olusturulur. Iki modda da api, worker ve scheduler `migrasyon-bekle` initContainer'inda `migrate --check` gecene kadar bekler. Geri alma sema geri almaz.
 - Backend probe'lari `/api/v1/health/`'e `Host: localhost` ile gider. `ALLOWED_HOSTS` sablonda kurulur: `localhost`, `teknoloji-api` (kume ici tuketici), ingress host'u ve `config.django.extraAllowedHosts`.
 - Statik dosyalar imajdadir; pod'lar `RUN_STARTUP_TASKS=false` ile acilir ve kok dosya sistemi salt okunurdur.
 - LibreTranslate (`libretranslate.enabled`) ilk acilista ~258 MB model indirir (internet gerekir); modeller PVC'de kalir.
@@ -662,6 +662,18 @@ scripts/helm_yerel_dogrulama.sh sok    # S7
 
 Betik baglami degistirmez, yerel olmayan bir kumeyi reddeder, gizli degerleri calisma aninda uretir ve `helm/tech-radar/ci/yerel-values.yaml`'i kullanir.
 
+### GitOps ile kurulum (Argo CD + Vault, yerel)
+
+Kisisel deneme ortami Argo CD ile git'ten kurulur (ADR-0008): chart bu reponun degismez
+`chart-<surum>` etiketinden (or. `chart-2.1.0`), degerler ve Vault Secrets Operator nesneleri
+private `yerel-gitops` reposundan okunur; platform `yerel-platform`'da Terraform ile kurulur.
+
+- `migration.mode=argocd` ve `secrets.existingSecret=teknoloji-secret` kullanilir (bkz. tablo).
+- Her chart surumu icin etiket: `git tag chart-<Chart.yaml version>` + push. CI (`chart etiketi`)
+  etiketin `Chart.yaml` ile ayni oldugunu ve CHANGELOG girdisini dogrular.
+- Kumede calisan surum `yerel-gitops`'taki `targetRevision`'dir; yukseltme ve geri alma orada
+  commit/`git revert` ile yapilir.
+
 ### Onemli values parametreleri
 
 | Parametre | Varsayilan | Aciklama |
@@ -669,6 +681,8 @@ Betik baglami degistirmez, yerel olmayan bir kumeyi reddeder, gizli degerleri ca
 | `secrets.secretKey` | `""` | **Zorunlu.** `openssl rand -hex 32` |
 | `secrets.dbPassword` | `""` | **Zorunlu.** PostgreSQL ve uygulamanin ortak parolasi |
 | `secrets.geminiApiKey` | `""` | Istege bagli; bos -> Gemini kapali |
+| `secrets.existingSecret` | `""` | Doluysa chart Secret olusturmaz, bu Secret'i kullanir (or. Vault Secrets Operator) |
+| `migration.mode` | `helm` | `argocd`: Job sabit adli Argo CD Sync hook'u (`helm template` ile kurulum) |
 | `backend.image.tag` / `frontend.image.tag` | `""` | Bos -> `appVersion` |
 | `backend.replicas` / `frontend.replicas` | `2` | Replika sayisi |
 | `postgresql.enabled` | `true` | `false` = harici PostgreSQL (`config.database.host`) |

@@ -166,6 +166,9 @@ jobs:
           helm template tech-radar helm/tech-radar -n tech-radar-ci $HELM_GEREKLI > rendered.yaml
           # shellcheck disable=SC2086
           helm template tech-radar helm/tech-radar -n tech-radar-ci $HELM_GEREKLI -f helm/tech-radar/ci/yerel-values.yaml > rendered-yerel.yaml
+          # B3: Argo CD + VSO kurulumu sir degeri vermeden render edilmeli
+          helm lint helm/tech-radar -f helm/tech-radar/ci/argocd-values.yaml
+          helm template tech-radar helm/tech-radar -n tech-radar-ci -f helm/tech-radar/ci/argocd-values.yaml > rendered-argocd.yaml
           kinds=$(grep -cE '^kind:' rendered.yaml || true)
           echo "### Helm render: ${kinds} kaynak" >> "${GITHUB_STEP_SUMMARY}"
           [ "${kinds}" -eq 18 ] || { echo "::error::Helm chart 18 kaynak bekleniyordu, ${kinds} uretti"; exit 1; }
@@ -192,11 +195,41 @@ jobs:
           scripts/imaj_etiket_kontrol.sh rendered.yaml
           scripts/imaj_etiket_kontrol.sh rendered-yerel.yaml
 
+      - name: Argo CD modu (migration.mode=argocd, secrets.existingSecret)
+        run: |
+          set -euo pipefail
+          kinds=$(grep -cE '^kind:' rendered-argocd.yaml || true)
+          echo "### Helm render (argocd modu): ${kinds} kaynak" >> "${GITHUB_STEP_SUMMARY}"
+          [ "${kinds}" -eq 14 ] || { echo "::error::argocd render'i 14 kaynak bekleniyordu, ${kinds} uretti"; exit 1; }
+          if grep -q '^kind: Secret' rendered-argocd.yaml; then
+            echo "::error::secrets.existingSecret varken chart Secret uretti"; exit 1
+          fi
+          if grep -q 'checksum/secret' rendered-argocd.yaml; then
+            echo "::error::secrets.existingSecret varken checksum/secret yazildi"; exit 1
+          fi
+          if grep -A1 'secretKeyRef:' rendered-argocd.yaml | grep 'name:' | grep -qv 'name: teknoloji-secret$'; then
+            echo "::error::secretKeyRef existingSecret'i kullanmiyor"; exit 1
+          fi
+          sed -n '/^kind: Job$/,/^spec:$/p' rendered-argocd.yaml > job-argocd.txt
+          grep -q '^  name: teknoloji-migrate$' job-argocd.txt || { echo "::error::argocd modunda Job adi sabit degil"; exit 1; }
+          grep -q 'argocd.argoproj.io/hook: Sync$' job-argocd.txt || { echo "::error::Sync hook annotation'i yok"; exit 1; }
+          grep -q 'argocd.argoproj.io/hook-delete-policy: BeforeHookCreation$' job-argocd.txt \
+            || { echo "::error::BeforeHookCreation annotation'i yok"; exit 1; }
+          sed -n '/^kind: Job$/,/^spec:$/p' rendered.yaml > job-helm.txt
+          grep -q '^  name: teknoloji-migrate-r1$' job-helm.txt || { echo "::error::helm modunda Job adi <name>-r<revizyon> degil"; exit 1; }
+          if grep -q 'argocd.argoproj.io/hook' job-helm.txt; then echo "::error::helm modunda Argo hook annotation'i var"; exit 1; fi
+          # shellcheck disable=SC2086
+          if helm template t helm/tech-radar --set migration.mode=yanlis $HELM_GEREKLI > /dev/null 2> hata.txt; then
+            echo "::error::gecersiz migration.mode kabul edildi"; exit 1
+          fi
+          grep -q "migration.mode 'helm' ya da 'argocd' olmali" hata.txt || { cat hata.txt; exit 1; }
+          scripts/imaj_etiket_kontrol.sh rendered-argocd.yaml
+
       - name: kubeconform (Kubernetes semasi)
         run: |
           docker run --rm -v "$PWD:/w" \
             ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
-            -strict -summary -kubernetes-version 1.31.0 /w/rendered.yaml /w/rendered-yerel.yaml
+            -strict -summary -kubernetes-version 1.31.0 /w/rendered.yaml /w/rendered-yerel.yaml /w/rendered-argocd.yaml
 
       - name: Chart surum kapisi
         env:

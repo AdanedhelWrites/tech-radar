@@ -140,10 +140,14 @@ scheduler:
       memory: 256Mi
 
 # -------------------------------------------------------
-# Migration Job — her revizyonda <name>-r<revizyon> adiyla calisir.
+# Migration Job — helm modunda her revizyonda <name>-r<revizyon> adiyla calisir.
 # api/worker/scheduler `migrate --check` gecene kadar initContainer'da bekler.
 # -------------------------------------------------------
 migration:
+  # helm: her revizyonda <name>-r<revizyon> adli Job (helm install/upgrade).
+  # argocd: sabit adli Argo CD Sync hook'u; Argo CD `helm template` kullandigi icin
+  # .Release.Revision hep 1'dir (spec B3 6.1).
+  mode: helm
   name: teknoloji-migrate
   component: migration
   backoffLimit: 3
@@ -351,10 +355,14 @@ config:
 # Gizli degerler (Secret) — burada BOS kalir; --set ile verin
 # -------------------------------------------------------
 secrets:
-  # Zorunlu. Uretmek icin: openssl rand -hex 32
+  # Doluysa chart Secret olusturmaz; bu adli mevcut Secret kullanilir (or. Vault Secrets
+  # Operator'un yazdigi). Anahtarlar: SECRET_KEY, DB_USER, DB_PASSWORD, GEMINI_API_KEY.
+  # Bu durumda asagidaki degerler ve `required` kontrolleri kullanilmaz.
+  existingSecret: ""
+  # Zorunlu (existingSecret bossa). Uretmek icin: openssl rand -hex 32
   secretKey: ""
   dbUser: "cybernews"
-  # Zorunlu. Uretmek icin: openssl rand -hex 24. PostgreSQL ve uygulama ayni parolayi kullanir.
+  # Zorunlu (existingSecret bossa). Uretmek icin: openssl rand -hex 24. PostgreSQL ve uygulama ayni parolayi kullanir.
   dbPassword: ""
   # Istege bagli; bos -> Gemini hic denenmez.
   geminiApiKey: ""

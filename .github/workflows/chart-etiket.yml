@@ -1,0 +1,33 @@
+# chart-<surum> etiketi push edilince surum Chart.yaml ile ayni mi (spec B3 K2, 9).
+# Argo CD (yerel-gitops) chart'i bu etiketten okur.
+
+name: chart etiketi
+
+on:
+  push:
+    tags: ["chart-*"]
+
+permissions: {}
+
+jobs:
+  etiket:
+    name: Etiket = Chart.yaml version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout (etiket)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Kontrol
+        env:
+          ETIKET: ${{ github.ref_name }}
+        run: scripts/chart_etiket_kontrol.sh "$ETIKET"

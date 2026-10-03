@@ -8,7 +8,7 @@ type: application
 # Chart surumu SemVer'dir (CHANGELOG.md): uyumsuz values/sablon degisikligi MAJOR,
 # yeni istege bagli deger veya bilesen MINOR, davranisi degistirmeyen duzeltme PATCH.
 # Chart dizinindeki her degisiklik bu degeri artirir (scripts/chart_surum_kontrol.sh).
-version: 2.0.1
+version: 2.1.0
 # Uygulama imajinin etiketi (CalVer YYYY.M.N); backend/frontend image.tag bossa kullanilir.
 appVersion: "2026.10.1"
 keywords:
