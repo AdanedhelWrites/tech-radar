@@ -58,13 +58,13 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: teknoloji-secret
+                  name: {{ include "tech-radar.secretAdi" . }}
                   key: DB_USER
             # Uygulamayla ayni parola (spec 7.1)
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: teknoloji-secret
+                  name: {{ include "tech-radar.secretAdi" . }}
                   key: DB_PASSWORD
             - name: PGDATA
               value: {{ .Values.postgresql.pgdata }}

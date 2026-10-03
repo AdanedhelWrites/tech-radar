@@ -6,6 +6,17 @@ dizinindeki her degisiklik `Chart.yaml` `version`'ini artirir ve buraya `## [sur
 basligi ekler; CI (`scripts/chart_surum_kontrol.sh`) bunu zorlar. `appVersion`
 uygulama imajinin etiketidir (CalVer `YYYY.M.N`).
 
+## [2.1.0] - 2026-10-04 — appVersion 2026.10.1
+
+GitOps (Argo CD) ve chart disi secret yonetimi (Vault Secrets Operator) icin istege bagli degerler
+([ADR-0008](../../docs/ADR-0008-Yerel-GitOps-Terraform-ArgoCD-Vault.md)). Varsayilan degerlerle
+render 2.0.1 ile aynidir (yalniz `helm.sh/chart` etiketi ve ondan turetilen checksum'lar degisir).
+
+### Eklenenler
+- `migration.mode` (`helm` varsayilan | `argocd`). `argocd`: Argo CD chart'i `helm template` ile isler ve `.Release.Revision` hep 1'dir; Job sabit adli (`<migration.name>`) bir Argo CD Sync hook'u olur (`argocd.argoproj.io/hook: Sync`, `argocd.argoproj.io/hook-delete-policy: BeforeHookCreation`) ve her senkronda yeniden olusturulur. Gecersiz deger render'i durdurur.
+- `secrets.existingSecret` (`""`). Doluysa `teknoloji-secret` olusturulmaz, `secrets.*` `required` kontrolleri atlanir, tum `secretKeyRef`'ler (PostgreSQL dahil) bu Secret'i kullanir ve pod'lara `checksum/secret` yazilmaz (yeniden baslatmayi Secret'in sahibi yapar). Secret anahtarlari: `SECRET_KEY`, `DB_USER`, `DB_PASSWORD`, `GEMINI_API_KEY`.
+- `ci/argocd-values.yaml` (CI'da Argo CD + VSO render'i).
+
 ## [2.0.1] - 2026-10-03 — appVersion 2026.10.1
 
 Duzeltme; render edilen manifestler degismez (yalniz `helm.sh/chart` etiketi ve ondan turetilen checksum'lar).

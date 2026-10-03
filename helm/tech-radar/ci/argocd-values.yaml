@@ -1,0 +1,12 @@
+# Argo CD + VSO kurulumunun CI render'i (spec B3 6.1): Secret chart disinda, migration
+# Sync hook'u, harici PostgreSQL. Gizli deger icermez ve gerektirmez.
+migration:
+  mode: argocd
+secrets:
+  existingSecret: teknoloji-secret
+postgresql:
+  enabled: false
+config:
+  database:
+    host: host.docker.internal
+    name: cybernews_k8s

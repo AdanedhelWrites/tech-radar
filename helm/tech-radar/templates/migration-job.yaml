@@ -1,14 +1,20 @@
-# Hook degil: her revizyonda yeni adli Job (Job spec'i degistirilemez). api/worker/
+# helm modunda hook degil: her revizyonda yeni adli Job (Job spec'i degistirilemez). api/worker/
 # scheduler migrasyon-bekle initContainer'inda bunu bekler; helm --wait-for-jobs kilitlenmez.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Values.migration.name }}-r{{ .Release.Revision }}
+  name: {{ include "tech-radar.migrationJobAdi" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.migration.name }}
     app.kubernetes.io/component: {{ .Values.migration.component }}
+  {{- /* argocd modu: Sync hook'u; her senkronda once eskisi silinir (spec 6.1) */}}
+  {{- if eq .Values.migration.mode "argocd" }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  {{- end }}
 spec:
   backoffLimit: {{ .Values.migration.backoffLimit }}
   ttlSecondsAfterFinished: {{ .Values.migration.ttlSecondsAfterFinished }}

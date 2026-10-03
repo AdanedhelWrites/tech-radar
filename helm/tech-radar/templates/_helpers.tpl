@@ -114,6 +114,29 @@ http://{{ .Values.libretranslate.name }}:{{ .Values.libretranslate.port }}
 {{- end }}
 
 {{/*
+Uygulama Secret'inin adi (spec 6.1): secrets.existingSecret doluysa o (or. VSO'nun
+yazdigi Secret), degilse chart'in kendi teknoloji-secret'i.
+*/}}
+{{- define "tech-radar.secretAdi" -}}
+{{- .Values.secrets.existingSecret | default "teknoloji-secret" -}}
+{{- end }}
+
+{{/*
+Migration Job adi (spec 6.1). helm: her revizyonda yeni ad (Job spec'i degistirilemez).
+argocd: sabit ad; Argo CD `helm template` kullanir, .Release.Revision hep 1'dir ve Job
+her senkronda Sync hook'u olarak yeniden olusturulur.
+*/}}
+{{- define "tech-radar.migrationJobAdi" -}}
+{{- if eq .Values.migration.mode "argocd" -}}
+{{ .Values.migration.name }}
+{{- else if eq .Values.migration.mode "helm" -}}
+{{ .Values.migration.name }}-r{{ .Release.Revision }}
+{{- else -}}
+{{- fail (printf "migration.mode 'helm' ya da 'argocd' olmali (gelen: %q)" .Values.migration.mode) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Uygulama konteynerlerinin ortak ortami (api, worker, scheduler, migrate, migrasyon-bekle).
 */}}
 {{- define "tech-radar.uygulamaOrtami" -}}
@@ -124,31 +147,35 @@ env:
   - name: SECRET_KEY
     valueFrom:
       secretKeyRef:
-        name: teknoloji-secret
+        name: {{ include "tech-radar.secretAdi" . }}
         key: SECRET_KEY
   - name: DB_USER
     valueFrom:
       secretKeyRef:
-        name: teknoloji-secret
+        name: {{ include "tech-radar.secretAdi" . }}
         key: DB_USER
   - name: DB_PASSWORD
     valueFrom:
       secretKeyRef:
-        name: teknoloji-secret
+        name: {{ include "tech-radar.secretAdi" . }}
         key: DB_PASSWORD
   - name: GEMINI_API_KEY
     valueFrom:
       secretKeyRef:
-        name: teknoloji-secret
+        name: {{ include "tech-radar.secretAdi" . }}
         key: GEMINI_API_KEY
 {{- end }}
 
 {{/*
 Pod sablonu annotation'lari: configmap/secret degisince pod'lar yeniden olusur.
+secrets.existingSecret'te Secret chart'in disindadir; degisince pod'lari sahibi yeniden
+baslatir (VSO rolloutRestartTargets), checksum/secret yazilmaz.
 */}}
 {{- define "tech-radar.ayarOzeti" -}}
 checksum/config: {{ include (print .Template.BasePath "/configmap.yaml") . | sha256sum }}
+{{- if not .Values.secrets.existingSecret }}
 checksum/secret: {{ include (print .Template.BasePath "/secret.yaml") . | sha256sum }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -164,7 +191,7 @@ Cagiran: include "tech-radar.migrasyonBekle" . | nindent 8   (initContainers: al
     - -c
     - |
       until python manage.py migrate --check >/dev/null 2>&1; do
-        echo "Migration'lar bekleniyor ({{ .Values.migration.name }}-r{{ .Release.Revision }})..."
+        echo "Migration'lar bekleniyor ({{ include "tech-radar.migrationJobAdi" . }})..."
         sleep 5
       done
       echo "Migration'lar uygulanmis."
