@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: teknoloji-haberleri
-  labels:
-    app.kubernetes.io/name: teknoloji-haberleri
-    app.kubernetes.io/part-of: teknoloji-haberleri

@@ -1,0 +1,29 @@
+# Yalniz yerel docker-desktop dogrulamasi (scripts/helm_yerel_dogrulama.sh).
+# Gizli deger icermez: secrets.* betik tarafindan calisma aninda uretilir.
+backend:
+  image:
+    tag: fazb-yerel
+    pullPolicy: Never
+  replicas: 1
+frontend:
+  image:
+    tag: fazb-yerel
+    pullPolicy: Never
+  replicas: 1
+ingress:
+  enabled: false
+config:
+  django:
+    # port-forward ile frontend'e gelen admin POST'lari icin
+    extraCsrfTrustedOrigins: "http://localhost:13000"
+postgresql:
+  storage:
+    size: 1Gi
+libretranslate:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1536Mi

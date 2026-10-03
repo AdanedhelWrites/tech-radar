@@ -45,8 +45,12 @@ COPY --from=builder /install /usr/local
 # Copy application code
 COPY . .
 
-# Static files directory (owned by appuser)
-RUN mkdir -p /app/staticfiles && chown -R appuser:appuser /app
+# Statik dosyalar imaja gomulur: Kubernetes'te kok dosya sistemi salt okunurdur
+# ve migration/collectstatic pod acilisinda calismaz (Faz B2, spec 7.7).
+# DEBUG=True yalniz bu komut icin: SECRET_KEY ve DB_HOST zorunlulugunu atlar;
+# hicbir veritabanina baglanilmaz. Compose bind mount'u bu dizini ortuyor ve
+# kendi collectstatic'ini entrypoint'te calistiriyor (RUN_STARTUP_TASKS=true).
+RUN DEBUG=True python manage.py collectstatic --noinput     && chown -R appuser:appuser /app
 
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh

@@ -3,7 +3,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ .Values.postgresql.name }}-pvc
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.postgresql.name }}
@@ -21,7 +21,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.postgresql.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.postgresql.name }}
@@ -43,9 +43,10 @@ spec:
         {{- include "tech-radar.podSecurityContext" .Values.postgresql.securityContext | nindent 8 }}
       containers:
         - name: postgresql
-          image: {{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}
+          image: {{ include "tech-radar.image" (dict "image" .Values.postgresql.image "root" $) }}
+          imagePullPolicy: IfNotPresent
           securityContext:
-            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
+            {{- include "tech-radar.containerSecurityContext" (dict "root" $ "bilesen" .Values.postgresql) | nindent 12 }}
           ports:
             - containerPort: {{ .Values.postgresql.port }}
           env:
@@ -59,11 +60,12 @@ spec:
                 secretKeyRef:
                   name: teknoloji-secret
                   key: DB_USER
+            # Uygulamayla ayni parola (spec 7.1)
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: teknoloji-secret
-                  key: POSTGRES_PASSWORD
+                  key: DB_PASSWORD
             - name: PGDATA
               value: {{ .Values.postgresql.pgdata }}
           volumeMounts:
@@ -77,18 +79,12 @@ spec:
             {{- toYaml .Values.postgresql.resources | nindent 12 }}
           readinessProbe:
             exec:
-              command:
-                - pg_isready
-                - -U
-                - {{ .Values.secrets.dbUser }}
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", {{ .Values.secrets.dbUser | quote }}, "-d", {{ .Values.config.database.name | quote }}]
             initialDelaySeconds: {{ .Values.postgresql.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.postgresql.probes.readiness.periodSeconds }}
           livenessProbe:
             exec:
-              command:
-                - pg_isready
-                - -U
-                - {{ .Values.secrets.dbUser }}
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", {{ .Values.secrets.dbUser | quote }}, "-d", {{ .Values.config.database.name | quote }}]
             initialDelaySeconds: {{ .Values.postgresql.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.postgresql.probes.liveness.periodSeconds }}
       volumes:
@@ -104,7 +100,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Values.postgresql.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.postgresql.name }}

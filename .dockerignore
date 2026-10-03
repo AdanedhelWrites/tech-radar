@@ -41,6 +41,12 @@ db.sqlite3.*
 media/
 staticfiles/
 
+# Imaja girmesi gereksiz (Faz B2): belgeler, dagitim tanimlari, Beat durumu
+docs/
+helm/
+k8s/
+celerybeat-schedule
+
 # Docker
 Dockerfile
 docker-compose*.yml

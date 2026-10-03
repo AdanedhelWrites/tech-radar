@@ -141,6 +141,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    env:
+      # secrets.* bilincli olarak bos ve `required`; CI sahte deger verir
+      HELM_GEREKLI: --set secrets.secretKey=ci-dogrulama-icin-sahte-deger --set secrets.dbPassword=ci-dogrulama-icin-sahte-parola
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -151,17 +154,55 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Chart surum kapisi taban commit'teki Chart.yaml'a erisir
+          fetch-depth: 0
 
       - name: helm lint + template
         run: |
           set -euo pipefail
-          # secrets.secretKey bilincli olarak bos ve `required`; CI sahte deger verir
-          helm lint helm/tech-radar --set secrets.secretKey=ci-dogrulama-icin-sahte-deger
-          helm template tech-radar helm/tech-radar --set secrets.secretKey=ci-dogrulama-icin-sahte-deger > rendered.yaml
+          # shellcheck disable=SC2086
+          helm lint helm/tech-radar $HELM_GEREKLI
+          # shellcheck disable=SC2086
+          helm template tech-radar helm/tech-radar -n tech-radar-ci $HELM_GEREKLI > rendered.yaml
+          # shellcheck disable=SC2086
+          helm template tech-radar helm/tech-radar -n tech-radar-ci $HELM_GEREKLI -f helm/tech-radar/ci/yerel-values.yaml > rendered-yerel.yaml
           kinds=$(grep -cE '^kind:' rendered.yaml || true)
-          echo "Helm render: ${kinds} kaynak"
-          [ "${kinds}" -ge 5 ] || { echo "::error::Helm chart beklenenden az kaynak uretti (${kinds})"; exit 1; }
+          echo "### Helm render: ${kinds} kaynak" >> "${GITHUB_STEP_SUMMARY}"
+          [ "${kinds}" -eq 18 ] || { echo "::error::Helm chart 18 kaynak bekleniyordu, ${kinds} uretti"; exit 1; }
+
+      - name: Zorunlu degerler (negatif test)
+        run: |
+          set -uo pipefail
+          if helm template t helm/tech-radar --set secrets.secretKey=x > /dev/null 2> hata.txt; then
+            echo "::error::secrets.dbPassword olmadan render basarili oldu"; exit 1
+          fi
+          grep -q "secrets.dbPassword zorunlu" hata.txt || { cat hata.txt; exit 1; }
+          if helm template t helm/tech-radar --set secrets.dbPassword=x > /dev/null 2> hata.txt; then
+            echo "::error::secrets.secretKey olmadan render basarili oldu"; exit 1
+          fi
+          grep -q "secrets.secretKey zorunlu" hata.txt || { cat hata.txt; exit 1; }
+
+      - name: Render cikti kontrolleri
+        run: |
+          set -euo pipefail
+          if grep -nE 'ALLOWED_HOSTS: "\*"|postgresPassword|DATABASE_URL' rendered.yaml; then
+            echo "::error::Render'da kaldirilmis ya da yasak ayar var"; exit 1
+          fi
+          grep -q 'name: teknoloji-translate$' rendered.yaml || { echo "::error::LibreTranslate Deployment'i yok"; exit 1; }
+          scripts/imaj_etiket_kontrol.sh rendered.yaml
+          scripts/imaj_etiket_kontrol.sh rendered-yerel.yaml
+
+      - name: kubeconform (Kubernetes semasi)
+        run: |
+          docker run --rm -v "$PWD:/w" \
+            ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
+            -strict -summary -kubernetes-version 1.31.0 /w/rendered.yaml /w/rendered-yerel.yaml
+
+      - name: Chart surum kapisi
+        env:
+          TABAN: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: scripts/chart_surum_kontrol.sh "$TABAN"
 
       - name: docker compose config
-        # SECRET_KEY ve DB_PASSWORD compose'da :? ile zorunlu; CI sahte deger verir
+        # SECRET_KEY ve DB_PASSWORD compose'da `:?` ile zorunlu; CI sahte deger verir
         run: SECRET_KEY=ci-dogrulama-icin-sahte-deger DB_PASSWORD=ci-dogrulama-icin-sahte-parola docker compose -f docker-compose.yml config --quiet

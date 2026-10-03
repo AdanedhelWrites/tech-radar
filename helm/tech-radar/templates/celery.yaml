@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.worker.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.worker.name }}
@@ -18,35 +18,21 @@ spec:
       labels:
         app.kubernetes.io/name: {{ .Values.worker.name }}
         app.kubernetes.io/component: {{ .Values.worker.component }}
+      annotations:
+        {{- include "tech-radar.ayarOzeti" . | nindent 8 }}
     spec:
       securityContext:
         {{- include "tech-radar.podSecurityContext" .Values.worker.securityContext | nindent 8 }}
+      initContainers:
+        {{- include "tech-radar.migrasyonBekle" . | nindent 8 }}
       containers:
         - name: worker
-          image: {{ include "tech-radar.backendImage" . }}
+          image: {{ include "tech-radar.image" (dict "image" .Values.backend.image "root" $) }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           command: {{ .Values.worker.command | toJson }}
           securityContext:
-            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
-          envFrom:
-            - configMapRef:
-                name: teknoloji-config
-          env:
-            - name: SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: SECRET_KEY
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: DB_USER
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: DB_PASSWORD
+            {{- include "tech-radar.containerSecurityContext" (dict "root" $ "bilesen" .Values.worker) | nindent 12 }}
+          {{- include "tech-radar.uygulamaOrtami" . | nindent 10 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -56,12 +42,12 @@ spec:
         - name: tmp
           emptyDir: {}
 ---
-# Celery Beat — ONEMLI: Her zaman 1 replica olmali!
+# Celery Beat — her zaman 1 replica
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.scheduler.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.scheduler.name }}
@@ -78,35 +64,21 @@ spec:
       labels:
         app.kubernetes.io/name: {{ .Values.scheduler.name }}
         app.kubernetes.io/component: {{ .Values.scheduler.component }}
+      annotations:
+        {{- include "tech-radar.ayarOzeti" . | nindent 8 }}
     spec:
       securityContext:
         {{- include "tech-radar.podSecurityContext" .Values.scheduler.securityContext | nindent 8 }}
+      initContainers:
+        {{- include "tech-radar.migrasyonBekle" . | nindent 8 }}
       containers:
         - name: scheduler
-          image: {{ include "tech-radar.backendImage" . }}
+          image: {{ include "tech-radar.image" (dict "image" .Values.backend.image "root" $) }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           command: {{ .Values.scheduler.command | toJson }}
           securityContext:
-            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
-          envFrom:
-            - configMapRef:
-                name: teknoloji-config
-          env:
-            - name: SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: SECRET_KEY
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: DB_USER
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: DB_PASSWORD
+            {{- include "tech-radar.containerSecurityContext" (dict "root" $ "bilesen" .Values.scheduler) | nindent 12 }}
+          {{- include "tech-radar.uygulamaOrtami" . | nindent 10 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp

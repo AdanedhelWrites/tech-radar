@@ -69,5 +69,3 @@ scripts/ornek_istemci_durum.json
 .claude/settings.local.json
 .claude/worktrees/
 
-# Gercek k8s secret'i (ornegi: k8s/02-secret.yaml.example)
-k8s/02-secret.yaml

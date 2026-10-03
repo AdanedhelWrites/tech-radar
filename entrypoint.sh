@@ -26,16 +26,22 @@ fi
 
 # --- Migration (sadece API sunucusu icin, worker/beat icin skip) ---
 # Celery komutları migration çalıştırmamalı
+# Kubernetes'te RUN_STARTUP_TASKS=false: migration ayri Job'da calisir, statik
+# dosyalar imajdadir (Faz B2). Compose varsayilani true (davranis degismez).
 case "$1" in
     celery)
         echo "Celery modu — migration atlanıyor."
         ;;
     *)
-        echo "Migration calistiriliyor..."
-        python manage.py migrate --noinput || true
+        if [ "${RUN_STARTUP_TASKS:-true}" = "true" ]; then
+            echo "Migration calistiriliyor..."
+            python manage.py migrate --noinput || true
 
-        echo "Static dosyalar toplanıyor..."
-        python manage.py collectstatic --noinput || true
+            echo "Static dosyalar toplanıyor..."
+            python manage.py collectstatic --noinput || true
+        else
+            echo "RUN_STARTUP_TASKS=false — migration ve collectstatic atlaniyor."
+        fi
         ;;
 esac
 

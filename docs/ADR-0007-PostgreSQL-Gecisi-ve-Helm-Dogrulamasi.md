@@ -1,7 +1,7 @@
 # ADR 0007: PostgreSQL Gecisi ve Helm Dogrulamasi (Faz B)
 
 ## Status
-Accepted — 2026-10-01. **B1 (PostgreSQL) uygulandi** (canli gecis 2026-10-02 02:10-02:15, merge commit `a492d38`). B2 (Helm dogrulamasi) acik.
+Accepted — 2026-10-01. **B1 (PostgreSQL) uygulandi** (canli gecis 2026-10-02 02:10-02:15, merge commit `a492d38`). **B2 (Helm dogrulamasi) uygulandi** (2026-10-03, docker-desktop'ta S1-S7 gecti); chart 2.0.0, appVersion 2026.10.1.
 
 Tasarim: [`superpowers/specs/2026-10-01-faz-b-postgres-helm-design.md`](superpowers/specs/2026-10-01-faz-b-postgres-helm-design.md). Planlar: `superpowers/plans/2026-10-01-faz-b1-postgres.md`, `superpowers/plans/2026-10-01-faz-b2-helm.md`. Spec ile plan celistiginde planlarin "Spec'e Gore Netlestirmeler" ve "Plan Degisikligi" bolumleri gecerlidir.
 
@@ -50,6 +50,44 @@ Tasarim sirasindaki problar (2026-09-30) yontemi belirledi:
 Gecis sirasinda yakalanan bir plan hatasi: Git Bash `docker compose run ... /app/...` yolunu `C:/Program Files/Git/app/...` olarak cevirdi ve ilk dump konteyner icine yazilip kayboldu. SQLite'a dokunulmadi (hash dogrulandi); komut `MSYS_NO_PATHCONV=1` ile tekrarlandi. Plan metni duzeltildi.
 
 48 saatlik olcum: (B1 Task 10'da eklenir)
+
+## Helm Dogrulamasi (B2)
+
+### Karar
+7. **Helm tek dagitim kaynagi;** `k8s/` silindi. Ham manifest isteyen `helm template` kullanir.
+8. **Chart surumlenir (K7):** SemVer `version` (bu faz 1.0.0 -> 2.0.0), `appVersion` = uygulama imaj etiketi (CalVer `2026.10.1`), `helm/tech-radar/CHANGELOG.md` (MAJOR'da yukseltme notu). Values'ta kayan etiket yok: ucuncu taraf imajlar surum + digest ile sabit. CI: `scripts/chart_surum_kontrol.sh` (chart degistiyse surum artmali ve CHANGELOG basligi olmali), `scripts/imaj_etiket_kontrol.sh`, kubeconform, zorunlu deger negatif testi.
+9. **Tek parola:** `secrets.dbPassword` zorunlu; `postgresPassword` kalkti (iki deger farkli girilince uygulama baglanamiyordu).
+10. **Migration** her revizyonda `teknoloji-migrate-r<N>` Job'unda; uygulama pod'lari `migrate --check` initContainer'inda bekler. Hook ve entrypoint'teki eszamanli migrate kalkti (`RUN_STARTUP_TASKS=false`); statik dosyalar imajda.
+11. **Probe'lar** `/api/v1/health/` + `Host: localhost`; `ALLOWED_HOSTS` sablonda acik liste (`*` kalkti).
+12. **LibreTranslate** chart'a girdi (PVC'de modeller); eksik env'ler `config.app.*`; `fsGroup` eklendi; pod'lar configmap/secret checksum'iyla yenilenir. Kok dosya sistemi her bilesende salt okunur kaldi: LibreTranslate'in yazdigi `.config`, `.cache`, `/app/db` (Prometheus metrik dizini) ve `/tmp` icin `emptyDir`.
+13. **Dogrulama yalniz yerel `docker-desktop`'ta** (`scripts/helm_yerel_dogrulama.sh`; baglam sabit, yerel olmayan kume reddedilir). Gercek kume talimatlari yalniz `<placeholder>` sablonu.
+
+### Ortam
+Docker Desktop Kubernetes **kubeadm** saglayicisi (tek dugum `docker-desktop`, v1.36.1, runtime docker: yerel imajlar kumede dogrudan gorunur). kind saglayicisi denendi ama Docker containerd image store'u kapali oldugu icin kume acilmadi; store'u acmak canli yiginin imajlarini gizleyecegi icin tercih edilmedi. Helm 4.3.0.
+
+### Sonuc (2026-10-03)
+| Senaryo | Sonuc |
+|---|---|
+| S1 kurulum (`--wait --wait-for-jobs`) | GECTI — tum pod'lar Ready, `teknoloji-migrate-r1` Complete, `migrate --check` 0 |
+| S2 HTTP | GECTI — health 200, schema tokensiz 401, frontend/admin/static 200, sahte `Host` 400 |
+| S3 uctan uca | GECTI — worker -> LibreTranslate `/languages` 200, SRE cekimi FetchRun `success` |
+| S4 upgrade | GECTI — revizyon 2, `teknoloji-migrate-r2` Complete, configmap degisikligi (RETENTION_DAYS 91) pod'lari yeniledi, veri korundu |
+| S5 PostgreSQL pod silme | GECTI — yeni pod Ready, FetchRun sayisi korundu (PVC + fsGroup) |
+| S6 zorunlu degerler | GECTI — `secretKey`/`dbPassword` olmadan render anlamli mesajla reddedildi |
+| S7 sokum | GECTI — release, namespace ve PVC'ler silindi; compose yigini etkilenmedi |
+
+Basarili kosu: 4 dk 23 sn (imaj derleme haric). Yerel imajlar dugume yuklenmeden kumede gorundu.
+
+**Dogrulamanin buldugu iki gercek hata** (ikisi de bu faza kadar hic deploy edilmedigi icin gorunmemisti):
+1. LibreTranslate salt okunur kokte `/home/libretranslate/.config` ve `/app/db/prometheus`'a yazamiyor, `CrashLoopBackOff`. Cozum guvenlik ayarini gevsetmek degil, bu iki dizine `emptyDir` (spec 8.4'teki "gevset" yedegine gerek kalmadi).
+2. `frontend/nginx.conf`'ta `location ~* \.(js|css|...)$` regex blogu, `^~` olmayan `/api/`, `/admin/`, `/static/` onek bloklarindan oncelikliydi: `/static/*.css` api'ye proxy'lenmeyip 404 donuyordu (compose'da frontend Vite dev sunucusu oldugu icin hic gorulmedi). Cozum: uc blok `location ^~`.
+
+### Kabul edilen sinirlar (B2)
+- Redis `emptyDir`: pod yeniden baslarsa kilit/soguma/cache/kuyruk kaybolur.
+- Readiness DB'yi kontrol etmez (`/api/v1/health/` bilincli olarak bagimsiz).
+- `helm rollback` sema geri almaz.
+- `backend.name` frontend imajina (`nginx.conf`) bagli.
+- Docker Desktop uretim kumesi degildir: storage class, ingress controller, NetworkPolicy ve cok dugumlu zamanlama dogrulanmadi.
 
 ## Consequences
 - **Positive:** Yazma kilidi kalkar; worker ve api eszamanli yazabilir. v1 imleci gecisten etkilenmedi (delta ozeti ayni). Env'i eksik bir kurulum acilista hata verir. Diger kisisel uygulamalar ayni sunucuda kendi veritabanini alir; Kubernetes kurulumu silinip yeniden kurulsa da yerel veri kalir.

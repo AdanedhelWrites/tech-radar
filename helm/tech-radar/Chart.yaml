@@ -1,12 +1,16 @@
 apiVersion: v2
 name: tech-radar
 description: >-
-  Turkish tech news aggregator — scrapes 27 sources
-  (cybersecurity, CVE, Kubernetes, SRE, DevTools),
-  translates to Turkish, and serves via a dark-mode UI.
+  Turkish tech news aggregator — scrapes cybersecurity, CVE, Kubernetes, SRE,
+  DevTools and AI sources, translates to Turkish (LibreTranslate + Gemini),
+  and serves an integration API and a dark-mode UI. PostgreSQL + Redis.
 type: application
-version: 1.0.0
-appVersion: "1.0.0"
+# Chart surumu SemVer'dir (CHANGELOG.md): uyumsuz values/sablon degisikligi MAJOR,
+# yeni istege bagli deger veya bilesen MINOR, davranisi degistirmeyen duzeltme PATCH.
+# Chart dizinindeki her degisiklik bu degeri artirir (scripts/chart_surum_kontrol.sh).
+version: 2.0.0
+# Uygulama imajinin etiketi (CalVer YYYY.M.N); backend/frontend image.tag bossa kullanilir.
+appVersion: "2026.10.1"
 keywords:
   - news-aggregator
   - cybersecurity

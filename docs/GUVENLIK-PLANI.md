@@ -113,6 +113,7 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapanacak; triaj kalanlara yap
 - [x] `docker-compose.yml` içindeki `SECRET_KEY=your-secret-key-here...` placeholder'ını `.env` dosyasına taşı
 - [x] **Varsayılan SECRET_KEY ile deploy riski:** `helm/tech-radar/values.yaml`, `values.yaml`, `k8s/02-secret.yaml` ve README'de örnek (Türkçe cümle) `SECRET_KEY` değerleri var. Bunlarla deploy edilirse anahtar herkesçe bilinir (session/CSRF imzası taklit edilebilir). Çözüm:
   - helm: `secretKey` boş, template'te `required` ✅
+  - helm: `dbPassword` da `required`; ayrı `postgresPassword` kaldırıldı (tek parola) ✅ (Faz B2, ADR-0007)
   - k8s: `02-secret.yaml` → `02-secret.yaml.example` ✅ (uzantı `.yaml` ile bitmez: `kubectl apply -f k8s/` onu atlar)
   - `settings.py`: `DEBUG=False` iken boş/örnek/zayıf `SECRET_KEY` ile açılmayı reddeder ✅ (`cybernews/ayar_dogrulama.py`)
   - `.gitleaksignore` **değiştirilmedi**: girdiler geçmiş commit'lere sabitli; silinirse geçmiş taraması yeniden kırmızı olur. (İlk plandaki "baseline'dan da silinmeli" maddesi bu yüzden geçersiz.)
@@ -130,3 +131,4 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapanacak; triaj kalanlara yap
 - **2026-09-14:** gitleaks `main`'de #3'ten beri her push'ta kırmızıydı. Sebep workflow hatası: runner `bash -e` ile koştuğu için rapor modunda sızıntı bulununca adım erken ölüyordu. `set +e` ile düzeltildi. Bulunan 5 bulgunun hepsi placeholder `SECRET_KEY`; `.gitleaksignore`'a baseline olarak eklendi, deploy riski P4'te.
 - **2026-09-22:** Güvenlik temizliği: P1 ve P2 uygulandı, Dependabot 14 → 0, code scanning 89 → 11 (ayrıntı: superpowers/specs/2026-09-22-guvenlik-temizligi-design.md).
 - **2026-09-30:** PR #43 (Django 5.2.17) merge. P4 SECRET_KEY/ALLOWED_HOSTS koruması (superpowers/specs/2026-09-30-hizli-isler-design.md).
+- **2026-10-03:** Faz B: SQLite → paylaşılan yerel PostgreSQL geçişi (B1) ve Helm chart 2.0.0 yerel docker-desktop doğrulaması (B2, ADR-0007). CI'a chart sürüm/imaj etiket kapıları ve kubeconform eklendi; DAST PostgreSQL ile çalışır.

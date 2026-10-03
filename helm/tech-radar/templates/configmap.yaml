@@ -2,16 +2,31 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: teknoloji-config
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
 data:
   DEBUG: {{ .Values.config.django.debug | quote }}
-  ALLOWED_HOSTS: {{ .Values.config.django.allowedHosts | quote }}
+  ALLOWED_HOSTS: {{ include "tech-radar.allowedHosts" . | quote }}
   CORS_ALLOWED_ORIGINS: {{ .Values.config.django.corsAllowedOrigins | quote }}
-  DATABASE_URL: {{ .Values.config.database.url | quote }}
+  CSRF_TRUSTED_ORIGINS: {{ include "tech-radar.csrfTrustedOrigins" . | quote }}
   DB_NAME: {{ .Values.config.database.name | quote }}
   DB_HOST: {{ .Values.config.database.host | quote }}
   DB_PORT: {{ .Values.config.database.port | quote }}
   REDIS_URL: {{ .Values.config.redis.url | quote }}
   CELERY_BROKER_URL: {{ .Values.config.redis.celeryBrokerUrl | quote }}
+  # Migration ayri Job'da, statikler imajda (spec 7.6-7.7)
+  RUN_STARTUP_TASKS: "false"
+  REFRESH_COOLDOWN: {{ .Values.config.app.refreshCooldown | quote }}
+  REFRESH_LOCK_TTL: {{ .Values.config.app.refreshLockTtl | quote }}
+  TRANSLATE_MIN_RATIO: {{ .Values.config.app.translateMinRatio | quote }}
+  RETRANSLATE_BATCH: {{ .Values.config.app.retranslateBatch | quote }}
+  RETRANSLATE_UPGRADE_BATCH: {{ .Values.config.app.retranslateUpgradeBatch | quote }}
+  RETENTION_DAYS: {{ .Values.config.app.retentionDays | quote }}
+  GEMINI_CVE_RESERVE: {{ .Values.config.app.geminiCveReserve | quote }}
+  GEMINI_DAILY_BUDGET: {{ .Values.config.app.geminiDailyBudget | quote }}
+  GEMINI_MODEL: {{ .Values.config.app.geminiModel | quote }}
+  LIBRETRANSLATE_URL: {{ include "tech-radar.libretranslateUrl" . | quote }}
+  LIBRETRANSLATE_TIMEOUT: {{ .Values.config.app.libretranslateTimeout | quote }}
+  LIBRETRANSLATE_COOLDOWN: {{ .Values.config.app.libretranslateCooldown | quote }}
+  LIBRETRANSLATE_CHUNK_CHARS: {{ .Values.config.app.libretranslateChunkChars | quote }}

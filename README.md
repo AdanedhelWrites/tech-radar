@@ -483,35 +483,25 @@ cybersecurity_news/
 │
 ├── docs/                       # Mimari karar kayitlari (ADR)
 │
-├── k8s/                        # Kubernetes manifest'leri (kubectl apply)
-│   ├── 00-namespace.yaml
-│   ├── 01-configmap.yaml       # Uygulama ayarlari
-│   ├── 02-secret.yaml.example  # Secret ornegi (dogrudan uygulanmaz)
-│   ├── 03-postgresql.yaml      # PostgreSQL (opsiyonel)
-│   ├── 04-redis.yaml           # Redis (opsiyonel)
-│   ├── 05-backend.yaml         # Django API Deployment + Service
-│   ├── 06-frontend.yaml        # Nginx Frontend Deployment + Service
-│   ├── 07-celery.yaml          # Worker + Beat Deployment
-│   ├── 08-ingress.yaml         # Nginx Ingress kurallari
-│   └── 09-migration-job.yaml   # DB migration Job
-│
-├── helm/tech-radar/            # Helm chart
-│   ├── Chart.yaml              # Chart metadata (v1.0.0)
-│   ├── values.yaml             # Varsayilan degerler
+├── helm/tech-radar/            # Helm chart (tek dagitim kaynagi; surum: Chart.yaml)
+│   ├── Chart.yaml              # version (SemVer) + appVersion (imaj etiketi)
+│   ├── CHANGELOG.md            # Chart surumleri ve yukseltme notlari
+│   ├── values.yaml             # Varsayilan degerler (gizli deger icermez)
+│   ├── ci/yerel-values.yaml    # Yerel docker-desktop dogrulamasi
 │   ├── .helmignore
 │   └── templates/
-│       ├── _helpers.tpl        # Paylasilan template fonksiyonlari
-│       ├── namespace.yaml
+│       ├── _helpers.tpl        # Imaj, guvenlik baglami, ortam, ALLOWED_HOSTS yardimcilari
 │       ├── configmap.yaml
-│       ├── secret.yaml
-│       ├── postgresql.yaml     # postgresql.enabled ile kontrol edilir
-│       ├── redis.yaml          # redis.enabled ile kontrol edilir
+│       ├── secret.yaml         # secretKey ve dbPassword zorunlu
+│       ├── postgresql.yaml     # postgresql.enabled
+│       ├── redis.yaml          # redis.enabled
+│       ├── libretranslate.yaml # libretranslate.enabled
 │       ├── backend.yaml
 │       ├── frontend.yaml
 │       ├── celery.yaml         # Worker + Beat
-│       ├── ingress.yaml        # ingress.enabled ile kontrol edilir
-│       ├── migration-job.yaml  # post-install/post-upgrade hook
-│       └── NOTES.txt           # helm install sonrasi bilgi mesaji
+│       ├── migration-job.yaml  # Her revizyonda teknoloji-migrate-r<N>
+│       ├── ingress.yaml        # ingress.enabled
+│       └── NOTES.txt
 │
 ├── docker-compose.yml          # 6 servis (PostgreSQL ayri: yerel-platform)
 ├── Dockerfile                  # Backend multi-stage build
@@ -589,301 +579,106 @@ Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabani
 
 ---
 
-## Kubernetes'e Deploy Etme
+## Kubernetes'e Deploy Etme (Helm)
 
-### Opsion A — Manifest'lerle (kubectl apply)
+Tek dagitim kaynagi `helm/tech-radar/` chart'idir; ham manifest isteyen `helm template` ciktisini kullanir. Chart surumu `Chart.yaml`'dadir ve SemVer'e uyar (uyumsuz degisiklik MAJOR, yeni istege bagli deger MINOR, duzeltme PATCH); her surumun degisiklikleri ve yukseltme notlari [`helm/tech-radar/CHANGELOG.md`](helm/tech-radar/CHANGELOG.md)'dedir ve CI bunu zorlar. `appVersion` uygulama imajinin etiketidir. Kararlar: [ADR-0007](docs/ADR-0007-PostgreSQL-Gecisi-ve-Helm-Dogrulamasi.md).
 
-#### On Gereksinimler
+> **Guvenlik:** Asagidaki komutlar sablondur; `<...>` alanlarini kendi ortaminizla doldurun ve **her komutta hedef baglami acikca verin** (`--kube-context` / `--context`). Aktif `kubectl` baglamina guvenmeyin. Gizli degerleri values dosyasina yazmayin.
 
-- Kubernetes cluster (minikube, k3s, EKS, GKE, AKS, vb.)
-- `kubectl` CLI kurulu ve cluster'a bagli
-- Docker image build ortami
-- Nginx Ingress Controller (opsiyonel)
+### On gereksinimler
 
-#### Mimari (Kubernetes)
+- Kubernetes kumesi, `kubectl` ve Helm 3
+- Kumenin cekebilecegi bir registry'de backend ve frontend imajlari
+- Ingress kullanilacaksa bir Ingress Controller (`ingress.className`, varsayilan `nginx`)
 
-```
-                    ┌─────────────────────┐
-                    │   Ingress (Nginx)   │
-                    └──────┬──────────────┘
-                           │
-              ┌────────────┼────────────┐
-              │ /api,      │ /          │
-              │ /admin,    │            │
-              │ /static    │            │
-              ▼            │            ▼
-    ┌──────────────┐       │  ┌──────────────────┐
-    │ teknoloji-api│       │  │teknoloji-frontend│
-    │ replica: 2   │       │  │  replica: 2      │
-    │ :8000        │       │  │  :3000 (nginx)   │
-    └──────┬───────┘       │  └──────────────────┘
-           │               │
-    ┌──────┼───────────────┘
-    │      │
-    ▼      ▼
-┌────────┐  ┌────────────────────┐
-│ Redis  │  │    PostgreSQL      │
-│ :6379  │  │    :5432           │
-└────────┘  └────────────────────┘
-    ▲
-    │
-┌───┴──────────────┐  ┌───────────────────┐
-│ teknoloji-worker │  │teknoloji-scheduler│
-│ (Celery Worker)  │  │ (Celery Beat)     │
-└──────────────────┘  └───────────────────┘
-```
-
-Docker Compose'dan farkli olarak Kubernetes'te:
-- **PostgreSQL** kullanilir (SQLite yerine — coklu replica destegi)
-- Frontend **Nginx** ile statik dosya olarak sunulur (Vite dev server yerine)
-- Tum konfigrasyon **ConfigMap** ve **Secret** ile yonetilir
-
-#### Adim 1 — Docker Image'larini Build Edin
+### Imajlar
 
 ```bash
-# Backend
-docker build -t teknoloji-haberleri-api:latest .
-
-# Frontend (production Nginx build)
-docker build -t teknoloji-haberleri-frontend:latest ./frontend
+docker build -t <registry>/teknoloji-haberleri-api:<surum> .
+docker build -t <registry>/teknoloji-haberleri-frontend:<surum> ./frontend
+docker push <registry>/teknoloji-haberleri-api:<surum>
+docker push <registry>/teknoloji-haberleri-frontend:<surum>
 ```
 
-Private registry kullaniyorsaniz tag'leyip push edin:
+`image.tag` verilmezse chart `appVersion`'i kullanir.
+
+### Kurulum
 
 ```bash
-docker tag teknoloji-haberleri-api:latest REGISTRY/teknoloji-haberleri-api:latest
-docker tag teknoloji-haberleri-frontend:latest REGISTRY/teknoloji-haberleri-frontend:latest
-docker push REGISTRY/teknoloji-haberleri-api:latest
-docker push REGISTRY/teknoloji-haberleri-frontend:latest
+helm upgrade --install tech-radar ./helm/tech-radar \
+  --kube-context <hedef-baglam> -n <namespace> --create-namespace \
+  --set secrets.secretKey="<openssl rand -hex 32>" \
+  --set secrets.dbPassword="<guclu-sifre>" \
+  --set ingress.host=<alan-adi> \
+  --set backend.image.repository=<registry>/teknoloji-haberleri-api \
+  --set backend.image.tag=<surum> \
+  --set frontend.image.repository=<registry>/teknoloji-haberleri-frontend \
+  --set frontend.image.tag=<surum> \
+  --wait --wait-for-jobs --timeout 15m
 ```
 
-Registry kullandiginizda K8s manifest'lerindeki `image:` degerlerini ve `imagePullPolicy` satirini guncellemeyi unutmayin.
+`secrets.secretKey` ve `secrets.dbPassword` zorunludur (bos birakilirsa render reddedilir); PostgreSQL ve uygulama ayni `dbPassword`'u kullanir. `secrets.geminiApiKey` istege baglidir. Uretimde harici secret yonetimi (external-secrets, sealed-secrets, vault) tercih edin.
 
-#### Adim 2 — Secret'lari Olusturun
+### Nasil calisir
 
-`k8s/02-secret.yaml.example` dosyasini `k8s/02-secret.yaml` olarak kopyalayip degerleri doldurun (`k8s/02-secret.yaml` gitignore'dadir):
+- Her revizyonda `teknoloji-migrate-r<revizyon>` Job'u migration'lari uygular; api, worker ve scheduler `migrasyon-bekle` initContainer'inda `migrate --check` gecene kadar bekler. `helm rollback` sema geri almaz.
+- Backend probe'lari `/api/v1/health/`'e `Host: localhost` ile gider. `ALLOWED_HOSTS` sablonda kurulur: `localhost`, `teknoloji-api` (kume ici tuketici), ingress host'u ve `config.django.extraAllowedHosts`.
+- Statik dosyalar imajdadir; pod'lar `RUN_STARTUP_TASKS=false` ile acilir ve kok dosya sistemi salt okunurdur.
+- LibreTranslate (`libretranslate.enabled`) ilk acilista ~258 MB model indirir (internet gerekir); modeller PVC'de kalir.
+- Redis `emptyDir` kullanir: pod yeniden baslarsa bolum kilitleri, soguma, cache ve kuyruk kaybolur; Beat bir sonraki slotta yeniden planlar.
+- `backend.name` `frontend/nginx.conf`'a baglidir (`teknoloji-api`); degistirirseniz frontend imajini yeniden derleyin.
 
-```yaml
-stringData:
-  SECRET_KEY: ""  # openssl rand -hex 32 — bos, ornek veya 32 karakterden kisa deger uygulamayi acmaz
-  DB_USER: "cybernews"
-  DB_PASSWORD: "guclu-veritabani-sifresi"
-  POSTGRES_PASSWORD: "guclu-veritabani-sifresi"
-```
-
-Veya dogrudan kubectl ile:
+### Guncelleme, geri alma, kaldirma
 
 ```bash
-kubectl create namespace teknoloji-haberleri
-
-kubectl create secret generic teknoloji-secret \
-  --namespace=teknoloji-haberleri \
-  --from-literal=SECRET_KEY="$(openssl rand -hex 32)" \
-  --from-literal=DB_USER=cybernews \
-  --from-literal=DB_PASSWORD="$(openssl rand -hex 16)" \
-  --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 16)"
+helm upgrade tech-radar ./helm/tech-radar --kube-context <hedef-baglam> -n <namespace> --reuse-values \
+  --set backend.image.tag=<yeni-surum> --set frontend.image.tag=<yeni-surum> --wait --wait-for-jobs
+helm history tech-radar --kube-context <hedef-baglam> -n <namespace>
+helm rollback tech-radar <revizyon> --kube-context <hedef-baglam> -n <namespace>
+helm uninstall tech-radar --kube-context <hedef-baglam> -n <namespace>
+kubectl --context <hedef-baglam> delete namespace <namespace>   # PVC'ler (veri) de silinir
 ```
 
-#### Adim 3 — Manifest'leri Uygulayin
+Yeni bir chart surumune gecmeden once `CHANGELOG.md`'deki yukseltme notunu okuyun (ornek: 2.0.0'da `postgresPassword` ve `global.namespace` kalkti).
+
+### Ham manifest
 
 ```bash
-# Tum manifest'leri uygula
-kubectl apply -f k8s/
-
-# Veya adim adim:
-kubectl apply -f k8s/00-namespace.yaml
-kubectl apply -f k8s/01-configmap.yaml
-kubectl apply -f k8s/02-secret.yaml
-kubectl apply -f k8s/03-postgresql.yaml     # Mevcut PostgreSQL varsa ATLA
-kubectl apply -f k8s/04-redis.yaml           # Mevcut Redis varsa ATLA
-kubectl wait --for=condition=ready pod \
-  -l app.kubernetes.io/name=teknoloji-postgresql \
-  -n teknoloji-haberleri --timeout=120s
-kubectl apply -f k8s/09-migration-job.yaml
-kubectl wait --for=condition=complete job/teknoloji-migrate \
-  -n teknoloji-haberleri --timeout=120s
-kubectl apply -f k8s/05-backend.yaml
-kubectl apply -f k8s/06-frontend.yaml
-kubectl apply -f k8s/07-celery.yaml
-kubectl apply -f k8s/08-ingress.yaml         # Ingress Controller yoksa ATLA
+helm template tech-radar ./helm/tech-radar -n <namespace> \
+  --set secrets.secretKey=<...> --set secrets.dbPassword=<...> > tech-radar.yaml
 ```
 
-#### Adim 4 — Dogrulama
+Ciktida secret degerleri acik metindir; commit etmeyin.
+
+### Yerel dogrulama (Docker Desktop Kubernetes)
+
+Chart yalniz yerel `docker-desktop` baglaminda gercek kurulumla dogrulanir (S1-S7: kurulum, HTTP, uctan uca cekim, upgrade, PostgreSQL kaliciligi, zorunlu degerler, sokum):
 
 ```bash
-kubectl get pods -n teknoloji-haberleri
-kubectl logs -f deployment/teknoloji-api -n teknoloji-haberleri
+scripts/helm_yerel_dogrulama.sh imaj   # :fazb-yerel imajlari
+scripts/helm_yerel_dogrulama.sh kur    # S1-S6
+scripts/helm_yerel_dogrulama.sh sok    # S7
 ```
 
-Ingress yoksa port forward:
+Betik baglami degistirmez, yerel olmayan bir kumeyi reddeder, gizli degerleri calisma aninda uretir ve `helm/tech-radar/ci/yerel-values.yaml`'i kullanir.
 
-```bash
-kubectl port-forward svc/teknoloji-frontend 3000:3000 -n teknoloji-haberleri
-kubectl port-forward svc/teknoloji-api 8000:8000 -n teknoloji-haberleri
-```
-
-### Opsion B — Helm Chart ile Deploy
-
-Helm chart `helm/tech-radar/` dizininde bulunur. Tum K8s kaynaklarini tek komutla deploy eder ve `values.yaml` uzerinden yapilandirma saglar.
-
-#### On Gereksinimler
-
-- Kubernetes cluster (minikube, k3s, EKS, GKE, AKS, vb.)
-- `kubectl` CLI kurulu ve cluster'a bagli
-- [Helm 3](https://helm.sh/docs/intro/install/) kurulu
-- Docker image'lar build edilmis (Opsion A, Adim 1'e bakin)
-
-#### Adim 1 — values.yaml Duzenleme
-
-`helm/tech-radar/values.yaml` dosyasini ortaminiza gore duzenleyin:
-
-```yaml
-# Onemli degerler:
-secrets:
-  secretKey: ""  # Zorunlu: openssl rand -hex 32 (bos birakilirsa helm install hata verir)
-  dbUser: "cybernews"
-  dbPassword: "guclu-veritabani-sifresi"
-  postgresPassword: "guclu-veritabani-sifresi"
-
-ingress:
-  enabled: true
-  host: teknoloji.example.com      # Kendi domain adiniz
-
-# Harici PostgreSQL kullaniyorsaniz:
-postgresql:
-  enabled: false                    # Cluster icine kurma
-config:
-  database:
-    host: "postgres.ornek-ns.svc.cluster.local"
-
-# Harici Redis kullaniyorsaniz:
-redis:
-  enabled: false
-config:
-  redis:
-    url: "redis://redis.ornek-ns.svc.cluster.local:6379/0"
-    celeryBrokerUrl: "redis://redis.ornek-ns.svc.cluster.local:6379/1"
-```
-
-#### Adim 2 — Helm Install
-
-```bash
-# Varsayilan degerlerle kurulum
-helm install tech-radar ./helm/tech-radar \
-  --namespace teknoloji-haberleri \
-  --create-namespace
-
-# Veya ozel values dosyasiyla
-helm install tech-radar ./helm/tech-radar \
-  --namespace teknoloji-haberleri \
-  --create-namespace \
-  -f my-values.yaml
-
-# Veya komut satirindan deger gecirerek
-helm install tech-radar ./helm/tech-radar \
-  --namespace teknoloji-haberleri \
-  --create-namespace \
-  --set ingress.host=radar.example.com \
-  --set secrets.secretKey="$(openssl rand -hex 32)" \
-  --set secrets.dbPassword="$(openssl rand -hex 16)" \
-  --set secrets.postgresPassword="$(openssl rand -hex 16)"
-```
-
-> **Not:** Migration job, Helm `post-install` ve `post-upgrade` hook olarak otomatik calisir. Manuel calistirmaya gerek yoktur.
-
-#### Adim 3 — Dogrulama
-
-```bash
-# Pod durumlari
-kubectl get pods -n teknoloji-haberleri
-
-# Helm release durumu
-helm status tech-radar -n teknoloji-haberleri
-
-# Uygulama loglari
-kubectl logs -f deployment/teknoloji-api -n teknoloji-haberleri
-```
-
-Ingress yoksa port forward:
-
-```bash
-kubectl port-forward svc/teknoloji-frontend 3000:3000 -n teknoloji-haberleri
-kubectl port-forward svc/teknoloji-api 8000:8000 -n teknoloji-haberleri
-```
-
-#### Guncelleme (Helm Upgrade)
-
-```bash
-# Yeni image build sonrasi
-helm upgrade tech-radar ./helm/tech-radar \
-  --namespace teknoloji-haberleri \
-  --set backend.image.tag=v2 \
-  --set frontend.image.tag=v2
-
-# Veya values dosyasini guncelleyip
-helm upgrade tech-radar ./helm/tech-radar \
-  --namespace teknoloji-haberleri \
-  -f my-values.yaml
-```
-
-Migration job her upgrade'de otomatik calisir (post-upgrade hook).
-
-#### Geri Alma (Rollback)
-
-```bash
-# Onceki surume geri don
-helm rollback tech-radar -n teknoloji-haberleri
-
-# Belirli bir revision'a geri don
-helm history tech-radar -n teknoloji-haberleri
-helm rollback tech-radar 2 -n teknoloji-haberleri
-```
-
-#### Kaldirma
-
-```bash
-helm uninstall tech-radar -n teknoloji-haberleri
-kubectl delete namespace teknoloji-haberleri
-```
-
-#### Helm Chart Yapisi
-
-```
-helm/tech-radar/
-├── Chart.yaml            # name: tech-radar, version: 1.0.0
-├── values.yaml            # Tum varsayilan degerler
-├── .helmignore
-└── templates/
-    ├── _helpers.tpl       # Paylasilan label/image fonksiyonlari
-    ├── NOTES.txt          # Install sonrasi bilgi mesaji
-    ├── namespace.yaml
-    ├── configmap.yaml     # Django, DB, Redis ortam degiskenleri
-    ├── secret.yaml        # SECRET_KEY, DB_USER, DB_PASSWORD
-    ├── postgresql.yaml    # PVC + Deployment + Service (postgresql.enabled)
-    ├── redis.yaml         # Deployment + Service (redis.enabled)
-    ├── backend.yaml       # Django API Deployment + Service
-    ├── frontend.yaml      # Nginx Frontend Deployment + Service
-    ├── celery.yaml        # Worker + Beat Deployment
-    ├── ingress.yaml       # Nginx Ingress (ingress.enabled)
-    └── migration-job.yaml # post-install/post-upgrade hook
-```
-
-#### Onemli values.yaml Parametreleri
+### Onemli values parametreleri
 
 | Parametre | Varsayilan | Aciklama |
 |-----------|-----------|----------|
-| `backend.replicas` | `2` | API pod sayisi |
-| `frontend.replicas` | `2` | Frontend pod sayisi |
-| `worker.replicas` | `1` | Celery worker sayisi |
-| `scheduler.replicas` | `1` | Beat scheduler (degistirmeyin!) |
-| `postgresql.enabled` | `true` | `false` = harici PostgreSQL kullan |
-| `redis.enabled` | `true` | `false` = harici Redis kullan |
-| `ingress.enabled` | `true` | `false` = Ingress olusturma |
-| `ingress.host` | `teknoloji.example.com` | Domain adiniz |
-| `ingress.tls.enabled` | `false` | TLS/HTTPS aktif et |
-| `backend.image.tag` | `latest` | Backend image tag |
-| `frontend.image.tag` | `latest` | Frontend image tag |
+| `secrets.secretKey` | `""` | **Zorunlu.** `openssl rand -hex 32` |
+| `secrets.dbPassword` | `""` | **Zorunlu.** PostgreSQL ve uygulamanin ortak parolasi |
+| `secrets.geminiApiKey` | `""` | Istege bagli; bos -> Gemini kapali |
+| `backend.image.tag` / `frontend.image.tag` | `""` | Bos -> `appVersion` |
+| `backend.replicas` / `frontend.replicas` | `2` | Replika sayisi |
+| `postgresql.enabled` | `true` | `false` = harici PostgreSQL (`config.database.host`) |
 | `postgresql.storage.size` | `5Gi` | PVC boyutu |
+| `redis.enabled` | `true` | `false` = harici Redis (`config.redis.*`) |
+| `libretranslate.enabled` | `true` | Yerel ceviri servisi |
+| `ingress.enabled` / `ingress.host` | `true` / `teknoloji.example.com` | Ingress ve alan adi (ALLOWED_HOSTS'a girer) |
+| `ingress.tls.enabled` | `false` | TLS/HTTPS |
+| `config.django.extraAllowedHosts` | `""` | Ek host'lar (virgulle) |
+| `config.app.*` | koddaki varsayilanlar | `RETENTION_DAYS`, `REFRESH_COOLDOWN`, `GEMINI_*`, `LIBRETRANSLATE_*` ... |
 
 ---
 
@@ -895,7 +690,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 |----------|-----------|----------|
 | `SECRET_KEY` | (yok) | Zorunlu (`DEBUG=False` iken). Bos, depodaki ornek degerler, `django-insecure` onekli veya 32 karakterden kisa anahtar uygulamayi acmaz. Compose `.env`'den okur. Uretmek icin `openssl rand -hex 32` |
 | `DEBUG` | `False` | Django debug modu |
-| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Virgulle ayrilmis izinli host listesi. Compose `localhost,127.0.0.1,teknoloji-api` verir. Kubernetes probe'lari pod IP'siyle geldigi icin K8s'te acikca ayarlanmali |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Virgulle ayrilmis izinli host listesi. Compose `localhost,127.0.0.1,teknoloji-api` verir. Helm chart'i bunu sablonda acik liste olarak kurar (probe'lar `Host: localhost` gonderir) |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,...` | Frontend origin'leri |
 | `CSRF_TRUSTED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Admin oturumuyla POST yapabilecek frontend origin'leri (Vite proxy `changeOrigin` kullandigi icin gerekli) |
 | `GEMINI_API_KEY` | (bos) | Google AI Studio anahtari; bos ise Gemini hic denenmez |
@@ -927,56 +722,6 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 
 ---
 
-## Guncelleme (Kubernetes)
-
-### kubectl ile (Opsion A)
-
-```bash
-# Yeni image build
-docker build -t teknoloji-haberleri-api:v2 .
-docker build -t teknoloji-haberleri-frontend:v2 ./frontend
-
-# Migration (gerekiyorsa)
-kubectl delete job teknoloji-migrate -n teknoloji-haberleri --ignore-not-found
-kubectl apply -f k8s/09-migration-job.yaml
-
-# Deployment guncelleme
-kubectl set image deployment/teknoloji-api api=teknoloji-haberleri-api:v2 -n teknoloji-haberleri
-kubectl set image deployment/teknoloji-frontend frontend=teknoloji-haberleri-frontend:v2 -n teknoloji-haberleri
-kubectl set image deployment/teknoloji-worker worker=teknoloji-haberleri-api:v2 -n teknoloji-haberleri
-kubectl set image deployment/teknoloji-scheduler scheduler=teknoloji-haberleri-api:v2 -n teknoloji-haberleri
-```
-
-### Helm ile (Opsion B)
-
-```bash
-# Yeni image build
-docker build -t teknoloji-haberleri-api:v2 .
-docker build -t teknoloji-haberleri-frontend:v2 ./frontend
-
-# Upgrade (migration otomatik calisir)
-helm upgrade tech-radar ./helm/tech-radar \
-  -n teknoloji-haberleri \
-  --set backend.image.tag=v2 \
-  --set frontend.image.tag=v2
-
-# Geri alma
-helm rollback tech-radar -n teknoloji-haberleri
-```
-
-### Kaldirma
-
-```bash
-# kubectl ile
-kubectl delete namespace teknoloji-haberleri
-
-# Helm ile
-helm uninstall tech-radar -n teknoloji-haberleri
-kubectl delete namespace teknoloji-haberleri
-```
-
----
-
 ## Bilinen Kisitlamalar
 
 - LibreTranslate cevirileri Gemini'ye gore daha dusuk kalitede olabilir (ozel ad/guvenlik terimi hatalari otomatik dogrulamayla yakalanmaz); rozetten ayirt edilir, `retranslate_pending` Gemini ile yukseltene kadar boyle kalir. Gemini gunluk butcesi (`GEMINI_DAILY_BUDGET`, varsayilan 400) asilirsa yukseltme bir sonraki gune kalir (bkz. [Hiz Siniri ve Devre Kesici](#4-hiz-siniri-ve-devre-kesici))
@@ -1000,7 +745,7 @@ kubectl delete namespace teknoloji-haberleri
 | [ADR-0004](docs/ADR-0004-Ceviri-Saglayici-Zinciri.md) | Ceviri saglayici zinciri (LibreTranslate yedek; 2026-09-15: Google kaldirildi, Gemini yukseltme) | Accepted (degisiklik 2026-09-15) |
 | [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md) | Saklama olcusu `updated_at` (sil/yeniden yaz dongusu) ve CVE'ye Gemini butce onceligi | Accepted (uygulandi 2026-09-18, canlida dogrulandi) |
 | [ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md) | `FetchRun` gorunurlugu, durum semantigi ve dar `GET /api/v1/status/` ucu (ADR-0003 bolum 11'in yerine gecer) | Accepted (uygulandi 2026-09-21, canlida dogrulandi) |
-| [ADR-0007](docs/ADR-0007-PostgreSQL-Gecisi-ve-Helm-Dogrulamasi.md) | SQLite'tan paylasilan yerel PostgreSQL'e kayipsiz gecis ve Helm chart dogrulamasi (Faz B) | Accepted (B1 uygulandi 2026-10-02; B2 acik) |
+| [ADR-0007](docs/ADR-0007-PostgreSQL-Gecisi-ve-Helm-Dogrulamasi.md) | SQLite'tan paylasilan yerel PostgreSQL'e kayipsiz gecis ve Helm chart dogrulamasi (Faz B) | Accepted (B1 2026-10-02 ve B2 2026-10-03 uygulandi; docker-desktop'ta dogrulandi) |
 
 ---
 
