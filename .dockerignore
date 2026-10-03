@@ -31,6 +31,10 @@ wheels/
 .installed.cfg
 *.egg
 
+# Sirlar imaja girmez (B3b): compose .env'i bind mount + env_file ile calisma aninda gelir
+.env
+.env.*
+
 # Django
 *.log
 local_settings.py
