@@ -82,4 +82,4 @@ serializer ile dogrulanir. Tasarim:
 `/api/v1/docs/`. **Sema artik dis sozlesmedir:** bugune kadar sozlesmeyi README
 tasiyordu ve bir hata dokumantasyon hatasiydi; sema yayimlandiktan sonra ayni
 hata tuketicinin istemcisini kirar. Alan tipi degisiklikleri bu gozle
-degerlendirilmelidir. Faz B — PostgreSQL ve Helm dogrulamasi ayri karar.
+degerlendirilmelidir. Faz B — PostgreSQL ve Helm dogrulamasi: [ADR-0007](ADR-0007-PostgreSQL-Gecisi-ve-Helm-Dogrulamasi.md) (tamamlandi).
