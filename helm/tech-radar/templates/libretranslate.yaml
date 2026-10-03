@@ -61,6 +61,11 @@ spec:
               mountPath: /home/libretranslate/.local
             - name: onbellek
               mountPath: /home/libretranslate/.cache
+            - name: ayarlar
+              mountPath: /home/libretranslate/.config
+            # Imajin entrypoint'i Prometheus metrik dizinini burada acar (PROMETHEUS_MULTIPROC_DIR)
+            - name: metrik
+              mountPath: /app/db
             - name: tmp
               mountPath: /tmp
           resources:
@@ -89,6 +94,10 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Values.libretranslate.name }}-modeller
         - name: onbellek
+          emptyDir: {}
+        - name: ayarlar
+          emptyDir: {}
+        - name: metrik
           emptyDir: {}
         - name: tmp
           emptyDir: {}

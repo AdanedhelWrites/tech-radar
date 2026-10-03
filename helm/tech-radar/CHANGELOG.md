@@ -20,7 +20,7 @@ Ilk gercek kurulum: yerel docker-desktop dogrulamasi
 - Migration hook'u kalkti; her revizyonda `<migration.name>-r<revizyon>` Job'u calisir.
 
 ### Eklenenler
-- LibreTranslate Deployment/Service/PVC (`libretranslate.*`).
+- LibreTranslate Deployment/Service/PVC (`libretranslate.*`). Kok dosya sistemi salt okunur; yazilabilir dizinler: `.local` (PVC, modeller), `.config`, `.cache`, `/app/db` (Prometheus metrik dizini) ve `/tmp` (emptyDir).
 - `config.app.*` (`REFRESH_*`, `TRANSLATE_MIN_RATIO`, `RETRANSLATE_*`, `RETENTION_DAYS`, `GEMINI_*`, `LIBRETRANSLATE_*`), `secrets.geminiApiKey`, `config.django.extraCsrfTrustedOrigins`.
 - `fsGroup` + `fsGroupChangePolicy`, `migrasyon-bekle` initContainer, configmap/secret checksum annotation'lari, bilesen bazinda `containerSecurityContext`.
 - Ucuncu taraf imajlar surum + digest ile sabit (`image.digest`); `ci/yerel-values.yaml`.
