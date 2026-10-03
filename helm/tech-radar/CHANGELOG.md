@@ -6,6 +6,14 @@ dizinindeki her degisiklik `Chart.yaml` `version`'ini artirir ve buraya `## [sur
 basligi ekler; CI (`scripts/chart_surum_kontrol.sh`) bunu zorlar. `appVersion`
 uygulama imajinin etiketidir (CalVer `YYYY.M.N`).
 
+## [2.0.1] - 2026-10-03 — appVersion 2026.10.1
+
+Duzeltme; render edilen manifestler degismez (yalniz `helm.sh/chart` etiketi ve ondan turetilen checksum'lar).
+
+### Duzeltilenler
+- `templates/NOTES.txt` git'e girdi: `.gitignore`'daki `*.txt` kurali dosyayi disliyordu, chart NOTES'suz yayinlaniyordu.
+- `NOTES.txt` 2.0.0'da kaldirilan `global.namespace` yerine `.Release.Namespace` kullanir; `kubectl ... -n` ipuclari bos namespace ile cikiyordu.
+
 ## [2.0.0] - 2026-10-01 — appVersion 2026.10.1
 
 Ilk gercek kurulum: yerel docker-desktop dogrulamasi

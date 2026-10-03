@@ -1,0 +1,22 @@
+
+Teknoloji Radar basariyla deploy edildi!
+
+{{- if .Values.ingress.enabled }}
+
+Uygulamaya erisim:
+  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+
+{{- else }}
+
+Ingress aktif degil. Port forward ile erisim:
+
+  kubectl port-forward svc/{{ .Values.frontend.name }} 3000:{{ .Values.frontend.port }} -n {{ .Release.Namespace }}
+  kubectl port-forward svc/{{ .Values.backend.name }} 8000:{{ .Values.backend.port }} -n {{ .Release.Namespace }}
+
+  Frontend: http://localhost:3000
+  Backend:  http://localhost:8000/api/
+
+{{- end }}
+
+Pod durumlarini kontrol edin:
+  kubectl get pods -n {{ .Release.Namespace }}
