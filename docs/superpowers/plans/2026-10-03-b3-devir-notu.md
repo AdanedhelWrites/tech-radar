@@ -44,7 +44,7 @@
 | Konu | Deger |
 |---|---|
 | Isletim sistemi / kabuk | Windows 11, Git Bash (Bash araci) + PowerShell |
-| tech-radar | `C:/Users/Adanedhel/Desktop/OpenCodeProjects/CyberNews/cybersecurity_news`, `main` @ `cb27d9e` (origin'den 1 commit onde: B3 spec + ADR-0008, push edilmedi) |
+| tech-radar | `C:/Users/Adanedhel/Desktop/OpenCodeProjects/CyberNews/cybersecurity_news`, `main` @ `0439e38` (pushlu) |
 | yerel-platform | `C:/Users/Adanedhel/Desktop/OpenCodeProjects/yerel-platform`, GitHub `AdanedhelWrites/yerel-platform` **private**, `main` @ `bb5c026` (pushlu) |
 | yerel-gitops | Henuz yok (acmak kullanici onayi ister) |
 | Kubernetes | Docker Desktop **kubeadm**, tek dugum `docker-desktop`, v1.36.1, runtime `docker://29.7.2` (yerel imajlar kumede gorunur), sunucu `https://kubernetes.docker.internal:6443` |
