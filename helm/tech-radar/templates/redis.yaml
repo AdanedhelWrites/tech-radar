@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.redis.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.redis.name }}
@@ -23,19 +23,22 @@ spec:
         {{- include "tech-radar.podSecurityContext" .Values.redis.securityContext | nindent 8 }}
       containers:
         - name: redis
-          image: {{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}
+          image: {{ include "tech-radar.image" (dict "image" .Values.redis.image "root" $) }}
+          imagePullPolicy: IfNotPresent
           securityContext:
-            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
+            {{- include "tech-radar.containerSecurityContext" (dict "root" $ "bilesen" .Values.redis) | nindent 12 }}
           ports:
             - containerPort: {{ .Values.redis.port }}
+          # Tirnak sart: tirnaksiz `yes` YAML'da boolean olur ve Kubernetes
+          # Deployment'i reddeder (1.0.0'daki hata; kubeconform yakaladi)
           command:
             - redis-server
             - --appendonly
-            - {{ .Values.redis.appendonly | ternary "yes" "no" }}
+            - {{ .Values.redis.appendonly | ternary "yes" "no" | quote }}
             - --maxmemory
-            - {{ .Values.redis.maxmemory }}
+            - {{ .Values.redis.maxmemory | quote }}
             - --maxmemory-policy
-            - {{ .Values.redis.maxmemoryPolicy }}
+            - {{ .Values.redis.maxmemoryPolicy | quote }}
           volumeMounts:
             - name: redis-data
               mountPath: /data
@@ -56,6 +59,7 @@ spec:
             initialDelaySeconds: {{ .Values.redis.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.redis.probes.liveness.periodSeconds }}
       volumes:
+        # Kabul edilen sinir (spec 12): kilit/soguma/cache/kuyruk pod omru kadar
         - name: redis-data
           emptyDir: {}
 ---
@@ -63,7 +67,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Values.redis.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.redis.name }}

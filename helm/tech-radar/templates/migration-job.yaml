@@ -1,16 +1,14 @@
+# Hook degil: her revizyonda yeni adli Job (Job spec'i degistirilemez). api/worker/
+# scheduler migrasyon-bekle initContainer'inda bunu bekler; helm --wait-for-jobs kilitlenmez.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Values.migration.name }}
-  namespace: {{ .Values.global.namespace }}
+  name: {{ .Values.migration.name }}-r{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.migration.name }}
     app.kubernetes.io/component: {{ .Values.migration.component }}
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "0"
-    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   backoffLimit: {{ .Values.migration.backoffLimit }}
   ttlSecondsAfterFinished: {{ .Values.migration.ttlSecondsAfterFinished }}
@@ -18,57 +16,34 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: {{ .Values.migration.name }}
+        app.kubernetes.io/component: {{ .Values.migration.component }}
     spec:
       restartPolicy: {{ .Values.migration.restartPolicy }}
       securityContext:
         {{- include "tech-radar.podSecurityContext" .Values.migration.securityContext | nindent 8 }}
       containers:
         - name: migrate
-          image: {{ include "tech-radar.backendImage" . }}
+          image: {{ include "tech-radar.image" (dict "image" .Values.backend.image "root" $) }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           securityContext:
-            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
+            {{- include "tech-radar.containerSecurityContext" (dict "root" $ "bilesen" .Values.migration) | nindent 12 }}
           command:
             - sh
             - -c
             - |
-              echo "PostgreSQL bekleniyor..."
-              while ! nc -z "$DB_HOST" "${DB_PORT:-5432}" 2>/dev/null; do
+              echo "PostgreSQL bekleniyor ($DB_HOST:${DB_PORT:-5432})..."
+              until nc -z "$DB_HOST" "${DB_PORT:-5432}" 2>/dev/null; do
                 sleep 2
               done
               echo "Migration calistiriliyor..."
               python manage.py migrate --noinput
-              echo "Static dosyalar toplaniyor..."
-              python manage.py collectstatic --noinput
-              echo "Migration tamamlandi!"
-          envFrom:
-            - configMapRef:
-                name: teknoloji-config
-          env:
-            - name: SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: SECRET_KEY
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: DB_USER
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: DB_PASSWORD
+              echo "Migration tamamlandi."
+          {{- include "tech-radar.uygulamaOrtami" . | nindent 10 }}
           volumeMounts:
-            - name: staticfiles
-              mountPath: /app/staticfiles
             - name: tmp
               mountPath: /tmp
           resources:
             {{- toYaml .Values.migration.resources | nindent 12 }}
       volumes:
-        - name: staticfiles
-          emptyDir: {}
         - name: tmp
           emptyDir: {}

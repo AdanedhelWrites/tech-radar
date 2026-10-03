@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.backend.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.backend.name }}
@@ -17,47 +17,35 @@ spec:
       labels:
         app.kubernetes.io/name: {{ .Values.backend.name }}
         app.kubernetes.io/component: {{ .Values.backend.component }}
+      annotations:
+        {{- include "tech-radar.ayarOzeti" . | nindent 8 }}
     spec:
       securityContext:
         {{- include "tech-radar.podSecurityContext" .Values.backend.securityContext | nindent 8 }}
+      initContainers:
+        {{- include "tech-radar.migrasyonBekle" . | nindent 8 }}
       containers:
         - name: api
-          image: {{ include "tech-radar.backendImage" . }}
+          image: {{ include "tech-radar.image" (dict "image" .Values.backend.image "root" $) }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           securityContext:
-            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
+            {{- include "tech-radar.containerSecurityContext" (dict "root" $ "bilesen" .Values.backend) | nindent 12 }}
           ports:
             - containerPort: {{ .Values.backend.port }}
-          envFrom:
-            - configMapRef:
-                name: teknoloji-config
-          env:
-            - name: SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: SECRET_KEY
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: DB_USER
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: teknoloji-secret
-                  key: DB_PASSWORD
+          {{- include "tech-radar.uygulamaOrtami" . | nindent 10 }}
           volumeMounts:
-            - name: staticfiles
-              mountPath: /app/staticfiles
             - name: tmp
               mountPath: /tmp
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
+          # Probe'lar pod IP'siyle gelir; pod IP'si ALLOWED_HOSTS'ta olamaz (spec 7.2)
           readinessProbe:
             httpGet:
               path: {{ .Values.backend.probes.readiness.path }}
               port: {{ .Values.backend.port }}
+              httpHeaders:
+                - name: Host
+                  value: localhost
             initialDelaySeconds: {{ .Values.backend.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.backend.probes.readiness.periodSeconds }}
             timeoutSeconds: {{ .Values.backend.probes.readiness.timeoutSeconds }}
@@ -65,12 +53,13 @@ spec:
             httpGet:
               path: {{ .Values.backend.probes.liveness.path }}
               port: {{ .Values.backend.port }}
+              httpHeaders:
+                - name: Host
+                  value: localhost
             initialDelaySeconds: {{ .Values.backend.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.backend.probes.liveness.periodSeconds }}
             timeoutSeconds: {{ .Values.backend.probes.liveness.timeoutSeconds }}
       volumes:
-        - name: staticfiles
-          emptyDir: {}
         - name: tmp
           emptyDir: {}
 ---
@@ -78,7 +67,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Values.backend.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.backend.name }}

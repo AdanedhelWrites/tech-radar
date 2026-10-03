@@ -1,0 +1,112 @@
+{{- if .Values.libretranslate.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.libretranslate.name }}-modeller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.libretranslate.name }}
+spec:
+  accessModes:
+    - {{ .Values.libretranslate.storage.accessMode }}
+  {{- if .Values.libretranslate.storage.storageClassName }}
+  storageClassName: {{ .Values.libretranslate.storage.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.libretranslate.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.libretranslate.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.libretranslate.name }}
+    app.kubernetes.io/component: {{ .Values.libretranslate.component }}
+spec:
+  replicas: 1
+  # Tek PVC (ReadWriteOnce): eski pod kapanmadan yenisi baglanamaz
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.libretranslate.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.libretranslate.name }}
+        app.kubernetes.io/component: {{ .Values.libretranslate.component }}
+    spec:
+      securityContext:
+        {{- include "tech-radar.podSecurityContext" .Values.libretranslate.securityContext | nindent 8 }}
+      containers:
+        - name: libretranslate
+          image: {{ include "tech-radar.image" (dict "image" .Values.libretranslate.image "root" $) }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "tech-radar.containerSecurityContext" (dict "root" $ "bilesen" .Values.libretranslate) | nindent 12 }}
+          env:
+            - name: LT_LOAD_ONLY
+              value: {{ .Values.libretranslate.loadOnly | quote }}
+            - name: LT_UPDATE_MODELS
+              value: "false"
+          ports:
+            - containerPort: {{ .Values.libretranslate.port }}
+          volumeMounts:
+            # Modeller ilk acilista iner (~258 MB) ve PVC'de kalir
+            - name: modeller
+              mountPath: /home/libretranslate/.local
+            - name: onbellek
+              mountPath: /home/libretranslate/.cache
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.libretranslate.resources | nindent 12 }}
+          startupProbe:
+            httpGet:
+              path: /languages
+              port: {{ .Values.libretranslate.port }}
+            periodSeconds: {{ .Values.libretranslate.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.libretranslate.probes.startup.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /languages
+              port: {{ .Values.libretranslate.port }}
+            periodSeconds: {{ .Values.libretranslate.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.libretranslate.probes.readiness.timeoutSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /languages
+              port: {{ .Values.libretranslate.port }}
+            periodSeconds: {{ .Values.libretranslate.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.libretranslate.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.libretranslate.probes.liveness.failureThreshold }}
+      volumes:
+        - name: modeller
+          persistentVolumeClaim:
+            claimName: {{ .Values.libretranslate.name }}-modeller
+        - name: onbellek
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.libretranslate.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tech-radar.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ .Values.libretranslate.name }}
+    app.kubernetes.io/component: {{ .Values.libretranslate.component }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.libretranslate.port }}
+      targetPort: {{ .Values.libretranslate.port }}
+  selector:
+    app.kubernetes.io/name: {{ .Values.libretranslate.name }}
+{{- end }}

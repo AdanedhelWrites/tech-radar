@@ -1,28 +1,21 @@
 # ============================================================
-# Teknoloji Radar — Kubernetes Deployment Values
+# Teknoloji Radar — Helm values
 # ============================================================
-# Bu dosya k8s/ manifest'lerindeki tum parametreleri
-# tek bir yerden yonetmenizi saglar.
+# Chart surumu Chart.yaml'dadir (SemVer); degisiklikler ve yukseltme notlari
+# CHANGELOG.md'de. Bu dosyadaki her degisiklik chart surumunu artirir (CI zorlar).
 #
-# Kullanim:
-#   1. Bu dosyadaki degerleri ortaminiza gore duzenleyin
-#   2. k8s/ manifest'lerini kubectl apply ile uygulayin
-#   3. Veya Helm/Kustomize ile bu dosyayi overlay olarak kullanin
-#
-# Not: Bu dosya Helm chart'i degildir, ancak Helm'e
-# donusturmek icin hazir bir referans gorevi gorur.
+# GIZLI DEGERLER BU DOSYAYA YAZILMAZ: secrets.* --set / --set-file ya da harici
+# secret yonetimiyle verilir.
+# Imaj etiketleri kayan olamaz (latest, 16-alpine ...): ucuncu taraf imajlar
+# surum + digest ile sabittir; kendi imajlarimizin etiketi bossa Chart.appVersion.
 # ============================================================
 
-# -------------------------------------------------------
-# Genel
-# -------------------------------------------------------
 global:
-  namespace: teknoloji-haberleri
   appName: teknoloji-haberleri
   labels:
     partOf: teknoloji-haberleri
-  # Tum container'larda ortak sertlestirme; bilesene gore degisen tek sey
-  # runAsUser/runAsGroup'tur (asagida her bilesenin kendi securityContext'inde).
+  # Tum container'larda ortak sertlestirme. Bir bilesen kendi
+  # containerSecurityContext'i ile tek tek anahtarlari ezebilir.
   containerSecurityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -33,18 +26,22 @@ global:
 # Backend (Django REST API + Gunicorn)
 # -------------------------------------------------------
 backend:
+  # frontend/nginx.conf bu ada (teknoloji-api:8000) proxy'ler; degistirirseniz
+  # frontend imajini yeniden derleyin.
   name: teknoloji-api
   component: backend
   image:
     repository: teknoloji-haberleri-api
-    tag: latest
-    pullPolicy: IfNotPresent        # Registry kullaniyorsaniz: Always
+    tag: ""                         # bos -> Chart.appVersion
+    digest: ""                      # doluysa repository:tag@digest
+    pullPolicy: IfNotPresent
   replicas: 2
   port: 8000
   # Dockerfile'daki appuser (groupadd/useradd -r ile Debian'in verdigi sabit UID/GID)
   securityContext:
     runAsUser: 999
     runAsGroup: 999
+  containerSecurityContext: {}
   resources:
     requests:
       cpu: 200m
@@ -52,27 +49,29 @@ backend:
     limits:
       cpu: "1"
       memory: 1Gi
+  # /api/v1/health/ DB'ye ve Redis'e dokunmaz; probe'lar Host: localhost gonderir
   probes:
     readiness:
-      path: /api/news/
-      initialDelaySeconds: 15
+      path: /api/v1/health/
+      initialDelaySeconds: 10
       periodSeconds: 10
       timeoutSeconds: 5
     liveness:
-      path: /api/news/
+      path: /api/v1/health/
       initialDelaySeconds: 30
       periodSeconds: 15
       timeoutSeconds: 5
 
 # -------------------------------------------------------
-# Frontend (React + Vite)
+# Frontend (React build + Nginx)
 # -------------------------------------------------------
 frontend:
   name: teknoloji-frontend
   component: frontend
   image:
     repository: teknoloji-haberleri-frontend
-    tag: latest
+    tag: ""                         # bos -> Chart.appVersion
+    digest: ""
     pullPolicy: IfNotPresent
   replicas: 2
   port: 3000
@@ -80,6 +79,7 @@ frontend:
   securityContext:
     runAsUser: 101
     runAsGroup: 101
+  containerSecurityContext: {}
   resources:
     requests:
       cpu: 50m
@@ -98,17 +98,17 @@ frontend:
       periodSeconds: 15
 
 # -------------------------------------------------------
-# Celery Worker
+# Celery Worker (backend imajini kullanir)
 # -------------------------------------------------------
 worker:
   name: teknoloji-worker
   component: worker
-  # Backend image'ini kullanir (ayni codebase)
   replicas: 1
   command: ["celery", "-A", "cybernews", "worker", "-l", "info", "--concurrency=2"]
   securityContext:
     runAsUser: 999
     runAsGroup: 999
+  containerSecurityContext: {}
   resources:
     requests:
       cpu: 200m
@@ -118,20 +118,19 @@ worker:
       memory: 1Gi
 
 # -------------------------------------------------------
-# Celery Beat (Periyodik Gorev Zamanlayici)
-# ONEMLI: Her zaman 1 replica olmali!
+# Celery Beat — her zaman 1 replica (ayni anda 2 Beat calisamaz)
 # -------------------------------------------------------
 scheduler:
   name: teknoloji-scheduler
   component: scheduler
-  replicas: 1                        # DEGISTIRMEYIN — ayni anda 2 Beat calisamaz
+  replicas: 1                        # DEGISTIRMEYIN
   strategy: Recreate
-  # PersistentScheduler varsayilan olarak calisma dizinine (readOnlyRootFilesystem
-  # altinda yazilamaz) celerybeat-schedule yazar; yazilabilir /tmp'e yonlendirildi.
+  # PersistentScheduler readOnlyRootFilesystem altinda calisma dizinine yazamaz
   command: ["celery", "-A", "cybernews", "beat", "-l", "info", "--schedule=/tmp/celerybeat-schedule"]
   securityContext:
     runAsUser: 999
     runAsGroup: 999
+  containerSecurityContext: {}
   resources:
     requests:
       cpu: 50m
@@ -141,11 +140,29 @@ scheduler:
       memory: 256Mi
 
 # -------------------------------------------------------
-# PostgreSQL
+# Migration Job — her revizyonda <name>-r<revizyon> adiyla calisir.
+# api/worker/scheduler `migrate --check` gecene kadar initContainer'da bekler.
 # -------------------------------------------------------
-# enabled: false yaparsaniz harici PostgreSQL kullanilir.
-# Bu durumda config.database altindaki host/port degerlerini
-# mevcut PostgreSQL adresinize yonlendirin.
+migration:
+  name: teknoloji-migrate
+  component: migration
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  restartPolicy: OnFailure
+  securityContext:
+    runAsUser: 999
+    runAsGroup: 999
+  containerSecurityContext: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# -------------------------------------------------------
+# PostgreSQL (enabled: false -> harici; config.database.host'u yonlendirin)
 # -------------------------------------------------------
 postgresql:
   enabled: true
@@ -153,17 +170,19 @@ postgresql:
   component: database
   image:
     repository: postgres
-    tag: 16-alpine
+    tag: 16.15-alpine
+    digest: sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
   port: 5432
   strategy: Recreate
-  # postgres:16-alpine imajinin kendi postgres kullanicisi
+  # postgres:alpine imajinin kendi postgres kullanicisi; fsGroup ayni gruptur
   securityContext:
     runAsUser: 70
     runAsGroup: 70
+  containerSecurityContext: {}
   storage:
     size: 5Gi
     accessMode: ReadWriteOnce
-    # storageClassName: ""           # Belirli bir storage class kullanmak icin
+    storageClassName: ""             # bos -> kumenin varsayilani
   pgdata: /var/lib/postgresql/data/pgdata
   resources:
     requests:
@@ -181,11 +200,8 @@ postgresql:
       periodSeconds: 10
 
 # -------------------------------------------------------
-# Redis
-# -------------------------------------------------------
-# enabled: false yaparsaniz harici Redis kullanilir.
-# Bu durumda config.redis altindaki URL degerlerini
-# mevcut Redis adresinize yonlendirin.
+# Redis (enabled: false -> harici; config.redis.* yonlendirin)
+# emptyDir: pod yeniden baslarsa kilit/soguma/cache/kuyruk kaybolur (kabul edilen sinir)
 # -------------------------------------------------------
 redis:
   enabled: true
@@ -193,12 +209,14 @@ redis:
   component: cache
   image:
     repository: redis
-    tag: 7-alpine
+    tag: 7.4.10-alpine
+    digest: sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
   port: 6379
-  # redis:7-alpine imajinin kendi redis kullanicisi
+  # redis:alpine imajinin kendi redis kullanicisi
   securityContext:
     runAsUser: 999
     runAsGroup: 1000
+  containerSecurityContext: {}
   maxmemory: 256mb
   maxmemoryPolicy: allkeys-lru
   appendonly: true
@@ -218,23 +236,64 @@ redis:
       periodSeconds: 10
 
 # -------------------------------------------------------
+# LibreTranslate — cekim aninda ceviri (Gemini yalniz retranslate'te)
+# Modeller ilk acilista iner (~258 MB, internet gerekir) ve PVC'de kalir.
+# -------------------------------------------------------
+libretranslate:
+  enabled: true
+  name: teknoloji-translate
+  component: translate
+  image:
+    repository: libretranslate/libretranslate
+    tag: v1.9.6
+    digest: sha256:1de2d7056bb8ad607a412f4563d9abe324ff632b43b5be9428bcc8e213aebb32
+  port: 5000
+  loadOnly: "en,tr"
+  # Imajin kendi libretranslate kullanicisi (uid 1032, gid nogroup)
+  securityContext:
+    runAsUser: 1032
+    runAsGroup: 65534
+  containerSecurityContext: {}
+  storage:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+  # Compose ile ayni sinir: yuk altinda tum cekirdekleri doyurabiliyor
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "4"
+      memory: 2Gi
+  probes:
+    # Ilk acilistaki model indirmesi icin 60 x 10 sn = 10 dk
+    startup:
+      periodSeconds: 10
+      failureThreshold: 60
+    readiness:
+      periodSeconds: 15
+      timeoutSeconds: 5
+    liveness:
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+
+# -------------------------------------------------------
 # Ingress
 # -------------------------------------------------------
 ingress:
   enabled: true
   name: teknoloji-ingress
   className: nginx
-  host: teknoloji.example.com       # Kendi domain adinizi yazin
+  host: teknoloji.example.com       # Kendi domain adiniz; ALLOWED_HOSTS'a otomatik girer
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    # cert-manager.io/cluster-issuer: letsencrypt-prod
   tls:
     enabled: false
     secretName: teknoloji-tls
-    # hosts:
-    #   - teknoloji.example.com
   paths:
     # Sira onemli — en spesifik path en ustte olmali
     - path: /api
@@ -255,53 +314,47 @@ ingress:
       port: 3000
 
 # -------------------------------------------------------
-# Migration Job
-# -------------------------------------------------------
-migration:
-  name: teknoloji-migrate
-  component: migration
-  backoffLimit: 3
-  ttlSecondsAfterFinished: 300
-  restartPolicy: OnFailure
-  securityContext:
-    runAsUser: 999
-    runAsGroup: 999
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
-
-# -------------------------------------------------------
-# Konfigürasyon (ConfigMap degerleri)
+# Konfigurasyon (ConfigMap)
 # -------------------------------------------------------
 config:
   django:
     debug: "False"
-    allowedHosts: "*"
+    # ALLOWED_HOSTS sablonda kurulur: localhost (probe'lar), backend.name (kume ici
+    # tuketici), ingress acikken ingress.host + asagidaki ekler (virgulle ayrilmis).
+    extraAllowedHosts: ""
+    # CSRF_TRUSTED_ORIGINS: ingress acikken http(s)://<ingress.host> + ekler.
+    extraCsrfTrustedOrigins: ""
     corsAllowedOrigins: "http://localhost:3000,http://teknoloji-frontend:3000"
   database:
-    url: "postgresql"               # "postgresql" = PostgreSQL kullan, bos = SQLite
     name: "cybernews"
-    host: "teknoloji-postgresql"     # postgresql.enabled=false ise harici adresi yazin
+    host: "teknoloji-postgresql"     # postgresql.enabled=false ise harici adres
     port: "5432"
   redis:
-    url: "redis://teknoloji-redis:6379/0"         # redis.enabled=false ise harici adresi yazin
+    url: "redis://teknoloji-redis:6379/0"
     celeryBrokerUrl: "redis://teknoloji-redis:6379/1"
+  # Uygulama ayarlari; varsayilanlar koddaki varsayilanlarla aynidir (README "Ortam Degiskenleri").
+  app:
+    refreshCooldown: "900"
+    refreshLockTtl: "3600"
+    translateMinRatio: "0.4"
+    retranslateBatch: "100"
+    retranslateUpgradeBatch: "40"
+    retentionDays: "90"
+    geminiCveReserve: "0.5"
+    geminiDailyBudget: "400"
+    geminiModel: "gemini-3.5-flash-lite"
+    libretranslateTimeout: "60"
+    libretranslateCooldown: "60"
+    libretranslateChunkChars: "160"
 
 # -------------------------------------------------------
-# Gizli Degerler (Secret)
-# -------------------------------------------------------
-# !! DEPLOY ONCESI BU DEGERLERI MUTLAKA DEGISTIRIN !!
-# Production'da bu dosyayi git'e commitlemek yerine
-# external-secrets, sealed-secrets veya vault kullanin.
+# Gizli degerler (Secret) — burada BOS kalir; --set ile verin
 # -------------------------------------------------------
 secrets:
-  # Zorunlu; bos birakilirsa `helm install` hata verir. Uretmek icin: openssl rand -hex 32
-  # Ornek: helm install ... --set secrets.secretKey="$(openssl rand -hex 32)"
+  # Zorunlu. Uretmek icin: openssl rand -hex 32
   secretKey: ""
   dbUser: "cybernews"
-  dbPassword: "buraya-guclu-sifre-yazin"
-  postgresPassword: "buraya-guclu-sifre-yazin"
+  # Zorunlu. Uretmek icin: openssl rand -hex 24. PostgreSQL ve uygulama ayni parolayi kullanir.
+  dbPassword: ""
+  # Istege bagli; bos -> Gemini hic denenmez.
+  geminiApiKey: ""

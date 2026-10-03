@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.frontend.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.frontend.name }}
@@ -22,10 +22,10 @@ spec:
         {{- include "tech-radar.podSecurityContext" .Values.frontend.securityContext | nindent 8 }}
       containers:
         - name: frontend
-          image: {{ include "tech-radar.frontendImage" . }}
+          image: {{ include "tech-radar.image" (dict "image" .Values.frontend.image "root" $) }}
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
           securityContext:
-            {{- include "tech-radar.containerSecurityContext" . | nindent 12 }}
+            {{- include "tech-radar.containerSecurityContext" (dict "root" $ "bilesen" .Values.frontend) | nindent 12 }}
           ports:
             - containerPort: {{ .Values.frontend.port }}
           volumeMounts:
@@ -61,7 +61,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Values.frontend.name }}
-  namespace: {{ .Values.global.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "tech-radar.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.frontend.name }}
