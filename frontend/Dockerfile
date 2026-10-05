@@ -20,7 +20,7 @@ ENV VITE_API_URL=/api
 RUN npm run build
 
 # --- Stage 2: Serve ---
-FROM nginx:1.31-alpine@sha256:62ff2089abf5a9ed33bd232895bef5e22f7bb4b200675cec49a5ebc48e3d4ac8
+FROM nginx:1.31-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
 
 RUN apk upgrade --no-cache
 
