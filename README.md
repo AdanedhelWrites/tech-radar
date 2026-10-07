@@ -332,7 +332,7 @@ Frontend icin `frontend/` altinda `npm install && npm run dev` yeterlidir; `vite
 
 ### Kod kurallari
 
-- Kod, yorum ve commit mesajlari ASCII Turkce (diakritiksiz). Dallar `main`'e `--no-ff` ile birlesir.
+- Kod, yorum ve commit mesajlari ASCII Turkce (diakritiksiz). `main` korumalidir: her degisiklik bir daldan PR ile gelir, bes zorunlu check (`Backend`, `Frontend`, `Helm / Compose`, `dependency-review`, `gitleaks`) yesil ve dal `main` ile guncel olmadan merge edilemez; dogrudan push kapalidir.
 - Her onemli karar bir ADR'dir (`docs/ADR-*.md`); tasarim ve uygulama planlari `docs/superpowers/` altindadir.
 - Sir degerleri (anahtar, parola, token) hicbir dosyaya, log'a veya ekrana yazilmaz; `.env` ve `.fazb/` gitignore'dadir, gitleaks her PR'da tarar.
 - `helm/tech-radar/` altindaki her degisiklik chart surumunu artirir ve CHANGELOG girdisi ister (bkz. [Surumleme](#surumleme)).
@@ -882,7 +882,7 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 | `OpenSSF Scorecard` | push, Sali | Rapor | Depo guvenlik puani |
 | `chart etiketi` | `chart-*` etiketi push'u | Kapi | Etiket `Chart.yaml version` ile ayni mi, CHANGELOG girdisi var mi |
 
-Dependabot pip, npm, Docker (digest) ve GitHub Actions bagimliliklarini haftalik gunceller; major surumler filtrelidir. Dependabot PR'i gelince: eski bir `main`'den acildiysa **Update branch**, tum check'ler yesilse merge; `CI` kirmiziysa merge etme, planlanmis yukseltme listesine ekle.
+Dependabot pip, npm, Docker (digest) ve GitHub Actions bagimliliklarini haftalik gunceller; major surumler filtrelidir. Dependabot PR'i gelince: eski bir `main`'den acildiysa **Update branch** (ruleset `strict` oldugu icin zaten zorunlu), bes zorunlu check yesilse merge; `CI` kirmiziysa merge etme, planlanmis yukseltme listesine ekle. `main-koruma` ruleset'i PR'siz push'u, silmeyi ve force-push'u engeller.
 
 Bulgular nerede: kod ve imaj zafiyetleri, sirlar ve workflow sorunlari **Security → Code scanning**; bagimlilik CVE'leri **Security → Dependabot**; ZAP bulgulari ilgili Actions kosusunun Summary tablosu ve artefakti. Zafiyet bildirimi icin [SECURITY.md](SECURITY.md) (GitHub private vulnerability reporting; ilk yanit 7 gun).
 
@@ -1017,10 +1017,8 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 
 ### Acik isler ve adaylar
 
-Siraya konmus (GUVENLIK-PLANI):
+Siraya konmus (GUVENLIK-PLANI; P3 ve P4 2026-10-08'de tamamlandi):
 
-- **P3** `main` ruleset'ine zorunlu check'ler (`Backend`, `Frontend`, `Helm / Compose`, `dependency-review`, `gitleaks`); boylece kirmizi PR merge edilemez.
-- **P4** Kalan code scanning bulgularinin triaji (eski Trivy kategorisinin silinmesi, CodeQL alert'leri, Helm misconfig bulgulari).
 - **P5** ZAP sonucunun SARIF olarak Security sekmesine yuklenmesi; haftalik guvenlik ozeti is akisi; `/api/v1/` icin ZAP API taramasi.
 
 Aday (henuz tasarlanmadi; kapsam notlari ADR-0002 ve B3 spec bolum 13):
