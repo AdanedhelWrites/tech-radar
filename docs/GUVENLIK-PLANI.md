@@ -1,6 +1,6 @@
 # Güvenlik Hattı ve Bekleyen İşler Planı
 
-> Son güncelleme: 2026-09-30 (P1, P2, P4 SECRET_KEY tamamlandı). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
+> Son güncelleme: 2026-10-08 (P3 ve P4 tamamlandı; kalan yalnız P5). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
 > Bir iş bitince kutusunu işaretle ve ilgili PR numarasını yanına yaz.
 
 ## 1. Hatlar ne zaman çalışır?
@@ -101,15 +101,16 @@ Dependabot PR #5 tek başına kırıldı, çünkü `django-celery-beat 2.5.0` `D
 - [x] `docker-compose.yml`: `node:18-alpine` → `node:22-alpine`
 - [x] `trivy` → `Imaj (frontend)`: OS EOSL=false (PR #11 koşusunda doğrulandı)
 
-### P3: Zorunlu status check'ler
-- [ ] `main-koruma` ruleset'ine (Settings → Rules) zorunlu check ekle: `Backend (Django testleri)`, `Frontend (Vite build)`, `Helm / Compose dogrulama`, `dependency-review`, `gitleaks`
-- Etkisi: Testi kırmızı PR merge edilemez. Web arayüzünden direkt `main`'e commit atmak da kapanır, her değişiklik PR'dan geçer.
+### P3: Zorunlu status check'ler ✅ (2026-10-08)
+- [x] `main-koruma` ruleset'ine zorunlu check eklendi: `Backend (Django testleri)`, `Frontend (Vite build)`, `Helm / Compose dogrulama`, `dependency-review`, `gitleaks`; `strict` (dal `main` ile güncel olmalı), PR zorunlu (0 onay; tek geliştirici), bypass yok, merge yöntemi merge/squash
+- Etkisi: Testi kırmızı PR merge edilemez. `main`'e doğrudan push kapandı, her değişiklik PR'dan geçer (Dependabot dahil). Yerel akış: dal → push → `gh pr create` → check'ler yeşil → `gh pr merge --merge`
 
-### P4: Bulgu triajı (P1 ve P2'den **sonra**)
-Alert'lerin çoğu yükseltmelerle kendiliğinden kapanacak; triaj kalanlara yapılmalı.
-- [ ] Security → Code scanning → Tool status: eski Trivy yapılandırmasını (kategorisiz, ~76 alert) sil. Yeni kategoriler `trivy-fs`, `trivy-image-backend`, `trivy-image-frontend`
-- [ ] CodeQL'deki 16 açık alert'i incele: düzelt ya da gerekçesiyle "dismiss" et
-- [ ] Trivy misconfig bulguları (Helm/k8s: securityContext, resource limit vb.) → Faz B Kubernetes doğrulamasıyla birlikte ele al
+### P4: Bulgu triajı ✅ (2026-10-08)
+Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıyla Dependabot 0, secret scanning 0, code scanning'de Trivy/CodeQL/gitleaks/zizmor açık bulgu yok.
+- [x] Eski Trivy kategorisi: açık alert kalmadı (2026-09-22 temizliği)
+- [x] CodeQL: açık alert kalmadı
+- [x] Trivy misconfig (Helm/k8s): Faz B2 chart 2.0.0 ile kapandı (securityContext, salt okunur kök, resource limit)
+- [x] Scorecard triajı (2026-10-08): 11 bulgudan 9'u gerekçeli dismiss — pip hash-pinning ×4 (won't fix: `requirements.txt` sürümle sabit, Dependabot günceller, hash bakım yükü kabul edilmedi), `$/.github/actions/setup-trivy` ×2 (false positive: repo içi composite action, binary sabit sürüm+SHA256), CodeReview/Fuzzing/CII (won't fix: tek geliştirici, fuzz hedefi yok, rozet hedef değil); `source-map-js` 1.2.1→1.2.2 lock-only fix (`c05ac5a`, GHSA-68fv-2mgg-jv7q); BranchProtection → P3 ile kapatıldı
 - [x] `docker-compose.yml` içindeki `SECRET_KEY=your-secret-key-here...` placeholder'ını `.env` dosyasına taşı
 - [x] **Varsayılan SECRET_KEY ile deploy riski:** `helm/tech-radar/values.yaml`, `values.yaml`, `k8s/02-secret.yaml` ve README'de örnek (Türkçe cümle) `SECRET_KEY` değerleri var. Bunlarla deploy edilirse anahtar herkesçe bilinir (session/CSRF imzası taklit edilebilir). Çözüm:
   - helm: `secretKey` boş, template'te `required` ✅
@@ -132,3 +133,4 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapanacak; triaj kalanlara yap
 - **2026-09-22:** Güvenlik temizliği: P1 ve P2 uygulandı, Dependabot 14 → 0, code scanning 89 → 11 (ayrıntı: superpowers/specs/2026-09-22-guvenlik-temizligi-design.md).
 - **2026-09-30:** PR #43 (Django 5.2.17) merge. P4 SECRET_KEY/ALLOWED_HOSTS koruması (superpowers/specs/2026-09-30-hizli-isler-design.md).
 - **2026-10-03:** Faz B: SQLite → paylaşılan yerel PostgreSQL geçişi (B1) ve Helm chart 2.0.0 yerel docker-desktop doğrulaması (B2, ADR-0007). CI'a chart sürüm/imaj etiket kapıları ve kubeconform eklendi; DAST PostgreSQL ile çalışır.
+- **2026-10-08:** Dependabot PR #46/#47/#48 (nginx ve node digest, actions grubu) merge. P4 Scorecard triajı: 9 gerekçeli dismiss + `source-map-js` düzeltmesi (`c05ac5a`). P3: `main-koruma` ruleset'ine PR zorunluluğu ve 5 zorunlu check (strict, bypass yok) eklendi; `main`'e doğrudan push kapandı.
