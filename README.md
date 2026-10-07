@@ -4,34 +4,70 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 
 > Bu proje **Vibe Coding** yaklasimiyla, Claude Code (claude-opus-4-6) ile birlikte gelistirilmistir.
 
+| | |
+|---|---|
+| **Uygulama surumu** | `appVersion` 2026.10.1 (CalVer; imaj etiketi) |
+| **Helm chart** | 2.1.0 (SemVer; etiket `chart-2.1.0`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
+| **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
+| **Testler** | 369 Django testi (`news/tests/`), PostgreSQL uzerinde CI'da kosar |
+| **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
+| **Lisans** | MIT |
+
+**Icindekiler:** [Mimari](#mimari) · [Ozellikler](#ozellikler) · [Veri Kaynaklari](#veri-kaynaklari) · [Teknoloji Yigini](#teknoloji-yigini) · [Kurulum](#kurulum-docker-compose) · [Gelistirme ve Test](#gelistirme-ve-test) · [Kullanim](#kullanim) · [API](#api-endpoints) · [Entegrasyon API v1](#entegrasyon-api-apiv1) · [Proje Yapisi](#proje-yapisi) · [Ceviri Sistemi](#ceviri-sistemi) · [Periyodik Cekim](#periyodik-cekim-celery-beat) · [Surumleme](#surumleme) · [Kubernetes / Helm](#kubernetese-deploy-etme-helm) · [CI ve Guvenlik Hatti](#ci-ve-guvenlik-hatti) · [Operasyon ve Sorun Giderme](#operasyon-ve-sorun-giderme) · [Ortam Degiskenleri](#ortam-degiskenleri) · [Belgeler ve Yol Haritasi](#belgeler-ve-yol-haritasi) · [ADR](#mimari-kararlar-adr)
+
 ---
 
 ## Mimari
 
+### Yerel topoloji
+
+<img alt="CyberNews yerel topoloji: GitHub repolari (tech-radar, yerel-gitops), docker-desktop Kubernetes (Argo CD, Vault Secrets Operator, Vault, tech-radar namespace'i), yerel-platform PostgreSQL, Docker Compose canli ortami ve gelistiricinin yerel-platform klonu (tf.sh, Terraform, sir_yaz.sh)" src="docs/img/yerel-topoloji.png" width="1154">
+
+Okunusu, yukaridan asagiya:
+
+- **GitHub**: `tech-radar` chart'i `chart-<surum>` etiketiyle sunar; `yerel-gitops` kumede ne calisacagini tutar. Gelistirici yalniz `yerel-gitops`'a push eder.
+- **docker-desktop Kubernetes**: Argo CD iki repoyu okur (chart HTTPS ile, GitOps reposu salt okunur SSH deploy key ile, 2 dakikada bir) ve `tech-radar` namespace'ini senkron tutar. Vault Secrets Operator Vault'tan `kv/tech-radar/uygulama`'yi okuyup `teknoloji-secret`'i yazar; uygulama Secret'i `env` olarak alir. Argo CD, VSO ve Vault'u Terraform kurar; Terraform ayrica Vault'u (KV, auth, politikalar) ve Argo CD'nin kok Application'ini ayarlar.
+- **yerel-platform PostgreSQL**: tek sunucu, iki veritabani. K8s uygulamasi `host.docker.internal:5432` uzerinden `cybernews_k8s`'e, compose `yerel-platform` agi uzerinden `cybernews`'e baglanir.
+- **Docker Compose**: canli ortam. api/worker/scheduler Redis'i cache ve broker olarak, LibreTranslate'i cekim aninda ceviri icin kullanir; 35 harici kaynagi ve Gemini API'yi disaridan ceker.
+
+Gorsel Archify ile uretildi; etkilesimli HTML surumu repo disinda tutulur.
+
+### Compose ici bilesenler
+
 ```
-                         ┌──────────────────┐
-                         │   React Frontend │
-                         │   (Vite + BS5)   │
-                         │   :3000          │
-                         └────────┬─────────┘
-                                  │ /api proxy
-                         ┌────────▼─────────┐
-                         │  Django REST API  │
-                         │  (Gunicorn)       │
-                         │  :8000            │
-                         └──┬──────────┬────┘
-                            │          │
-                   ┌────────▼──┐  ┌────▼────────────┐
-                   │   Redis   │  │  Celery Worker   │
-                   │   :6379   │  │  + Beat Scheduler│
-                   └───────────┘  └─────────────────┘
-                                          │
-                              ┌───────────▼───────────┐
-                               │   Harici Kaynaklar     │
-                               │   (35 kaynak)          │
-                              │   + LibreTranslate      │
-                              └─────────────────────────┘
+                 ┌──────────────────────┐
+                 │   React Frontend     │  Vite dev server (compose) /
+                 │   Vite + Bootstrap 5 │  Nginx (imaj, K8s)
+                 │   :3000              │
+                 └──────────┬───────────┘
+                            │ /api proxy
+                 ┌──────────▼───────────┐        ┌───────────────────────┐
+                 │  Django REST API     │◄──────►│  PostgreSQL 16        │
+                 │  Gunicorn, DRF       │        │  yerel-platform       │
+                 │  /api/* (arayuz)     │        │  (ayri repo, paylasilan│
+                 │  /api/v1/* (dis API) │        │   yerel-postgres:5432) │
+                 └───┬─────────────┬────┘        └───────────────────────┘
+                     │             │
+          ┌──────────▼──┐   ┌──────▼─────────────────────┐
+          │  Redis 7    │◄──┤  Celery Worker + Beat       │
+          │  cache +    │   │  cekim · ceviri · retranslate│
+          │  broker     │   │  6 saatte bir / 2 saatte bir │
+          └─────────────┘   └──────┬───────────────┬──────┘
+                                   │               │
+                      ┌────────────▼────┐   ┌──────▼──────────────┐
+                      │ 35 harici kaynak│   │ Ceviri saglayicilari│
+                      │ RSS · HTML · API│   │ LibreTranslate (yerel)│
+                      └─────────────────┘   │ Gemini (yukseltme)   │
+                                            └─────────────────────┘
 ```
+
+Ayni kod uc bicimde calisir:
+
+| Ortam | Ne icin | Nasil kurulur | Veritabani |
+|---|---|---|---|
+| **Docker Compose** | Canli yerel ortam (gunluk kullanim) | `docker compose up -d --build` | `yerel-postgres` / `cybernews` |
+| **Helm (generic)** | Herhangi bir Kubernetes kumesi | `helm upgrade --install` ([bolum](#kubernetese-deploy-etme-helm)) | chart ici PostgreSQL ya da harici |
+| **Argo CD + Vault (yerel GitOps)** | Paralel deneme ortami, docker-desktop | `yerel-gitops` reposuna commit; platform `yerel-platform` Terraform'u ([ADR-0008](docs/ADR-0008-Yerel-GitOps-Terraform-ArgoCD-Vault.md)) | `yerel-postgres` / `cybernews_k8s` |
 
 ## Ozellikler
 
@@ -48,8 +84,13 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 - **Tarih filtresi** — 1-15 gun (haberler) / 1-60 gun (DevTools, Yapay Zeka) slider ile filtreleme
 - **CVSS siddet filtresi** — Kritik / Yuksek / Orta / Dusuk (CVE sayfasi)
 - **HTML rapor disa aktarma** — Her bolumden koyu temali, yazdirilabilir HTML rapor indirilebilir
-- **Docker Compose** — Tek komutla 5 container ayaga kalkar
-- **Kubernetes** — Production-ready manifest'ler + Helm chart
+- **Entegrasyon API (`/api/v1/`)** — Token'li, imlecli delta okuma; OpenAPI 3 semasi ve Swagger UI; manuel tetikleme ve is takibi ([ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md))
+- **Cekim gorunurlugu** — Her cekim `FetchRun` olarak kaydedilir; `GET /api/v1/status/` bolum basina tazelik ve son durum verir ([ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md))
+- **Ceviri rozetleri** — Her kayit saglayicisini tasir (LibreTranslate / Gemini); bekleyen cevirilerde Ingilizce metin kaybolmaz
+- **Docker Compose** — Tek komutla 6 container ayaga kalkar (PostgreSQL ayri `yerel-platform` reposunda paylasilir)
+- **Kubernetes** — Surumlu Helm chart (SemVer + CHANGELOG, CI kapilari); Argo CD Sync hook modu ve harici Secret destegi
+- **GitOps + Vault** — Yerel docker-desktop'ta Terraform ile kurulan Argo CD + HashiCorp Vault + Vault Secrets Operator zinciri; sirlar git'e ve state'e girmez ([ADR-0008](docs/ADR-0008-Yerel-GitOps-Terraform-ArgoCD-Vault.md))
+- **Guvenlik hatti** — 9 GitHub Actions is akisi: test/build/Helm kapisi, CodeQL, Trivy (kaynak + imaj + SBOM), gitleaks, ZAP DAST, Dependency Review, zizmor, OpenSSF Scorecard, chart etiketi kapisi ([plan](docs/GUVENLIK-PLANI.md))
 
 ---
 
@@ -128,12 +169,16 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 
 | Katman | Teknolojiler |
 |--------|-------------|
-| **Backend** | Python 3.11, Django 4.2, Django REST Framework 3.14, Celery 5.3, Gunicorn |
-| **Frontend** | React 18, Vite 5, React Bootstrap 2.9, React Router DOM 6, Axios |
-| **Veri** | PostgreSQL 16 (compose ve K8s; SQLite yalniz `DEBUG=True` ile hostta), Redis 7 (cache + broker) |
+| **Backend** | Python 3.11, Django 5.2, Django REST Framework 3.18, drf-spectacular (OpenAPI 3), Celery 5.6 + django-celery-beat, Gunicorn 22, Whitenoise |
+| **Frontend** | React 18, Vite 6, React Bootstrap 2.9, React Router DOM 7, Axios, react-hot-toast; Node 22 |
+| **Veri** | PostgreSQL 16 (compose ve K8s; SQLite yalniz `DEBUG=True` ile hostta), Redis 7 (cache + Celery broker, django-redis) |
 | **Scraping** | BeautifulSoup4, lxml, Requests |
-| **Ceviri** | Cekim aninda yerel LibreTranslate (aninda Turkce, rozetli); retranslate 2 saatte bir bekleyen ve LibreTranslate kayitlarini Gemini API (gemini-3.5-flash-lite, ucretsiz katman, kayit basina tek istek) ile yukseltir + merkezi post-processing |
-| **Altyapi** | Docker Compose, Kubernetes, Nginx 1.25, Whitenoise |
+| **Ceviri** | Cekim aninda yerel LibreTranslate 1.9.6 (aninda Turkce, rozetli); retranslate 2 saatte bir bekleyen ve LibreTranslate kayitlarini Gemini API (gemini-3.5-flash-lite, ucretsiz katman, kayit basina tek istek) ile yukseltir + merkezi post-processing |
+| **Konteyner / dagitim** | Docker Compose, cok asamali Dockerfile'lar (non-root, digest sabitli taban imajlar), Nginx 1.31 (frontend imaji), Helm chart `tech-radar` |
+| **Platform (ayri repolar)** | `yerel-platform`: paylasilan PostgreSQL + Terraform (Argo CD, Vault, VSO); `yerel-gitops`: Argo CD Application'lari ve ortam degerleri |
+| **CI / guvenlik** | GitHub Actions, CodeQL, Trivy, gitleaks, OWASP ZAP, Dependency Review, zizmor, OpenSSF Scorecard, Dependabot, kubeconform |
+
+Tam surumler [`requirements.txt`](requirements.txt) ve [`frontend/package.json`](frontend/package.json) dosyalarindadir; Dependabot bunlari haftalik gunceller.
 
 ---
 
@@ -167,13 +212,14 @@ docker compose up -d --build
 | Container | Image | Port | Gorev |
 |-----------|-------|------|-------|
 | `teknoloji-api` | `teknoloji-haberleri-api:latest` | 8000 | Django REST API, scraping, ceviri |
-| `teknoloji-frontend` | `node:18-alpine` | 3000 | React arayuz (Vite dev server, hot-reload) |
-| `teknoloji-redis` | `redis:7-alpine` | 6379 | Cache + Celery message broker |
+| `teknoloji-frontend` | `node:22-alpine` | 3000 | React arayuz (Vite dev server, hot-reload; kaynak bind mount) |
+| `teknoloji-translate` | `libretranslate/libretranslate:v1.9.6` | — (kume ici 5000) | Yerel ceviri; yalniz `en,tr` modelleri, ilk acilista ~258 MB indirir (volume `teknoloji-translate-models`); 4 CPU / 2 GB siniri |
+| `teknoloji-redis` | `redis:7-alpine` | 6379 | Cache + Celery message broker (volume `teknoloji-redis-data`) |
+| `teknoloji-worker` | `teknoloji-haberleri-api:latest` | — | Arka plan scraping + ceviri (`celery worker`) |
+| `teknoloji-scheduler` | `teknoloji-haberleri-api:latest` | — | Periyodik gorev zamanlayici (`celery beat`) |
 | `yerel-postgres` (ayri repo: `yerel-platform`) | `postgres:16.15-alpine` | 127.0.0.1:5432 | Paylasilan yerel PostgreSQL; CyberNews `cybernews` veritabanini ve kullanicisini kullanir |
-| `teknoloji-worker` | `teknoloji-haberleri-api:latest` | — | Arka plan scraping + ceviri |
-| `teknoloji-scheduler` | `teknoloji-haberleri-api:latest` | — | Periyodik gorev zamanlayici (Celery Beat) |
 
-Container'lar `teknoloji-network` bridge network uzerinden haberlesir.
+Container'lar `teknoloji-network` bridge agi uzerinden haberlesir; api, worker ve scheduler ayrica `yerel-platform` adli **dis** aga baglanir (PostgreSQL oradadir). Compose kaynak kodu `/app`'e bind mount eder; api `entrypoint.sh` ile acilista `migrate` + `collectstatic` calistirir (`RUN_STARTUP_TASKS=true`). Ayni imaj Kubernetes'te salt okunur kok dosya sistemiyle ve bu adimlar kapali calisir.
 
 ### Yonetim Komutlari
 
@@ -226,6 +272,70 @@ docker compose exec teknoloji-api python manage.py createsuperuser
 ```
 
 Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ayni tarayicidaki frontend isteklerinde de kullanilir; axios CSRF token'i `csrftoken` cerezinden otomatik ekler.
+
+---
+
+## Gelistirme ve Test
+
+### Testler
+
+369 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+
+```bash
+# Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
+docker compose exec teknoloji-api python manage.py test news --noinput
+
+# Tek kullanimlik PostgreSQL + Redis ile, canli yigina dokunmadan (CI ile ayni yol)
+scripts/pg_test.sh test news --noinput
+
+# Hostta SQLite ile hizli deneme (DEBUG=True, DB_HOST bos)
+scripts/pg_test.sh --sqlite test news.tests.test_cursor
+```
+
+CI (`Backend (Django testleri)`) testleri PostgreSQL 16 servisiyle, `DEBUG=False` ve gercek bir `SECRET_KEY` ile kosar; migration'larin eksiksiz oldugu (`makemigrations --check`) ayni iste dogrulanir. Yeni bir test yazarken kodu gecici olarak bozup testin kirmiziya dondugunu gorun; mock'lanmis saglayici testlerinde "yesil ama hicbir seyi sinamiyor" tuzagi kolaydir.
+
+| Test dosyasi grubu | Kapsam |
+|---|---|
+| `test_cursor`, `test_filters`, `test_refresh`, `test_jobs`, `test_status`, `test_schema`, `test_auth` | `/api/v1/` sozlesmesi: imlec, parametreler, kilit/soguma, is takibi, status, OpenAPI, token |
+| `test_translation*`, `test_gemini`, `test_retranslate` | Terim koruma, parca bolme, post-processing, saglayici zinciri, devre kesici, butce, yukseltme |
+| `test_saklama`, `test_fetchrun`, `test_eski_fetch_kapisi` | `RETENTION_DAYS` sil/yeniden yaz dongusu, FetchRun kaydi, eski `/api/*/fetch/` uclarinin v1 kapisindan gecmesi |
+| `test_ayar_dogrulama`, `test_admin`, `test_cache`, `test_altyapi`, `test_modeller` | `SECRET_KEY`/`DB_HOST` korumalari, admin yetkisi, cache, model kisitlari |
+| `test_migrations_*`, `test_veri_tasima` | Veri migration'lari ve SQLite -> PostgreSQL tasima araclari |
+
+### Hostta calistirma
+
+`DEBUG` varsayilani `False` oldugu icin anahtarsiz `python manage.py ...` reddedilir. Yerelde iki secenek:
+
+```bash
+# Konteynerde (onerilen; ortam compose'tan gelir)
+docker compose exec teknoloji-api python manage.py <komut>
+
+# Hostta SQLite ile (yalniz deneme)
+DEBUG=True python manage.py <komut>
+```
+
+Frontend icin `frontend/` altinda `npm install && npm run dev` yeterlidir; `vite.config.js` `/api`'yi `localhost:8000`'e proxy'ler. Compose'daki dev sunucusu calisirken hosttan `npm install` yapmayin (bind mount `node_modules` ve EACCES); once `docker compose stop teknoloji-frontend`.
+
+### Yonetim komutlari ve betikler
+
+| Komut / betik | Ne yapar |
+|---|---|
+| `manage.py veri_tasi_dump <dosya>` | Tam hassasiyetli (mikrosaniye koruyan) JSON dump; hassas icerik, commit edilmez |
+| `manage.py veri_ozeti` | Model basina satir sayisi ve alan ozeti; iki veritabanini karsilastirmak icin |
+| `manage.py bozuk_cevirileri_isaretle` | Turkce metninde `XTRM` yer tutucu kalintisi olan kayitlari bulup `needs_translation` isaretler |
+| `scripts/pg_test.sh` | Tek kullanimlik PostgreSQL + Redis'e karsi `manage.py`; canli yigina dokunmaz |
+| `scripts/ornek_istemci.py` | `/api/v1/` delta senkron ornegi (yalniz standart kutuphane) |
+| `scripts/helm_yerel_dogrulama.sh imaj\|kur\|sok` | Chart'i yalniz `docker-desktop`'ta gercek kurulumla dogrular (S1-S7) |
+| `scripts/chart_surum_kontrol.sh <taban-ref>` | Chart dizini degistiyse `Chart.yaml version` artmis ve CHANGELOG girdisi var mi (CI kapisi) |
+| `scripts/imaj_etiket_kontrol.sh <render.yaml>` | Render'daki imajlar etiketli mi, `latest` yok mu, ucuncu taraf imajlar digest ile sabit mi (CI kapisi) |
+| `scripts/chart_etiket_kontrol.sh chart-<surum>` | `chart-*` etiketi `Chart.yaml` ile ayni mi (etiket push'unda CI kapisi) |
+
+### Kod kurallari
+
+- Kod, yorum ve commit mesajlari ASCII Turkce (diakritiksiz). Dallar `main`'e `--no-ff` ile birlesir.
+- Her onemli karar bir ADR'dir (`docs/ADR-*.md`); tasarim ve uygulama planlari `docs/superpowers/` altindadir.
+- Sir degerleri (anahtar, parola, token) hicbir dosyaya, log'a veya ekrana yazilmaz; `.env` ve `.fazb/` gitignore'dadir, gitleaks her PR'da tarar.
+- `helm/tech-radar/` altindaki her degisiklik chart surumunu artirir ve CHANGELOG girdisi ister (bkz. [Surumleme](#surumleme)).
 
 ---
 
@@ -442,6 +552,14 @@ cybersecurity_news/
 │   ├── serializers.py          # DRF serializer'lari
 │   ├── urls.py                 # API URL pattern'leri
 │   ├── translation_utils.py    # Merkezi ceviri modulu (terim koruma + post-processing)
+│   ├── translation_providers.py# Saglayici zinciri: LibreTranslate (cekim) + devre kesici
+│   ├── gemini.py               # Gemini API istemcisi, hiz siniri, gunluk butce, CVE payi
+│   ├── retranslate.py          # Bekleyenleri cevir + LibreTranslate kayitlarini Gemini'ye yukselt
+│   ├── cache_utils.py          # Redis cache anahtarlari ve temizleme
+│   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
+│   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
+│   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
+│   ├── tests/                  # 369 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
 │   ├── ai_scraper.py           # 8 Yapay Zeka kaynagi scraper'i
 │   ├── cve_scraper.py          # 5 CVE kaynagi scraper'i
@@ -458,7 +576,12 @@ cybersecurity_news/
 │   └── admin.py                # Django admin kayitlari
 │
 ├── scripts/
-│   └── ornek_istemci.py        # /api/v1/ delta senkron ornegi (stdlib-only)
+│   ├── ornek_istemci.py        # /api/v1/ delta senkron ornegi (stdlib-only)
+│   ├── pg_test.sh              # Tek kullanimlik PostgreSQL + Redis ile manage.py / testler
+│   ├── helm_yerel_dogrulama.sh # Chart'i yalniz docker-desktop'ta dogrular (S1-S7)
+│   ├── chart_surum_kontrol.sh  # CI kapisi: chart degistiyse surum + CHANGELOG
+│   ├── imaj_etiket_kontrol.sh  # CI kapisi: render'da etiketsiz / latest imaj yok
+│   └── chart_etiket_kontrol.sh # CI kapisi: chart-<surum> etiketi Chart.yaml ile ayni
 │
 ├── scraper_multi.py            # 5 siber guvenlik kaynagi scraper'i
 │
@@ -472,22 +595,33 @@ cybersecurity_news/
 │   │   │   ├── KubernetesComponent.jsx # Kubernetes sayfasi
 │   │   │   ├── SREComponent.jsx        # SRE sayfasi
 │   │   │   ├── DevToolsComponent.jsx   # DevTools sayfasi
-│   │   │   └── AINewsComponent.jsx     # Yapay Zeka sayfasi
+│   │   │   ├── AINewsComponent.jsx     # Yapay Zeka sayfasi
+│   │   │   └── CeviriEtiketi.jsx       # Ceviri saglayici rozeti
 │   │   └── services/
 │   │       └── api.js          # Axios API servisleri
-│   ├── Dockerfile              # Production build: Node + Nginx
+│   ├── Dockerfile              # Production build: Node 22 + Nginx 1.31 (non-root)
+│   ├── .dockerignore           # node_modules bind mount'u build'i bozmasin
 │   ├── nginx.conf              # SPA routing + /api proxy
 │   ├── vite.config.js          # Dev proxy ayarlari
 │   ├── index.html
 │   └── package.json
 │
-├── docs/                       # Mimari karar kayitlari (ADR)
+├── docs/
+│   ├── ADR-0001 ... ADR-0008   # Mimari karar kayitlari
+│   ├── GUVENLIK-PLANI.md       # Guvenlik hatti: hatlar, bulgu yerleri, bekleyen isler
+│   └── superpowers/
+│       ├── specs/              # Tasarim belgeleri (karar + gerekce + testler)
+│       └── plans/              # Uygulama planlari (gorev gorev) ve devir notlari
+│
+├── .github/workflows/          # CI, codeql, trivy, gitleaks, dast-zap, dependency-review,
+│                               # zizmor, scorecard, chart-etiket (bkz. CI ve Guvenlik Hatti)
 │
 ├── helm/tech-radar/            # Helm chart (tek dagitim kaynagi; surum: Chart.yaml)
 │   ├── Chart.yaml              # version (SemVer) + appVersion (imaj etiketi)
 │   ├── CHANGELOG.md            # Chart surumleri ve yukseltme notlari
 │   ├── values.yaml             # Varsayilan degerler (gizli deger icermez)
 │   ├── ci/yerel-values.yaml    # Yerel docker-desktop dogrulamasi
+│   ├── ci/argocd-values.yaml   # CI'da Argo CD + VSO modunda render
 │   ├── .helmignore
 │   └── templates/
 │       ├── _helpers.tpl        # Imaj, guvenlik baglami, ortam, ALLOWED_HOSTS yardimcilari
@@ -499,18 +633,23 @@ cybersecurity_news/
 │       ├── backend.yaml
 │       ├── frontend.yaml
 │       ├── celery.yaml         # Worker + Beat
-│       ├── migration-job.yaml  # Her revizyonda teknoloji-migrate-r<N>
+│       ├── migration-job.yaml  # helm: teknoloji-migrate-r<N>; argocd: sabit adli Sync hook
 │       ├── ingress.yaml        # ingress.enabled
 │       └── NOTES.txt
 │
 ├── docker-compose.yml          # 6 servis (PostgreSQL ayri: yerel-platform)
-├── Dockerfile                  # Backend multi-stage build
-├── entrypoint.sh               # Startup: wait-for-db + migrate
-├── requirements.txt            # Python bagimliliklari
-├── .gitignore
-├── .dockerignore
+├── Dockerfile                  # Backend multi-stage build (non-root, digest sabitli taban)
+├── entrypoint.sh               # Startup: wait-for-db + migrate + collectstatic (compose)
+├── requirements.txt            # Python bagimliliklari (surumler sabit)
+├── SECURITY.md                 # Zafiyet bildirimi: GitHub private vulnerability reporting
+├── .env.example                # SECRET_KEY, DB_PASSWORD (zorunlu), GEMINI_API_KEY
+├── .gitleaksignore             # Gecmis commit'lere sabitli placeholder baseline'i (silinmez)
+├── .gitignore                  # .env, .fazb/, db.sqlite3*, staticfiles/, node_modules
+├── .dockerignore               # .env ve .env.* imaja girmez
 └── manage.py
 ```
+
+> Depo kokundeki `scraper*.py`, `gui*.py` ve `requirements_*.txt` dosyalari projenin ilk masaustu/CLI surumunden kalmadir; web uygulamasi bunlari kullanmaz.
 
 ---
 
@@ -575,7 +714,30 @@ Ceviri sonrasi otomatik duzeltmeler:
 | DevTools | `fetch_devtools_task` | :40 | 30 |
 | Yapay Zeka | `fetch_ai_news_task` | :50 | 30 |
 
-Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabaninda zaten cevrilmis kayitlar tekrar cevrilmez; yalnizca yeni haberler ve ceviri bekleyen (`needs_translation`) kayitlar LibreTranslate'e gonderilir. Gun araligi task varsayilanidir; her cekim (manuel "Getir" dahil) bu araligin disinda kalan eski kayitlari siler. Bekleyen ve LibreTranslate kayitlarinin Gemini ile yukseltilmesi ayri bir Beat gorevidir (bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)).
+Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabaninda zaten cevrilmis kayitlar tekrar cevrilmez; yalnizca yeni haberler ve ceviri bekleyen (`needs_translation`) kayitlar LibreTranslate'e gonderilir. Gun araligi task varsayilanidir; her cekim (manuel "Getir" dahil) bu araligin disinda kalan eski kayitlari siler. Bekleyen ve LibreTranslate kayitlarinin Gemini ile yukseltilmesi ayri bir Beat gorevidir (bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)): `retranslate_pending_task`, tek saatlerde dakika 05.
+
+Her cekim bir `FetchRun` satiri birakir (bolum, baslangic/bitis, `fetched_count`, `saved_count`, durum, hata ozeti). Son durumlar `GET /api/v1/status/` ile okunur; Beat'in gercekten calistigini kontrol etmenin en kisa yolu budur ([ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md)).
+
+---
+
+## Surumleme
+
+Uc ayri sayi vardir ve birbirine karistirilmamalidir:
+
+| Ne | Nerede | Kural | Kim degistirir |
+|---|---|---|---|
+| **Uygulama surumu** | `helm/tech-radar/Chart.yaml` `appVersion`; imaj etiketi `teknoloji-haberleri-{api,frontend}:<appVersion>` | CalVer `YYYY.M.N` | Yeni uygulama surumunde gelistirici |
+| **Chart surumu** | `Chart.yaml` `version` + git etiketi `chart-<version>` | SemVer: uyumsuz values/sablon MAJOR, yeni istege bagli deger MINOR, duzeltme PATCH; her surum `CHANGELOG.md`'de `## [surum]` basligi | Chart dizinine dokunan her PR |
+| **Kumede calisan surum** | `yerel-gitops` reposunda Application'in `targetRevision`'i | Degismez `chart-*` etiketi; yukseltme = etiketi degistir, geri alma = `git revert` | GitOps reposuna commit |
+
+CI bu kurallari zorlar:
+
+- `scripts/chart_surum_kontrol.sh`: chart dizini degistiyse `version` artmis ve CHANGELOG girdisi var mi (CI, `Helm / Compose dogrulama`).
+- `scripts/imaj_etiket_kontrol.sh`: render'da etiketsiz veya `latest` imaj yok, ucuncu taraf imajlar digest ile sabit.
+- `scripts/chart_etiket_kontrol.sh`: `chart-*` etiketi push edilince `Chart.yaml` ile ayni surumu gosteriyor mu (`chart etiketi` is akisi).
+- Dockerfile'lardaki taban imajlar digest ile sabittir; Dependabot digest guncellemelerini PR olarak acar.
+
+Etiket yalniz chart icin vardir (`git tag chart-2.1.0 && git push origin chart-2.1.0`); uygulama icin GitHub Release veya registry yayini yoktur, imajlar yerelde `appVersion` etiketiyle derlenir.
 
 ---
 
@@ -664,15 +826,23 @@ Betik baglami degistirmez, yerel olmayan bir kumeyi reddeder, gizli degerleri ca
 
 ### GitOps ile kurulum (Argo CD + Vault, yerel)
 
-Kisisel deneme ortami Argo CD ile git'ten kurulur (ADR-0008): chart bu reponun degismez
-`chart-<surum>` etiketinden (or. `chart-2.1.0`), degerler ve Vault Secrets Operator nesneleri
-private `yerel-gitops` reposundan okunur; platform `yerel-platform`'da Terraform ile kurulur.
+Kisisel deneme ortami Argo CD ile git'ten kurulur ([ADR-0008](docs/ADR-0008-Yerel-GitOps-Terraform-ArgoCD-Vault.md), tasarim: [spec](docs/superpowers/specs/2026-10-03-b3-terraform-argocd-vault-design.md)). Uc repo is bolusur:
 
-- `migration.mode=argocd` ve `secrets.existingSecret=teknoloji-secret` kullanilir (bkz. tablo).
-- Her chart surumu icin etiket: `git tag chart-<Chart.yaml version>` + push. CI (`chart etiketi`)
-  etiketin `Chart.yaml` ile ayni oldugunu ve CHANGELOG girdisini dogrular.
-- Kumede calisan surum `yerel-gitops`'taki `targetRevision`'dir; yukseltme ve geri alma orada
-  commit/`git revert` ile yapilir.
+| Repo | Rol | Icerik |
+|---|---|---|
+| `tech-radar` (bu repo, public) | Uygulama ve chart | `helm/tech-radar`, her chart surumu icin degismez `chart-<surum>` etiketi |
+| `yerel-platform` (private) | Platform | Paylasilan PostgreSQL; `terraform/kume` (Argo CD, Vault, VSO) ve `terraform/yapilandirma` (Vault KV/auth/politikalar, AppProject'ler, kok Application); `scripts/tf.sh` baglami `docker-desktop`'a kilitler |
+| `yerel-gitops` (private) | "Kumede ne calissin" | `apps/tech-radar.yaml` (uc kaynakli Application), `tech-radar/values-yerel.yaml` (sir yok), `tech-radar/manifests/` (ServiceAccount, VaultAuth, VaultStaticSecret) |
+
+Nasil calisir:
+
+- Argo CD chart'i bu reponun `chart-2.1.0` etiketinden, degerleri ve VSO nesnelerini `yerel-gitops`'tan okur; hedef namespace `tech-radar`, `automated: {prune, selfHeal}`.
+- `migration.mode=argocd` (Job sabit adli Sync hook) ve `secrets.existingSecret=teknoloji-secret` kullanilir; Secret'i Vault Secrets Operator `kv/tech-radar/uygulama`'dan yazar ve deger degisince api/worker/scheduler Deployment'larini yeniden baslatir.
+- K8s ortami **paralel denemedir**: ayri veritabani `cybernews_k8s`, Gemini ve Beat kapali, imajlar yerel (`pullPolicy: Never`); compose canli ortam olarak kalir.
+- Kumede calisan surum `yerel-gitops`'taki `targetRevision`'dir; yukseltme orada etiketi degistirmek, geri alma `git revert`. Argo CD arayuzundeki Rollback auto-sync altinda kapalidir.
+- Vault kilitliyse (Docker Desktop yeniden baslayinca) uygulama calismaya devam eder; yalniz sir yenilemesi bekler. Acmak: `yerel-platform/scripts/vault_kilit_ac.sh`.
+
+Dogrulama senaryolari T1-T12 (kurulum, en az yetki, repo erisimi, yukseltme, rollback, sapma, sir rotasyonu, Vault yeniden baslatma, sifirdan kurulum) `yerel-platform/scripts/k8s_dogrulama.sh` ile kosar; sonuclar ADR-0008'dedir.
 
 ### Onemli values parametreleri
 
@@ -693,6 +863,74 @@ private `yerel-gitops` reposundan okunur; platform `yerel-platform`'da Terraform
 | `ingress.tls.enabled` | `false` | TLS/HTTPS |
 | `config.django.extraAllowedHosts` | `""` | Ek host'lar (virgulle) |
 | `config.app.*` | koddaki varsayilanlar | `RETENTION_DAYS`, `REFRESH_COOLDOWN`, `GEMINI_*`, `LIBRETRANSLATE_*` ... |
+
+---
+
+## CI ve Guvenlik Hatti
+
+Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks` ve etiket push'unda `chart etiketi` **kapidir** (kirmiziysa merge/etiket gecmez), digerleri **rapor** uretir: bulgu varsa hat yesil kalir ve bulgu Security sekmesine duser; hat yalniz taramanin kendisi yapilamadiysa kirmizi olur. Ayrintili okuma rehberi ve bekleyen isler: [`docs/GUVENLIK-PLANI.md`](docs/GUVENLIK-PLANI.md).
+
+| Is akisi | Tetik | Mod | Ne yapar |
+|---|---|---|---|
+| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: PostgreSQL 16 ile 369 test + `makemigrations --check`; `Frontend (Vite build)`; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
+| `Dependency Review` | PR | **Kapi** | HIGH/CRITICAL zafiyetli bagimlilik getiren PR'i durdurur |
+| `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
+| `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |
+| `CodeQL Advanced` | PR, push, Pazar | Rapor | Python ve JavaScript statik analiz |
+| `DAST (ZAP baseline)` | PR, push, Pazartesi | Rapor | Uygulamayi PostgreSQL ile ayaga kaldirip OWASP ZAP baseline taramasi; HTML rapor artefakti |
+| `zizmor` | `.github/` degisince, Persembe | Rapor | Workflow dosyalarinin guvenlik denetimi |
+| `OpenSSF Scorecard` | push, Sali | Rapor | Depo guvenlik puani |
+| `chart etiketi` | `chart-*` etiketi push'u | Kapi | Etiket `Chart.yaml version` ile ayni mi, CHANGELOG girdisi var mi |
+
+Dependabot pip, npm, Docker (digest) ve GitHub Actions bagimliliklarini haftalik gunceller; major surumler filtrelidir. Dependabot PR'i gelince: eski bir `main`'den acildiysa **Update branch**, tum check'ler yesilse merge; `CI` kirmiziysa merge etme, planlanmis yukseltme listesine ekle.
+
+Bulgular nerede: kod ve imaj zafiyetleri, sirlar ve workflow sorunlari **Security → Code scanning**; bagimlilik CVE'leri **Security → Dependabot**; ZAP bulgulari ilgili Actions kosusunun Summary tablosu ve artefakti. Zafiyet bildirimi icin [SECURITY.md](SECURITY.md) (GitHub private vulnerability reporting; ilk yanit 7 gun).
+
+Uygulama tarafindaki korumalar: `DEBUG=False` iken bos, ornek, `django-insecure` onekli veya 32 karakterden kisa `SECRET_KEY` ile uygulama acilmaz (`cybernews/ayar_dogrulama.py`); `DB_HOST` bossa yalniz `DEBUG=True` ile SQLite; veritabanini silen uclar admin oturumu ister; `/api/v1/` token + hiz siniri + paylasilan soguma; imajlar non-root, Kubernetes'te kok dosya sistemi salt okunur.
+
+---
+
+## Operasyon ve Sorun Giderme
+
+### Saglik ve gorunurluk
+
+```bash
+# Servis ayakta mi (tokensiz)
+curl -s http://localhost:8000/api/v1/health/
+
+# Bolum basina tazelik: son basarili cekim, son durum, bekleyen ceviri sayisi
+curl -s -H "Authorization: Token $CYBERNEWS_TOKEN" http://localhost:8000/api/v1/status/
+
+# Loglar
+docker compose logs -f --tail=100 teknoloji-worker      # cekim ve ceviri
+docker compose logs -f --tail=100 teknoloji-scheduler   # Beat planlamasi
+docker compose logs -f --tail=100 teknoloji-translate   # LibreTranslate
+
+# Celery kuyrugu ve worker durumu
+docker compose exec teknoloji-worker celery -A cybernews inspect active
+docker compose exec teknoloji-redis redis-cli -n 1 LLEN celery
+```
+
+### Sik karsilasilan durumlar
+
+| Belirti | Sebep | Cozum |
+|---|---|---|
+| `teknoloji-api` acilmiyor, logda `SECRET_KEY` hatasi | `.env`'de anahtar yok, ornek deger ya da 32 karakterden kisa | `openssl rand -hex 32` ile uret, `.env`'e yaz, `docker compose up -d` |
+| `DB_PASSWORD .env icinde tanimli olmali` | Compose degiskeni bos | `yerel-platform/scripts/uygulama_ekle.sh cybernews` ile olusturulan parolayi `.env`'e yaz |
+| api PostgreSQL'e baglanamiyor | `yerel-platform` compose'u ayakta degil ya da `yerel-platform` dis agi yok | Once `yerel-platform`'da `docker compose up -d`, sonra burada |
+| Ilk cekimde ceviri yok, `teknoloji-translate` unhealthy | LibreTranslate modelleri iniyor (~258 MB, `start_period` 120 sn) | Bekle; `docker compose logs teknoloji-translate`. Internet yoksa ve volume bossa servis acilmaz |
+| Kayitlar Ingilizce kaldi, rozet "bekliyor" | Saglayici devre kesicisi acik ya da Gemini butcesi doldu | Kayip yok; `retranslate_pending` bir sonraki turda dener. Durum: `/api/v1/status/` `pending_translation` |
+| `/api/v1/*/refresh/` 429 `cooldown` | Bolum sogumada (`REFRESH_COOLDOWN`, tum token'lar ortak) | `Retry-After` kadar bekle; soguma bilincli bir koruma |
+| Hostta `manage.py` reddediliyor | `DEBUG` varsayilani `False`, anahtar ve `DB_HOST` yok | Konteynerde calistir ya da `DEBUG=True` ile SQLite |
+| `npm install` EACCES | Compose dev sunucusu bind mount'ta `node_modules` tutuyor | `docker compose stop teknoloji-frontend`, sonra `docker compose run --rm --no-deps teknoloji-frontend npm install` |
+| Git Bash'te `docker ... /app/...` yolu `C:/Program Files/Git/app` oluyor | MSYS yol cevirisi | Komutun basina `MSYS_NO_PATHCONV=1` |
+| `compose run ... teknoloji-api manage.py` migrate calistiriyor | Entrypoint once migrate yapar | `--entrypoint python` ver |
+| K8s'te Secret yenilenmiyor, VSO `Synced False`, "Vault is sealed" | Docker Desktop yeniden basladi, Vault kilitli | Uygulama calismaya devam eder; `yerel-platform/scripts/vault_kilit_ac.sh` |
+| K8s'te elle yaptigin degisiklik geri aliniyor | Argo CD `selfHeal` | Degisikligi `yerel-gitops`'a commit et; acil durumda once auto-sync'i kapat |
+
+### Yedekleme
+
+Canli veri `yerel-platform`'un PostgreSQL'indedir; yedek orada alinir (`yerel-platform/scripts/yedekle.sh`). Uygulama tarafinda tam hassasiyetli dump icin `manage.py veri_tasi_dump`, dogrulama icin `manage.py veri_ozeti` kullanilir; dump dosyasi parola hash'leri ve token'lar icerdigi icin `.fazb/` altinda tutulur ve is bitince silinir. Redis yedeklenmez: kaybolursa cache, soguma ve kuyruk sifirlanir, Beat bir sonraki slotta devam eder.
 
 ---
 
@@ -746,6 +984,53 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 - Elastic 8.x serisi release notes farkli URL'de (`/guide/en/...`), sadece 9.x serisi icin detayli changelog cekilir
 - Yapay Zeka bolumu yalnizca haber RSS'lerini kapsar; benchmark/leaderboard skorlari ertelenmistir ([ADR-0002](docs/ADR-0002-AI-Benchmark.md))
 - `artificialintelligence-news.com` RSS'i 403 dondugu icin yerine MIT Technology Review AI kullanilir
+- `news` bolumunde `link` uzerinde veritabani benzersizlik kisiti yoktur; v1 tuketicisi kendi tarafinda benzersiz indeks tanimlamalidir (bkz. [Upsert anahtari](#upsert-anahtari--id-kullanmayin))
+- Yerel GitOps ortami bilinerek sinirlidir: Vault tek anahtar ve elle unseal, kok token yerel dosyada, Kubernetes Secret'lari etcd'de sifresiz, tek dugum, SSO yok, Argo CD polling (webhook yok). Uretim esdegerleri spec bolum 10'dadir
+- Compose ve K8s ayni PostgreSQL sunucusunda farkli veritabanlari (`cybernews`, `cybernews_k8s`) kullanir; ayni veritabanina ayni anda baglanmazlar
+
+---
+
+## Belgeler ve Yol Haritasi
+
+### Belgeler
+
+| Belge | Icerik |
+|---|---|
+| [`docs/ADR-*.md`](docs/) | Mimari kararlar: baglam, karar, elenen alternatifler, sonuc ve canli dogrulama olcumleri |
+| [`docs/GUVENLIK-PLANI.md`](docs/GUVENLIK-PLANI.md) | Guvenlik hatti nasil okunur, bulgular nereye duser, haftalik rutin, bekleyen isler (P3-P5), gecmis |
+| [`docs/superpowers/specs/`](docs/superpowers/specs/) | Tasarim belgeleri: her buyuk isin "neden, ne, nasil dogrulanir" metni (A1-A5b, guvenlik temizligi, Faz B, B3) |
+| [`docs/superpowers/plans/`](docs/superpowers/plans/) | Uygulama planlari ve devir notlari; gorev gorev komutlar, beklenen ciktilar |
+| [`helm/tech-radar/CHANGELOG.md`](helm/tech-radar/CHANGELOG.md) | Chart surumleri ve yukseltme notlari |
+| [`SECURITY.md`](SECURITY.md) | Zafiyet bildirimi |
+
+### Tamamlanan asamalar
+
+| Tarih | Asama | Kayit |
+|---|---|---|
+| 2026-09-11 | Yapay Zeka bolumu (8 kaynak) | ADR-0001, ADR-0002 (benchmark ertelendi) |
+| 2026-09-12 → 09-21 | Entegrasyon API `/api/v1/` A1-A5b: token, imlecli delta, refresh/jobs, FetchRun + status, OpenAPI | ADR-0003, ADR-0006 |
+| 2026-09-14 → 09-18 | Ceviri saglayici zinciri; Google kaldirildi, Gemini yukseltme; saklama olcusu `updated_at`, CVE'ye butce onceligi | ADR-0004, ADR-0005 |
+| 2026-09-13 → 09-30 | Guvenlik hatti (8 is akisi), Django 4.2 → 5.2, Dependabot 14 → 0, `SECRET_KEY`/`ALLOWED_HOSTS` korumalari | GUVENLIK-PLANI P0-P2, P4 (kismi) |
+| 2026-10-02 | Faz B1: SQLite → paylasilan yerel PostgreSQL, kayipsiz gecis (ozet birebir) | ADR-0007 |
+| 2026-10-03 | Faz B2: Helm chart 2.0.0 docker-desktop'ta S1-S7 ile dogrulandi; CI chart kapilari | ADR-0007 |
+| 2026-10-04 | B3: Terraform + Argo CD + Vault/VSO ile yerel GitOps; chart 2.1.0; T1-T12 gecti | ADR-0008 |
+
+### Acik isler ve adaylar
+
+Siraya konmus (GUVENLIK-PLANI):
+
+- **P3** `main` ruleset'ine zorunlu check'ler (`Backend`, `Frontend`, `Helm / Compose`, `dependency-review`, `gitleaks`); boylece kirmizi PR merge edilemez.
+- **P4** Kalan code scanning bulgularinin triaji (eski Trivy kategorisinin silinmesi, CodeQL alert'leri, Helm misconfig bulgulari).
+- **P5** ZAP sonucunun SARIF olarak Security sekmesine yuklenmesi; haftalik guvenlik ozeti is akisi; `/api/v1/` icin ZAP API taramasi.
+
+Aday (henuz tasarlanmadi; kapsam notlari ADR-0002 ve B3 spec bolum 13):
+
+- Vault **dinamik PostgreSQL kimlikleri** (database secrets engine + `VaultDynamicSecret`) ile statik `DB_PASSWORD`'un kalkmasi.
+- Argo CD **ApplicationSet** (kok uygulamanin yerine) ve ikinci bir ortam klasoruyle terfi akisi; Argo CD Image Updater.
+- AI benchmark/leaderboard bileseni (ADR-0002, ertelendi).
+- Diger kisisel uygulamalarin ayni zincire eklenmesi (yeni uygulama = `uygulamalar` listesine bir eleman + `yerel-gitops/apps/<ad>.yaml`).
+
+Kapsam disi (bilincli): gercek bir kumeye kurulum, imaj registry'si ve release yayini, SSO, cok dugum, K8s ortaminin canli olmasi.
 
 ---
 
@@ -760,6 +1045,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md) | Saklama olcusu `updated_at` (sil/yeniden yaz dongusu) ve CVE'ye Gemini butce onceligi | Accepted (uygulandi 2026-09-18, canlida dogrulandi) |
 | [ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md) | `FetchRun` gorunurlugu, durum semantigi ve dar `GET /api/v1/status/` ucu (ADR-0003 bolum 11'in yerine gecer) | Accepted (uygulandi 2026-09-21, canlida dogrulandi) |
 | [ADR-0007](docs/ADR-0007-PostgreSQL-Gecisi-ve-Helm-Dogrulamasi.md) | SQLite'tan paylasilan yerel PostgreSQL'e kayipsiz gecis ve Helm chart dogrulamasi (Faz B) | Accepted (B1 2026-10-02 ve B2 2026-10-03 uygulandi; docker-desktop'ta dogrulandi) |
+| [ADR-0008](docs/ADR-0008-Yerel-GitOps-Terraform-ArgoCD-Vault.md) | Yerel GitOps: iki asamali Terraform, Argo CD "app of apps", Vault + Vault Secrets Operator, chart 2.1.0 (B3) | Accepted (B3a + B3b 2026-10-04 uygulandi; T1-T12 docker-desktop'ta gecti) |
 
 ---
 
