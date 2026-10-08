@@ -114,7 +114,7 @@ Ayni kod uc bicimde calisir:
 | The Register | RSS Feed | Security bolumu; tam metin RSS'te |
 | Security Affairs | RSS Feed | Tam metin `content:encoded` icinde gelir |
 
-> Yeni RSS kaynaklari `scraper_multi.RSSNewsSource` ile okunur: tur basina en fazla 15 haber, `days` penceresi, 200 karakterden kisa ozetler makale sayfasindan tamamlanir. `fetch_all_news` tavani kaynak sayisiyla buyur (`max(30, 3 x kaynak)`), boylece seyrek yazan kaynaklar (Krebs, SANS) tarih siralamasinda dusmez.
+> Yeni RSS kaynaklari `scraper_multi.RSSNewsSource` ile okunur: tur basina en fazla 15 haber, `days` penceresi, 200 karakterden kisa ozetler makale sayfasindan tamamlanir. Feed'den gelen linkler yalniz kaynagin kendi kok alaninda ve `https` ise acilir (`news/base_scraper.link_guvenli`; SSRF korumasi, bkz. [GUVENLIK-PLANI 3a](docs/GUVENLIK-PLANI.md)). `fetch_all_news` tavani kaynak sayisiyla buyur (`max(30, 3 x kaynak)`), boylece seyrek yazan kaynaklar (Krebs, SANS) tarih siralamasinda dusmez.
 
 ### CVE Zafiyetleri (6 kaynak)
 

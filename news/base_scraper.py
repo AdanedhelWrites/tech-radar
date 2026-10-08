@@ -1,15 +1,56 @@
+import ipaddress
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import re
 from typing import List, Dict, Optional
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlsplit
 import logging
 
 log = logging.getLogger(__name__)
 
+def kok_alan(host: str) -> str:
+    """Kayitli kok alan yaklasimi: son iki etiket (api.theregister.com -> theregister.com)."""
+    parcalar = (host or '').lower().strip('.').split('.')
+    return '.'.join(parcalar[-2:]) if len(parcalar) >= 2 else (host or '').lower()
+
+
+def link_guvenli(url: str, kok: Optional[str] = None) -> bool:
+    """Feed'den gelen bir link sayfa cekimi icin acilabilir mi (SSRF, 2026-10-08).
+
+    Worker kume icindedir; zehirlenmis bir feed `http://teknoloji-redis:6379/` ya da
+    `http://10.0.0.5/` gibi ic adreslere HTTP attirabilirdi. Kural: yalniz https;
+    host IP, localhost, tek etiketli ad ya da ic alan (.local/.internal/.lan) olamaz;
+    kullanici bilgisi (user@host) olamaz; `kok` verildiyse host o kok alanda olmali.
+    """
+    try:
+        parca = urlsplit(url or '')
+    except ValueError:
+        return False
+    host = (parca.hostname or '').lower().rstrip('.')
+    if parca.scheme != 'https' or not host or parca.username or parca.password:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        pass
+    if '.' not in host or host == 'localhost':
+        return False
+    if host.endswith(('.localhost', '.local', '.internal', '.lan', '.home.arpa', '.svc', '.cluster.local')):
+        return False
+    if kok and not (host == kok or host.endswith('.' + kok)):
+        return False
+    return True
+
+
 class BaseRSSScraper:
     """Tüm RSS tabanli scraperlar icin temel sinif."""
+
+    # Sayfa cekiminde izinli kok alan (fetch_standard_rss_entries akisin hostundan kurar;
+    # RSSNewsSource base_url'den). None: yalniz genel kurallar (https, ic adres yok).
+    _aktif_kok: Optional[str] = None
 
     def __init__(self):
         self.session = requests.Session()
@@ -56,7 +97,9 @@ class BaseRSSScraper:
             if len(content_desc) > len(desc):
                 desc = content_desc
 
-        if len(desc) < 200 and link:
+        if len(desc) < 200 and link and not link_guvenli(link, self._aktif_kok):
+            log.warning(f"[{self.__class__.__name__}] Link izinli alan disinda, sayfa cekilmedi: {link[:80]}")
+        elif len(desc) < 200 and link:
             try:
                 resp = self.session.get(link, timeout=5)
                 soup = BeautifulSoup(resp.content, 'html.parser')
@@ -91,6 +134,8 @@ class BaseRSSScraper:
         log.info(f"[{source_name}] Son {days} gunun haberleri cekiliyor...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
+        # Sayfa cekimi yalniz akisin kendi kok alaninda (feed.infoq.com -> infoq.com)
+        self._aktif_kok = kok_alan(urlsplit(feed_url).hostname or '')
         try:
             resp = self.session.get(feed_url, timeout=20)
             soup = BeautifulSoup(resp.content, 'xml')

@@ -1,4 +1,4 @@
-from news.base_scraper import BaseRSSScraper
+from news.base_scraper import BaseRSSScraper, link_guvenli
 """
 Kubernetes Scraper Module
 kubernetes.io/blog, GitHub Releases, CNCF Blog kaynaklarindan
@@ -34,6 +34,10 @@ class K8sScraper(BaseRSSScraper):
     def fetch_article_content(self, url: str) -> Dict:
         """Haber linkine gidip gercek baslik ve icerigi ceker"""
         result = {'title': '', 'description': ''}
+        # SSRF (2026-10-08): yalniz kubernetes.io altindaki https linkler
+        if not link_guvenli(url, 'kubernetes.io'):
+            log.warning(f"  [fetch_article_content] Link izinli alan disinda, atlandi: {str(url)[:80]}")
+            return result
         try:
             response = self.session.get(url, timeout=15)
             response.raise_for_status()

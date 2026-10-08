@@ -65,6 +65,10 @@ gh api "repos/AdanedhelWrites/tech-radar/dependabot/alerts?state=open&per_page=1
 
 Kural: yeni inline `<script>` eklenmez; gerekiyorsa `nonce="{{ request.csp_nonce }}"`. Swagger UI `SpectacularSwaggerSplitView` ile çalışır.
 
+### Scraper tarafı SSRF koruması (2026-10-08)
+
+Worker küme içindedir ve feed'lerden gelen linkleri makale sayfası için açar. Zehirlenmiş bir feed `http://teknoloji-redis:6379/` ya da `http://10.0.0.5/` gibi iç adreslere istek attırabilirdi. `news/base_scraper.link_guvenli(url, kok)` tek kapıdır: yalnız `https`; IP, `localhost`, tek etiketli ad (küme içi servis), `.svc`/`.cluster.local`/`.local`/`.internal`/`.lan` yok; `user@host` yok; `kok` verildiyse kaynağın kendi kök alanı. Çağrı noktaları: `NewsSource.fetch_full_article` (kök = `get_base_url`), `BaseRSSScraper._get_expanded_description` (kök = akışın hostu), `RSSNewsSource` (kök = `base_url`), K8s `fetch_article_content` (`kubernetes.io`), Redis `_fetch_full_article` (`redis.io`). Reddedilen link `WARNING` loglanır, kayıt akış özetiyle yazılır. Kural: feed'den gelen bir URL'yi açan yeni kod bu kapıdan geçmeli (`news/tests/test_link_guvenligi.py`).
+
 ## 4. Ertelenen işler (sırayla)
 
 ### P0: Açık Dependabot PR'larının triajı ✅ (2026-09-14)

@@ -27,7 +27,7 @@ import time
 from email.utils import parsedate_to_datetime
 
 from news.translation_utils import translate_text, translate_long_text
-from news.base_scraper import BaseRSSScraper
+from news.base_scraper import BaseRSSScraper, link_guvenli
 import logging
 
 log = logging.getLogger(__name__)
@@ -593,6 +593,10 @@ class RedisScraper(DevToolsScraper):
     def _fetch_full_article(self, url: str) -> str:
         """Redis blog sayfasina gidip tam makale icerigini ceker.
         Redis blog icerigi [class*='blockContent'] div'inde bulunur."""
+        # SSRF (2026-10-08): yalniz redis.io altindaki https linkler
+        if not link_guvenli(url, 'redis.io'):
+            log.warning(f"    [Redis] Link izinli alan disinda, atlandi: {str(url)[:80]}")
+            return ""
         try:
             resp = self.session.get(url, timeout=20)
             if not resp.ok:
