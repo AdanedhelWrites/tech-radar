@@ -127,10 +127,18 @@ class ZapSarifTests(SimpleTestCase):
         run = self.m.donustur(ORNEK_RAPOR)['runs'][0]
         sonuclar = run['results']
         self.assertEqual(len(sonuclar), 4)
+        # GitHub Code Scanning "http" semali artifactLocation kabul etmez (checkout semasi "file"):
+        # konum sanal goreli yol, tam URL mesajda ve logicalLocations'ta
         seviye = {(s['ruleId'], s['locations'][0]['physicalLocation']['artifactLocation']['uri']): s['level'] for s in sonuclar}
-        self.assertEqual(seviye[('zap/10038', 'http://localhost:8000/admin/login/')], 'warning')
-        self.assertEqual(seviye[('zap/10021', 'http://localhost:8000/static/admin/css/base.css')], 'note')
-        self.assertEqual(seviye[('zap/10015', 'http://localhost:8000/admin/login/')], 'note')
+        self.assertEqual(seviye[('zap/10038', 'dast/admin/login/')], 'warning')
+        self.assertEqual(seviye[('zap/10021', 'dast/static/admin/css/base.css')], 'note')
+        self.assertEqual(seviye[('zap/10015', 'dast/admin/login/')], 'note')
+        for s in sonuclar:
+            uri = s['locations'][0]['physicalLocation']['artifactLocation']['uri']
+            self.assertFalse(uri.startswith(('http://', 'https://', '/')), uri)
+            self.assertNotIn(':', uri.split('/')[0])
+            self.assertTrue(s['locations'][0]['logicalLocations'][0]['name'].startswith('http://localhost:8000/'))
+            self.assertIn('http://localhost:8000/', s['message']['text'])
         # ruleIndex kurallar listesindeki sirayla tutarli
         kural_idler = [k['id'] for k in run['tool']['driver']['rules']]
         for s in sonuclar:
@@ -153,6 +161,16 @@ class ZapSarifTests(SimpleTestCase):
         b = self.m.donustur(ORNEK_RAPOR)['runs'][0]['results']
         self.assertEqual([s['partialFingerprints'] for s in a], [s['partialFingerprints'] for s in b])
         self.assertEqual(len({s['partialFingerprints']['zap/instance'] for s in a}), 4)
+
+    def test_konum_yolu_sorgu_ve_kok_icin(self):
+        rapor = json.loads(json.dumps(ORNEK_RAPOR))
+        rapor['site'][0]['alerts'][1]['instances'][0]['uri'] = 'http://localhost:8000/api/v1/cve/?limit=5&x=1'
+        rapor['site'][0]['alerts'][2]['instances'][0]['uri'] = 'http://localhost:8000'
+        run = self.m.donustur(rapor)['runs'][0]
+        uriler = {s['ruleId']: s['locations'][0]['physicalLocation']['artifactLocation']['uri'] for s in run['results']}
+        # sorgu dizesi konuma girmez (ayni uc nokta tek konum), kok "/" icin bos olmayan yol
+        self.assertEqual(uriler['zap/10021'], 'dast/api/v1/cve/')
+        self.assertEqual(uriler['zap/10015'], 'dast/')
 
     def test_bos_rapor_gecerli_sarif(self):
         sarif = self.m.donustur({"@version": "2.16.1", "site": []})

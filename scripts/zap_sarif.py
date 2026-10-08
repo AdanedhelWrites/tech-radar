@@ -4,7 +4,9 @@
     scripts/zap_sarif.py report_json.json zap-baseline.sarif
 
 Yalniz standart kutuphane. Her ZAP alert tipi (pluginid) bir SARIF kurali, her instance
-bir sonuc olur; konum uygulama URL'sidir (DAST'ta dosya yoktur). GitHub Security sekmesi
+bir sonuc olur. DAST'ta dosya yoktur ve GitHub Code Scanning "http" semali artifactLocation
+kabul etmez (checkout semasi "file" ile eslesmeli); bu yuzden konum sanal goreli yoldur
+(`dast/<url-yolu>`), tam URL mesajda ve logicalLocations'ta tasinir. GitHub Security sekmesi
 `security-severity` ile siddeti, `partialFingerprints` ile ayni bulgunun kosular arasinda
 takibini yapar. Rapor bos olsa da gecerli (sonucsuz) SARIF uretilir: hat yesil kalir ama
 Security sekmesinde "ZAP calisti, bulgu yok" gorunur.
@@ -14,6 +16,7 @@ import html
 import json
 import re
 import sys
+from urllib.parse import urlsplit
 
 SARIF_SEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json"
 ZAP_BILGI = "https://www.zaproxy.org/"
@@ -78,6 +81,12 @@ def _kural(alert):
     }
 
 
+def _konum_yolu(uri):
+    """URL -> Code Scanning'in kabul ettigi goreli sanal yol: dast/<yol> (sorgu ve host yok)."""
+    yol = urlsplit(uri).path.lstrip("/")
+    return f"dast/{yol}"
+
+
 def _sonuc(alert, instance, kural_id, kural_index):
     seviye, _ = RISK.get(str(alert.get("riskcode", "0")), RISK["0"])
     uri = str(instance.get("uri") or "").strip() or "http://localhost/"
@@ -86,7 +95,7 @@ def _sonuc(alert, instance, kural_id, kural_index):
     kanit = _duz_metin(instance.get("evidence"))
     ad = _duz_metin(alert.get("name") or alert.get("alert") or kural_id)
 
-    parcalar = [ad]
+    parcalar = [ad, f"{yontem} {uri}".strip()]
     if param:
         parcalar.append(f"parametre: {param}")
     if kanit:
@@ -108,7 +117,7 @@ def _sonuc(alert, instance, kural_id, kural_index):
         "message": {"text": mesaj},
         "locations": [{
             "physicalLocation": {
-                "artifactLocation": {"uri": uri},
+                "artifactLocation": {"uri": _konum_yolu(uri), "uriBaseId": "%SRCROOT%"},
             },
             "logicalLocations": [{"name": uri, "kind": "resource"}],
         }],

@@ -27,7 +27,7 @@ Hat sadece taramanın kendisi yapılamadıysa kırmızı olur. Bulgu yok diye "b
 | Merge sonrası kırmızı olan hat | **Actions** sekmesi (ayrıca GitHub bildirimi / mail gelir) |
 | Kod ve imaj zafiyetleri, secret'lar, workflow sorunları | **Security → Code scanning** (Tool filtresi: Trivy, CodeQL, gitleaks, zizmor, Scorecard) |
 | Bağımlılık CVE'leri | **Security → Dependabot** |
-| ZAP (DAST) bulguları | **Security → Code scanning** (Tool: OWASP ZAP, kategori `zap-baseline`; URL konumlu, severity ZAP riskinden); ayrıca Actions → `DAST (ZAP baseline)` koşusu → **Summary** tablosu + `zap-baseline` artefaktı (HTML/JSON rapor) |
+| ZAP (DAST) bulguları | **Security → Code scanning** (Tool: OWASP ZAP, kategori `zap-baseline`; konum sanal yol `dast/<url-yolu>`, tam URL mesajda; severity ZAP riskinden); ayrıca Actions → `DAST (ZAP baseline)` koşusu → **Summary** tablosu + `zap-baseline` artefaktı (HTML/JSON rapor) |
 | SBOM (CycloneDX) | Actions → `trivy` koşusu → `sbom-*` artefaktları |
 
 ### Haftalık kontrol rutini (~10 dk)
@@ -120,7 +120,7 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıy
   - `.gitleaksignore` **değiştirilmedi**: girdiler geçmiş commit'lere sabitli; silinirse geçmiş taraması yeniden kırmızı olur. (İlk plandaki "baseline'dan da silinmeli" maddesi bu yüzden geçersiz.)
 
 ### P5: Görünürlük
-- [x] ZAP sonucunu SARIF'e çevirip Security sekmesine yükle; tek kontrol yeri Security olsun — `scripts/zap_sarif.py` (stdlib; alert tipi = kural, instance = sonuç, URL konum, `security-severity` High 8.0 / Medium 5.0 / Low 3.0 / Info 1.0, kararlı `partialFingerprints`), 8 birim testi `news/tests/test_zap_sarif.py`; `upload-sarif` kategori `zap-baseline` (2026-10-08)
+- [x] ZAP sonucunu SARIF'e çevirip Security sekmesine yükle; tek kontrol yeri Security olsun — `scripts/zap_sarif.py` (stdlib; alert tipi = kural, instance = sonuç, konum `dast/<url-yolu>` (Code Scanning `http` şemalı konum kabul etmiyor; tam URL mesajda), `security-severity` High 8.0 / Medium 5.0 / Low 3.0 / Info 1.0, kararlı `partialFingerprints`), 8 birim testi `news/tests/test_zap_sarif.py`; `upload-sarif` kategori `zap-baseline` (2026-10-08)
 - [ ] Haftalık güvenlik özeti: araç × severity tablosuyla GitHub Issue açan bir workflow
 - [ ] A5 (OpenAPI şeması) çıkınca `zaproxy/action-api-scan` ile `/api/v1/` tam taransın
 
