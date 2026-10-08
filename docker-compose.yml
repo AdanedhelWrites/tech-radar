@@ -22,6 +22,7 @@ services:
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - NVD_API_KEY=${NVD_API_KEY:-}
       - RETENTION_DAYS=90
       - GEMINI_CVE_RESERVE=0.5
     depends_on:
@@ -109,6 +110,7 @@ services:
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - NVD_API_KEY=${NVD_API_KEY:-}
       - RETENTION_DAYS=90
       - GEMINI_CVE_RESERVE=0.5
     depends_on:
