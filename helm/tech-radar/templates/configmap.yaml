@@ -30,3 +30,11 @@ data:
   LIBRETRANSLATE_TIMEOUT: {{ .Values.config.app.libretranslateTimeout | quote }}
   LIBRETRANSLATE_COOLDOWN: {{ .Values.config.app.libretranslateCooldown | quote }}
   LIBRETRANSLATE_CHUNK_CHARS: {{ .Values.config.app.libretranslateChunkChars | quote }}
+  # chart 2.2.0 (2026-10-08)
+  LOG_LEVEL: {{ .Values.config.app.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.config.app.logFormat | quote }}
+  SOURCE_SILENT_RUNS: {{ .Values.config.app.sourceSilentRuns | quote }}
+  CELERY_TASK_SOFT_TIME_LIMIT: {{ .Values.config.app.celeryTaskSoftTimeLimit | quote }}
+  CELERY_TASK_TIME_LIMIT: {{ .Values.config.app.celeryTaskTimeLimit | quote }}
+  AXES_FAILURE_LIMIT: {{ .Values.config.app.axesFailureLimit | quote }}
+  AXES_COOLOFF_MINUTES: {{ .Values.config.app.axesCooloffMinutes | quote }}

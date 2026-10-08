@@ -4,6 +4,7 @@ import {
   Container, Row, Col, Card, Button, Form,
   Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
+import useAraliklaYenile from '../hooks/useAraliklaYenile'
 import CeviriEtiketi from './CeviriEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
@@ -37,12 +38,8 @@ function SREComponent() {
     sources.reduce((acc, s) => ({ ...acc, [s.value]: true }), {})
   )
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadEntries(true)
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [])
+  // Sekme arka plandayken durur (hooks/useAraliklaYenile)
+  useAraliklaYenile(() => loadEntries(true), 5000)
 
 
   useEffect(() => {

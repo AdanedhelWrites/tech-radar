@@ -4,6 +4,7 @@ import {
   Container, Row, Col, Card, Button, Form,
   Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
+import useAraliklaYenile from '../hooks/useAraliklaYenile'
 import CeviriEtiketi, { ceviriEtiketiHtml } from './CeviriEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
@@ -41,12 +42,8 @@ function CVEComponent() {
   const [severityFilter, setSeverityFilter] = useState('all')
 
   // Diger bes bilesenle ayni kalip: cekim surerken yeni kayitlar kendiliginden ekrana duser
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadCVEs(true)
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [])
+  // Sekme arka plandayken durur (hooks/useAraliklaYenile)
+  useAraliklaYenile(() => loadCVEs(true), 5000)
 
   useEffect(() => {
     loadCVEs()

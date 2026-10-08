@@ -27,7 +27,7 @@ import time
 from email.utils import parsedate_to_datetime
 
 from news.translation_utils import translate_text, translate_long_text
-from news.base_scraper import BaseRSSScraper
+from news.base_scraper import BaseRSSScraper, link_guvenli, oturum_kur
 import logging
 
 log = logging.getLogger(__name__)
@@ -39,8 +39,7 @@ class DevToolsScraper(BaseRSSScraper):
     GITHUB_API = "https://api.github.com/"
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.session = oturum_kur({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json, text/html, application/xhtml+xml, application/xml;q=0.9,*/*;q=0.8',
         })
@@ -593,6 +592,10 @@ class RedisScraper(DevToolsScraper):
     def _fetch_full_article(self, url: str) -> str:
         """Redis blog sayfasina gidip tam makale icerigini ceker.
         Redis blog icerigi [class*='blockContent'] div'inde bulunur."""
+        # SSRF (2026-10-08): yalniz redis.io altindaki https linkler
+        if not link_guvenli(url, 'redis.io'):
+            log.warning(f"    [Redis] Link izinli alan disinda, atlandi: {str(url)[:80]}")
+            return ""
         try:
             resp = self.session.get(url, timeout=20)
             if not resp.ok:

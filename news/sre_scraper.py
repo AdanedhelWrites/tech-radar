@@ -18,7 +18,7 @@ import time
 from email.utils import parsedate_to_datetime
 
 from news.translation_utils import translate_text, translate_long_text
-from news.base_scraper import BaseRSSScraper
+from news.base_scraper import BaseRSSScraper, oturum_kur
 import logging
 
 log = logging.getLogger(__name__)
@@ -29,8 +29,7 @@ class SREScraper(BaseRSSScraper):
 
     def __init__(self):
         super().__init__()
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.session = oturum_kur({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         })

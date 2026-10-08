@@ -130,6 +130,9 @@ jobs:
       - name: Bagimliliklar (lockfile'a birebir)
         run: npm ci --no-audit --no-fund
 
+      - name: Lint (ESLint)
+        run: npm run lint
+
       - name: Build
         run: |
           npm run build

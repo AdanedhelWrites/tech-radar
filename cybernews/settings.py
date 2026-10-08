@@ -6,6 +6,7 @@ Docker Compose ve Kubernetes ortamlarında çalışır.
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 from csp.constants import NONCE, NONE, SELF, UNSAFE_INLINE
@@ -44,7 +45,25 @@ INSTALLED_APPS = [
     'drf_spectacular_sidecar',
     'news',
     'django_celery_beat',
+    'axes',
 ]
+
+# Admin girisinde kaba kuvvet korumasi (django-axes, 2026-10-08). /admin/ nginx ve Vite
+# proxy'si uzerinden disari aciktir; DRF throttle yalniz /api/v1/'i korur. Kilit anahtari
+# (kullanici adi, IP) cifti: proxy arkasinda REMOTE_ADDR proxy'nin adresi oldugu icin
+# yalniz IP'ye kilitlemek herkesi kilitlerdi; yalniz kullanici adina kilitlemek de
+# yonetici adini bilen birinin hesabi surekli kilitlemesine (DoS) yol acardi.
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',   # ilk sirada: kilitliyse kimlik denenmez
+    'django.contrib.auth.backends.ModelBackend',
+]
+AXES_FAILURE_LIMIT = int(os.environ.get('AXES_FAILURE_LIMIT', '5'))
+AXES_COOLOFF_TIME = timedelta(minutes=int(os.environ.get('AXES_COOLOFF_MINUTES', '30')))
+AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]
+AXES_RESET_ON_SUCCESS = True
+AXES_HTTP_RESPONSE_CODE = 429  # kilit = hiz siniri; v1'deki 429 ile ayni dil
+# Denemeler veritabaninda (admin > Axes > Access attempts); kilit kayitlari da oradan silinir
+AXES_HANDLER = 'axes.handlers.database.AxesDatabaseHandler'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -59,6 +78,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Kilitli giriste 403 dondurur; AuthenticationMiddleware'den sonra, listenin sonunda
+    'axes.middleware.AxesMiddleware',
 ]
 
 # CORS settings — environment variable ile genişletilebilir

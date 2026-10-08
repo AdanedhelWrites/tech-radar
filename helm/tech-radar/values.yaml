@@ -350,13 +350,22 @@ config:
     libretranslateTimeout: "60"
     libretranslateCooldown: "60"
     libretranslateChunkChars: "160"
+    # 2026-10-08 (chart 2.2.0): loglama, kaynak sagligi, Celery sure sinirlari, admin kilidi
+    logLevel: "INFO"            # DEBUG | INFO | WARNING
+    logFormat: "text"           # text | json (Loki/ELK icin satir basina JSON)
+    sourceSilentRuns: "4"       # /api/v1/status/ silent_sources esigi (ardisik 0 donen tur)
+    celeryTaskSoftTimeLimit: "1500"
+    celeryTaskTimeLimit: "1800"
+    axesFailureLimit: "5"       # admin girisi: (kullanici adi, IP) basina basarisiz deneme
+    axesCooloffMinutes: "30"
 
 # -------------------------------------------------------
 # Gizli degerler (Secret) — burada BOS kalir; --set ile verin
 # -------------------------------------------------------
 secrets:
   # Doluysa chart Secret olusturmaz; bu adli mevcut Secret kullanilir (or. Vault Secrets
-  # Operator'un yazdigi). Anahtarlar: SECRET_KEY, DB_USER, DB_PASSWORD, GEMINI_API_KEY.
+  # Operator'un yazdigi). Anahtarlar: SECRET_KEY, DB_USER, DB_PASSWORD, GEMINI_API_KEY;
+  # istege bagli (yoksa pod yine acilir): GITHUB_TOKEN, NVD_API_KEY.
   # Bu durumda asagidaki degerler ve `required` kontrolleri kullanilmaz.
   existingSecret: ""
   # Zorunlu (existingSecret bossa). Uretmek icin: openssl rand -hex 32
@@ -366,3 +375,7 @@ secrets:
   dbPassword: ""
   # Istege bagli; bos -> Gemini hic denenmez.
   geminiApiKey: ""
+  # Istege bagli (2026-10-08). GitHub API anonim limiti 60/saat/IP; token yalniz api.github.com'a gider.
+  githubToken: ""
+  # Istege bagli. NVD anonim 5 istek/30 sn; CVE turu 3 NVD istegi yapar. Yalniz services.nvd.nist.gov'a gider.
+  nvdApiKey: ""
