@@ -1,0 +1,4 @@
+# Kod sahipligi: tum degisikliklerde inceleme istegi otomatik olarak repo sahibine gider.
+# Ruleset'te "code owner review" zorunlu DEGIL: tek gelistiricili projede PR yazari kendi
+# PR'ini onaylayamaz; zorunlu olsaydi her PR kilitlenirdi. Dependabot PR'larinda sahip onaylar.
+*   @AdanedhelWrites
