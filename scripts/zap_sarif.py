@@ -3,8 +3,9 @@
 
     scripts/zap_sarif.py report_json.json zap-baseline.sarif
 
-Yalniz standart kutuphane. Her ZAP alert tipi (pluginid) bir SARIF kurali, her instance
-bir sonuc olur. DAST'ta dosya yoktur ve GitHub Code Scanning "http" semali artifactLocation
+Yalniz standart kutuphane. Her ZAP alert tipi (alertRef; yoksa pluginid) bir SARIF kurali,
+her instance bir sonuc olur. Gurultu kurallari ZAP tarafinda .zap/rules.tsv ile IGNORE edilir,
+bu betik filtrelemez. DAST'ta dosya yoktur ve GitHub Code Scanning "http" semali artifactLocation
 kabul etmez (checkout semasi "file" ile eslesmeli); bu yuzden konum sanal goreli yoldur
 (`dast/<url-yolu>`), tam URL mesajda ve logicalLocations'ta tasinir. GitHub Security sekmesi
 `security-severity` ile siddeti, `partialFingerprints` ile ayni bulgunun kosular arasinda
@@ -42,6 +43,14 @@ def _duz_metin(s):
     return _BOSLUK.sub(" ", html.unescape(s)).strip()
 
 
+def _kural_id(alert):
+    """Kural anahtari alertRef'tir (or. 90005-2): bir eklenti birden fazla alt kural uretebilir
+    (Sec-Fetch-Dest/Mode/Site/User) ve her birinin adi farklidir. alertRef yoksa pluginid."""
+    ref = str(alert.get("alertRef") or "").strip()
+    pluginid = str(alert.get("pluginid", "")).strip() or "bilinmeyen"
+    return f"zap/{ref or pluginid}"
+
+
 def _kural(alert):
     pluginid = str(alert.get("pluginid", "")).strip() or "bilinmeyen"
     ad = _duz_metin(alert.get("name") or alert.get("alert") or f"ZAP {pluginid}")
@@ -65,7 +74,7 @@ def _kural(alert):
         etiketler.append(f"WASC-{wasc}")
 
     return {
-        "id": f"zap/{pluginid}",
+        "id": _kural_id(alert),
         "name": ad,
         "shortDescription": {"text": ad},
         "fullDescription": {"text": aciklama},
@@ -140,7 +149,7 @@ def donustur(rapor):
                 indeks[kid] = len(kurallar)
                 kurallar.append(kural)
             else:
-                # Ayni plugin birden fazla alertRef ile gelebilir; en yuksek riski koru
+                # Ayni alertRef birden fazla site'ta gelebilir; en yuksek riski koru
                 mevcut = kurallar[indeks[kid]]
                 if float(kural["properties"]["security-severity"]) > float(mevcut["properties"]["security-severity"]):
                     kurallar[indeks[kid]] = kural

@@ -109,11 +109,32 @@ class ZapSarifTests(SimpleTestCase):
         self.assertEqual(run['tool']['driver']['name'], 'OWASP ZAP')
         self.assertEqual(run['tool']['driver']['version'], '2.16.1')
 
+    def test_kural_anahtari_alertref_alt_kurallar_ayri(self):
+        # ZAP 90005 eklentisi dort alt kural uretir (Sec-Fetch-Dest/Mode/Site/User); pluginid ile
+        # anahtarlansa hepsi ilk adin altinda birlesirdi. Kural = alertRef, yoksa pluginid.
+        rapor = json.loads(json.dumps(ORNEK_RAPOR))
+        def alt(ref, ad):
+            return {"pluginid": "90005", "alertRef": ref, "alert": ad, "name": ad, "riskcode": "1",
+                    "confidence": "2", "riskdesc": "Low (Medium)", "desc": "<p>x</p>",
+                    "instances": [{"uri": "http://localhost:8000/", "method": "GET", "param": ad.split(" ")[0]}],
+                    "count": "1", "solution": "", "otherinfo": "", "reference": "", "cweid": "352", "wascid": "9", "sourceid": "3"}
+        rapor['site'][0]['alerts'] = [alt("90005-1", "Sec-Fetch-Dest Header is Missing"),
+                                      alt("90005-2", "Sec-Fetch-Mode Header is Missing"),
+                                      {**alt("", "Referanssiz"), "alertRef": ""}]
+        run = self.m.donustur(rapor)['runs'][0]
+        kurallar = {k['id']: k['name'] for k in run['tool']['driver']['rules']}
+        self.assertEqual(kurallar, {'zap/90005-1': 'Sec-Fetch-Dest Header is Missing',
+                                    'zap/90005-2': 'Sec-Fetch-Mode Header is Missing',
+                                    'zap/90005': 'Referanssiz'})
+        self.assertEqual({s['ruleId'] for s in run['results']}, set(kurallar))
+        # helpUri eklenti sayfasina gider (alt kural eki olmadan)
+        self.assertTrue(all(k['helpUri'].endswith('/alerts/90005/') for k in run['tool']['driver']['rules']))
+
     def test_kurallar_alert_basina_tek_ve_siddet_tasir(self):
         run = self.m.donustur(ORNEK_RAPOR)['runs'][0]
         kurallar = {k['id']: k for k in run['tool']['driver']['rules']}
-        self.assertEqual(set(kurallar), {'zap/10038', 'zap/10021', 'zap/10015'})
-        csp = kurallar['zap/10038']
+        self.assertEqual(set(kurallar), {'zap/10038-1', 'zap/10021', 'zap/10015'})
+        csp = kurallar['zap/10038-1']
         self.assertEqual(csp['name'], 'Content Security Policy (CSP) Header Not Set')
         # GitHub security-severity: 4.0-6.9 medium
         self.assertEqual(csp['properties']['security-severity'], '5.0')
@@ -130,7 +151,7 @@ class ZapSarifTests(SimpleTestCase):
         # GitHub Code Scanning "http" semali artifactLocation kabul etmez (checkout semasi "file"):
         # konum sanal goreli yol, tam URL mesajda ve logicalLocations'ta
         seviye = {(s['ruleId'], s['locations'][0]['physicalLocation']['artifactLocation']['uri']): s['level'] for s in sonuclar}
-        self.assertEqual(seviye[('zap/10038', 'dast/admin/login/')], 'warning')
+        self.assertEqual(seviye[('zap/10038-1', 'dast/admin/login/')], 'warning')
         self.assertEqual(seviye[('zap/10021', 'dast/static/admin/css/base.css')], 'note')
         self.assertEqual(seviye[('zap/10015', 'dast/admin/login/')], 'note')
         for s in sonuclar:
@@ -148,9 +169,9 @@ class ZapSarifTests(SimpleTestCase):
         rapor = json.loads(json.dumps(ORNEK_RAPOR))
         rapor['site'][0]['alerts'][0]['riskcode'] = '3'
         run = self.m.donustur(rapor)['runs'][0]
-        csp = [s for s in run['results'] if s['ruleId'] == 'zap/10038']
+        csp = [s for s in run['results'] if s['ruleId'] == 'zap/10038-1']
         self.assertTrue(all(s['level'] == 'error' for s in csp))
-        kural = [k for k in run['tool']['driver']['rules'] if k['id'] == 'zap/10038'][0]
+        kural = [k for k in run['tool']['driver']['rules'] if k['id'] == 'zap/10038-1'][0]
         self.assertEqual(kural['properties']['security-severity'], '8.0')
         xcto = [s for s in run['results'] if s['ruleId'] == 'zap/10021'][0]
         self.assertIn('x-content-type-options', xcto['message']['text'])

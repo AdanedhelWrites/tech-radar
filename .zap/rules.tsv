@@ -1,0 +1,7 @@
+# ZAP baseline kural dosyasi (zaproxy/action-baseline rules_file_name). Bicim: <pluginid>\t<IGNORE|WARN|FAIL>\t(<aciklama>)
+# IGNORE: kural raporda ve Security sekmesinde gorunmez. Buraya yalniz gurultu girer; gercek bulgu dismiss ile kapatilir.
+90005	IGNORE	(Sec-Fetch-* istek basliklari ZAP'in kendi isteklerinde eksik; uygulama sorunu degil)
+10049	IGNORE	(Non-Storable / Storable and Cacheable Content: bilgi amacli)
+10111	IGNORE	(Authentication Request Identified: bilgi amacli, login formu zaten biliniyor)
+10112	IGNORE	(Session Management Response Identified: bilgi amacli)
+10094	IGNORE	(Base64 Disclosure: login sayfasindaki csrfmiddlewaretoken, yanlis pozitif)
