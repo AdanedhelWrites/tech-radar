@@ -8,6 +8,8 @@ Docker Compose ve Kubernetes ortamlarında çalışır.
 import os
 from pathlib import Path
 
+from csp.constants import NONCE, NONE, SELF, UNSAFE_INLINE
+
 from cybernews.ayar_dogrulama import dogrulanmis_secret_key, veritabani_ayari
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -45,6 +47,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # CSP ve diger guvenlik basliklari WhiteNoise'dan ONCE: statik dosya yanitlari da baslik tasir
+    'csp.middleware.CSPMiddleware',
+    'cybernews.guvenlik_basliklari.GuvenlikBasliklariMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -60,6 +65,31 @@ _cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,ht
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins.split(',') if origin.strip()]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Content-Security-Policy (django-csp 4; ZAP 10038, GUVENLIK-PLANI 2026-10-08).
+# Backend'in HTML yuzeyi admin, /api/v1/docs/ ve hata sayfalaridir; React arayuzu ayri sunucudan gelir.
+# script-src: yalniz 'self' + istek basina nonce (admin sablonlarinda inline script yok; Swagger UI
+# SpectacularSwaggerSplitView ile ayri script URL'si kullanir). style-src 'unsafe-inline': drf-spectacular
+# sablonundaki <style> blogu ve Swagger UI'nin kendi stilleri icin; inline stil dusuk risklidir.
+CONTENT_SECURITY_POLICY = {
+    'DIRECTIVES': {
+        'default-src': [SELF],
+        'script-src': [SELF, NONCE],
+        'style-src': [SELF, UNSAFE_INLINE],
+        'img-src': [SELF, 'data:'],
+        'font-src': [SELF, 'data:'],
+        'connect-src': [SELF],
+        'object-src': [NONE],
+        'base-uri': [SELF],
+        'form-action': [SELF],
+        'frame-ancestors': [NONE],
+    },
+}
+
+# WhiteNoise varsayilani statik dosyalara Access-Control-Allow-Origin: * ekler (ZAP 10098
+# "Cross-Domain Misconfiguration"). Statik dosyalar yalniz ayni origin'den (admin, docs) ve frontend
+# proxy'sinden tuketilir; cross-origin erisime gerek yok.
+WHITENOISE_ALLOW_ALL_ORIGINS = False
 
 # CSRF — Vite dev proxy (changeOrigin) Host basligini degistirdigi icin
 # frontend origin'i acikca guvenilir sayilmali (admin oturumuyla yapilan POST'lar icin)

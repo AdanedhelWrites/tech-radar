@@ -54,6 +54,17 @@ gh api "repos/AdanedhelWrites/tech-radar/dependabot/alerts?state=open&per_page=1
 4. Aynı dosyaya dokunan iki PR'ı art arda merge ediyorsan, ilkinden sonra ikinciyi tekrar **Update branch** ile güncelle ve check'lerin yeniden yeşil gelmesini bekle. Böylece birleşik hal de test edilmiş olur.
 5. **`CI` kırmızıysa merge etme.** Genelde başka bir paket de birlikte yükseltilmeli (örnek: Django 5 için `django-celery-beat` da yükseltilmeli). PR'ı kapat ve işi aşağıdaki plana ekle.
 
+## 3a. Uygulama tarafı güvenlik başlıkları (2026-10-08)
+
+| Başlık | Kaynak | Değer / not |
+|---|---|---|
+| Content-Security-Policy | django-csp 4 (`CONTENT_SECURITY_POLICY` settings) | `default-src 'self'`; `script-src 'self'` + istek başına nonce (yalnız `request.csp_nonce` kullanılınca eklenir); `style-src 'self' 'unsafe-inline'`; `img/font-src 'self' data:`; `object-src 'none'`; `frame-ancestors 'none'`; `base-uri`/`form-action 'self'` |
+| Permissions-Policy, Cross-Origin-Resource-Policy, Cross-Origin-Embedder-Policy | `cybernews/guvenlik_basliklari.py` | tüm tarayıcı özellikleri kapalı; `same-origin`; `require-corp`. View'in verdiği değer ezilmez |
+| X-Content-Type-Options, Referrer-Policy, Cross-Origin-Opener-Policy, X-Frame-Options | Django SecurityMiddleware / XFrameOptionsMiddleware | varsayılanlar (`nosniff`, `same-origin`, `same-origin`, `DENY`) |
+| Access-Control-Allow-Origin (statik) | WhiteNoise | `WHITENOISE_ALLOW_ALL_ORIGINS=False`; API CORS'u django-cors-headers yönetir |
+
+Kural: yeni inline `<script>` eklenmez; gerekiyorsa `nonce="{{ request.csp_nonce }}"`. Swagger UI `SpectacularSwaggerSplitView` ile çalışır.
+
 ## 4. Ertelenen işler (sırayla)
 
 ### P0: Açık Dependabot PR'larının triajı ✅ (2026-09-14)
@@ -135,3 +146,4 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıy
 - **2026-10-03:** Faz B: SQLite → paylaşılan yerel PostgreSQL geçişi (B1) ve Helm chart 2.0.0 yerel docker-desktop doğrulaması (B2, ADR-0007). CI'a chart sürüm/imaj etiket kapıları ve kubeconform eklendi; DAST PostgreSQL ile çalışır.
 - **2026-10-08:** Dependabot PR #46/#47/#48 (nginx ve node digest, actions grubu) merge. P4 Scorecard triajı: 9 gerekçeli dismiss + `source-map-js` düzeltmesi (`c05ac5a`). P3: `main-koruma` ruleset'ine PR zorunluluğu ve 5 zorunlu check (strict, bypass yok) eklendi; `main`'e doğrudan push kapandı.
 - **2026-10-08:** P5-a: ZAP baseline raporu SARIF'e çevrilip Security → Code scanning'e yükleniyor (`scripts/zap_sarif.py`, kategori `zap-baseline`).
+- **2026-10-08:** Güvenlik başlıkları (ZAP 10038/10098/10063/90004): django-csp 4 ile CSP (`script-src 'self'` + nonce, inline script yok; `style-src` `'unsafe-inline'` Swagger/spectacular için), `cybernews/guvenlik_basliklari.py` ile Permissions-Policy / CORP / COEP, `WHITENOISE_ALLOW_ALL_ORIGINS=False` (statik dosyalarda `ACAO: *` kalktı), `/api/v1/docs/` `SpectacularSwaggerSplitView` (başlatma betiği `?script=` ile ayrı JS). Testler `news/tests/test_guvenlik_basliklari.py`.
