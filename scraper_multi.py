@@ -1,6 +1,11 @@
 """
 Guncel Haberler - Multi-Source Scraper
-5 farkli kaynaktan siber guvenlik haberi ceker ve tam icerik olarak cevirir.
+12 farkli kaynaktan siber guvenlik haberi ceker ve tam icerik olarak cevirir.
+
+  HTML: The Hacker News, Bleeping Computer, Krebs on Security
+  RSS : SecurityWeek (+tam makale), Dark Reading, The Record (+tam makale), CyberScoop,
+        Help Net Security (+tam makale), Infosecurity Magazine, SANS ISC, The Register,
+        Security Affairs
 """
 
 import requests
@@ -189,6 +194,19 @@ class TheHackerNewsSource(NewsSource):
 class BleepingComputerSource(NewsSource):
     """Bleeping Computer kaynagi"""
 
+    # Cloudflare, Chrome/120 User-Agent'ini python'un TLS parmak iziyle eslesmedigi icin
+    # 403 ile reddediyor (2026-10-08 olcumu: hem /feed/ hem /news/security/; kaynak hic
+    # kayit uretmemisti). Firefox UA ve kisa UA geciyor.
+    USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0'
+    # Makale sayfalari arka arkaya cekilince ~15. istekten sonra 429 donuyor (2026-10-08);
+    # tur basina en fazla bu kadar makale, istekler arasi bekleme ile.
+    MAX_ITEMS = 10
+    ARTICLE_DELAY = 1.0
+
+    def __init__(self):
+        super().__init__()
+        self.session.headers['User-Agent'] = self.USER_AGENT
+
     def get_name(self):
         return "Bleeping Computer"
 
@@ -217,6 +235,8 @@ class BleepingComputerSource(NewsSource):
         print(f"[{self.get_name()}] {len(news_divs)} news div bulundu")
 
         for news_div in news_divs:
+            if len(articles) >= self.MAX_ITEMS:
+                break
             try:
                 h4 = news_div.find('h4')
                 if not h4:
@@ -262,6 +282,7 @@ class BleepingComputerSource(NewsSource):
                 # Habere gidip tam icerik cek
                 content = ''
                 print(f"  [BC] Tam icerik cekiliyor: {title[:50]}...")
+                time.sleep(self.ARTICLE_DELAY)
                 article_data = self.fetch_full_article(link)
                 if article_data['title'] and len(article_data['title']) > len(title):
                     title = article_data['title']
@@ -295,91 +316,110 @@ class BleepingComputerSource(NewsSource):
                 return datetime.now()
 
 
-class SecurityWeekSource(NewsSource):
-    """SecurityWeek kaynagi"""
+class RSSNewsSource(NewsSource):
+    """RSS tabanli genel haber kaynagi.
+
+    Akis okunur, `days` penceresi uygulanir, en fazla `max_items` haber islenir
+    (Infosecurity Magazine gibi 250 item tasiyan akislarda sayfa cekimi patlamasin).
+    Aciklama: content:encoded varsa tam metin oradan; 200 karakterden kisaysa makale
+    sayfasindaki paragraflar (BaseRSSScraper._get_expanded_description). `tam_makale`
+    True ise ayrica NewsSource.fetch_full_article ile govde denenir ve uzun olan alinir.
+    """
+
+    max_items = 15
+
+    def __init__(self, name, feed_url, base_url, tam_makale=False):
+        super().__init__()
+        self._name = name
+        self.feed_url = feed_url
+        self.base_url = base_url
+        self.tam_makale = tam_makale
 
     def get_name(self):
-        return "SecurityWeek"
+        return self._name
 
     def get_base_url(self):
-        return "https://www.securityweek.com"
+        return self.base_url
+
+    @staticmethod
+    def _baslik_temizle(title):
+        # SANS ISC basliklari "... https://isc.sans.edu/podcastdetail/9638, (Thu, Oct 8th)"
+        # bicimindedir: URL ve sondaki gun eki atilir; CDATA kaliplari da temizlenir
+        title = re.sub(r'<!\[CDATA\[|\]\]>', '', title)
+        title = re.sub(r'\s*https?://\S+', '', title)
+        title = re.sub(r',?\s*\((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),[^)]*\)\s*$', '', title)
+        return title.strip(' ,')
 
     def fetch_news(self, days=7):
-        print(f"[{self.get_name()}] Haberler cekiliyor...")
-
+        print(f"[{self._name}] RSS'den haberler cekiliyor...")
         try:
-            response = self.session.get(self.get_base_url(), timeout=30)
+            response = self.session.get(self.feed_url, timeout=20)
             response.raise_for_status()
         except requests.RequestException as e:
-            print(f"[{self.get_name()}] Hata: {e}")
+            print(f"[{self._name}] RSS Hatasi: {e}")
             return []
 
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup(response.content, 'xml')
+        items = soup.find_all('item') or soup.find_all('entry')
+        print(f"[{self._name}] {len(items)} RSS item bulundu")
+
         articles = []
-
-        story_divs = soup.find_all('div', class_='views-row') or soup.find_all('article')
         cutoff_date = datetime.now() - timedelta(days=days)
-
-        print(f"[{self.get_name()}] {len(story_divs)} story bulundu")
-
-        for story in story_divs:
+        for item in items:
+            if len(articles) >= self.max_items:
+                break
             try:
-                title_tag = story.find('h2', class_='node-title') or story.find('h3') or story.find('h2')
-                if not title_tag:
+                title_tag = item.find('title')
+                title = self._baslik_temizle(title_tag.get_text(strip=True)) if title_tag else ''
+                link_tag = item.find('link')
+                link = (link_tag.get('href') or link_tag.get_text(strip=True)) if link_tag else ''
+                if not title or not link:
                     continue
 
-                link_tag = title_tag.find('a')
-                title = link_tag.get_text(strip=True) if link_tag else title_tag.get_text(strip=True)
-                link = link_tag.get('href', '') if link_tag else ""
-                if link and not link.startswith('http'):
-                    link = self.get_base_url() + link
+                pub_tag = item.find('pubDate') or item.find('published') or item.find('updated')
+                date_str = pub_tag.get_text(strip=True) if pub_tag else ''
+                pub_date = self._parse_rss_date(date_str) if date_str else None
+                if pub_date is None:
+                    pub_date = datetime.now()
+                if pub_date < cutoff_date:
+                    continue
 
-                date_tag = story.find('span', class_='date-display-single') or story.find('time')
-                date_str = ""
-                pub_date = datetime.now()
-
-                if date_tag:
-                    date_str = date_tag.get_text(strip=True)
-                    pub_date = self._parse_date(date_str)
-
-                if pub_date >= cutoff_date:
-                    # Habere gidip tam icerik cek
-                    content = ''
-                    if link:
-                        print(f"  [SW] Tam icerik cekiliyor: {title[:50]}...")
+                content = self._get_expanded_description(item, link, title)
+                if self.tam_makale:
+                    try:
                         article_data = self.fetch_full_article(link)
-                        if article_data['title'] and len(article_data['title']) > len(title):
-                            title = article_data['title']
-                        content = article_data['content']
+                        if len(article_data['content']) > len(content):
+                            content = article_data['content']
+                    except Exception as e:
+                        print(f"  [{self._name}] Tam icerik alinamadi: {e}")
 
-                    if not content:
-                        desc_tag = (story.find('div', class_='field-name-body') or
-                                   story.find('p'))
-                        content = desc_tag.get_text(strip=True) if desc_tag else title
-
-                    articles.append({
-                        'title': title,
-                        'description': content,
-                        'link': link,
-                        'date': pub_date.strftime('%Y-%m-%d'),
-                        'original_date': date_str,
-                        'source': self.get_name()
+                articles.append({
+                    'title': title,
+                    'description': content,
+                    'link': link,
+                    'date': pub_date.strftime('%Y-%m-%d'),
+                    'original_date': date_str,
+                    'source': self._name,
                 })
             except Exception as e:
-                print(f"[{self.get_name()}] Haber islenirken hata: {e}")
+                print(f"[{self._name}] Haber islenirken hata: {e}")
                 continue
 
-        print(f"[{self.get_name()}] {len(articles)} haber bulundu.")
+        print(f"[{self._name}] {len(articles)} haber bulundu.")
         return articles
 
-    def _parse_date(self, date_str):
-        try:
-            return datetime.strptime(date_str, '%B %d, %Y')
-        except:
-            try:
-                return datetime.strptime(date_str, '%b %d, %Y')
-            except:
-                return datetime.now()
+
+class SecurityWeekSource(RSSNewsSource):
+    """SecurityWeek kaynagi - RSS + tam makale.
+
+    2026-10-08: ana sayfa HTML'inde baslik linkleri bos geliyordu; bir cekimdeki 22 haber
+    tek bir link='' kaydina cokuyordu (NewsArticle.link unique). RSS linkleri tasiyor,
+    makale govdesi sayfadan cekilir.
+    """
+
+    def __init__(self):
+        super().__init__('SecurityWeek', 'https://www.securityweek.com/feed/',
+                         'https://www.securityweek.com', tam_makale=True)
 
 
 class DarkReadingSource(NewsSource):
@@ -565,20 +605,37 @@ class MultiSourceScraper(BaseRSSScraper):
             BleepingComputerSource(),
             SecurityWeekSource(),
             DarkReadingSource(),
-            KrebsOnSecuritySource()
+            KrebsOnSecuritySource(),
+            # 2026-10-08 eklenen RSS kaynaklari (hepsi anahtarsiz, bot engeli yok)
+            RSSNewsSource('The Record', 'https://therecord.media/feed',
+                          'https://therecord.media', tam_makale=True),
+            RSSNewsSource('CyberScoop', 'https://cyberscoop.com/feed/', 'https://cyberscoop.com'),
+            RSSNewsSource('Help Net Security', 'https://www.helpnetsecurity.com/feed/',
+                          'https://www.helpnetsecurity.com', tam_makale=True),
+            RSSNewsSource('Infosecurity Magazine', 'https://www.infosecurity-magazine.com/rss/news/',
+                          'https://www.infosecurity-magazine.com'),
+            RSSNewsSource('SANS ISC', 'https://isc.sans.edu/rssfeed_full.xml', 'https://isc.sans.edu'),
+            RSSNewsSource('The Register', 'https://www.theregister.com/security/headlines.atom',
+                          'https://www.theregister.com'),
+            RSSNewsSource('Security Affairs', 'https://securityaffairs.com/feed',
+                          'https://securityaffairs.com'),
         ]
 
     def fetch_all_news(self, days=7, selected_sources=None, max_total=30):
         """Tum kaynaklardan haber ceker (max_total ile sinirli)"""
-        print(f"\n{'='*80}")
-        print(f"TUM KAYNAKLARDAN HABER CEKILIYOR ({days} gun, maks {max_total})")
-        print(f"{'='*80}\n")
-
         all_articles = []
         sources_to_fetch = self.sources
 
         if selected_sources:
             sources_to_fetch = [s for s in self.sources if s.get_name() in selected_sources]
+
+        # Kaynak sayisi arttikca toplam tavan da buyusun: 12 kaynakta 30'luk sabit tavan,
+        # tarihe gore siralamada seyrek yazan kaynaklari (Krebs, SANS) tamamen dusuruyordu.
+        max_total = max(max_total, 3 * len(sources_to_fetch))
+
+        print(f"\n{'='*80}")
+        print(f"TUM KAYNAKLARDAN HABER CEKILIYOR ({days} gun, maks {max_total})")
+        print(f"{'='*80}\n")
 
         # Her kaynaga esit pay ver
         per_source_limit = max(5, max_total // max(len(sources_to_fetch), 1))

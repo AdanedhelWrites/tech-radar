@@ -42,6 +42,8 @@ PROTECTED_TERMS = [
     'Jenkins', 'ArgoCD', 'Argo CD', 'Argo',
     'Terraform', 'Ansible', 'Vagrant', 'Packer',
     'GitHub', 'GitLab', 'Bitbucket',
+    # 2026-10-08 DevTools kaynaklari: LibreTranslate "Langfuse"u "Langion" yapmisti
+    'Keycloak', 'LiteLLM', 'LangGraph', 'Langfuse', 'CISA', 'KEV',
 
     # --- Cloud / Platform ---
     'AWS', 'GCP', 'Azure', 'CloudFlare', 'Cloudflare',

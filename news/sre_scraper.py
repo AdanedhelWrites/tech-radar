@@ -2,10 +2,10 @@
 SRE (Site Reliability Engineering) Scraper Module
 5 kaynak:
   - SRE Weekly (RSS) — sreweekly.com/feed/
-  - InfoQ SRE (HTML) — infoq.com/sre/news/
+  - InfoQ SRE (RSS) — feed.infoq.com/sre/
   - PagerDuty Engineering Blog (RSS) — pagerduty.com/eng/feed/
   - Google Cloud Blog (RSS + SRE filtre) — cloud.google.com/blog/rss
-  - DZone DevOps (RSS) — feeds.dzone.com/devops
+  - DZone DevOps (RSS) — feeds.dzone.com/devops-and-cicd
 """
 
 import requests
@@ -135,67 +135,17 @@ class SREWeeklyScraper(SREScraper):
 class InfoQSREScraper(SREScraper):
     """InfoQ SRE News (infoq.com/sre/news) scraper"""
 
-    BASE_URL = "https://www.infoq.com/sre/news/"
+    # 2026-10-08: infoq.com/sre/news/ kartlari artik istemci tarafinda cizildigi icin
+    # HTML'de 0 kart bulunuyordu (son kayit 2026-08-21). Resmi konu akisi RSS verir.
+    FEED_URL = "https://feed.infoq.com/sre/"
 
     def fetch_entries(self, days: int = 30) -> List[Dict]:
-        """InfoQ SRE haberlerini ceker"""
-        print(f"[InfoQ SRE] Son {days} gunun haberleri cekiliyor...")
-
-        entries = []
-        cutoff_date = datetime.now() - timedelta(days=days)
-
-        try:
-            response = self.session.get(self.BASE_URL, timeout=20)
-            response.raise_for_status()
-
-            soup = BeautifulSoup(response.text, 'html.parser')
-
-            cards = soup.select('li[data-id][data-path]')
-            print(f"  [InfoQ SRE] {len(cards)} kart bulundu")
-
-            for card in cards:
-                try:
-                    title_tag = card.select_one('h3.card__title a')
-                    if not title_tag:
-                        continue
-
-                    title = title_tag.get_text(strip=True)
-                    href = title_tag.get('href', '')
-                    link = f"https://www.infoq.com{href}" if href.startswith('/') else href
-
-                    if not title or not link:
-                        continue
-
-                    desc_tag = card.select_one('p.card__excerpt')
-                    description = desc_tag.get_text(strip=True) if desc_tag else title
-
-                    date_str = ''
-                    date_span = card.select_one('span.card__date span')
-                    if date_span:
-                        date_str = date_span.get_text(strip=True)
-
-                    pub_date = self._parse_rss_date(date_str) if date_str else datetime.now()
-                    if pub_date is None:
-                        pub_date = datetime.now()
-
-                    if pub_date.replace(tzinfo=None) < cutoff_date:
-                        continue
-
-                    entries.append({
-                        'title': title,
-                        'description': description[:4000],
-                        'link': link,
-                        'date': pub_date.strftime('%Y-%m-%d'),
-                        'source': 'InfoQ SRE',
-                })
-                except Exception as e:
-                    print(f"  [InfoQ SRE] Kart isleme hatasi: {e}")
-                    continue
-
-        except Exception as e:
-            print(f"[InfoQ SRE] Hata: {e}")
-
-        print(f"[InfoQ SRE] {len(entries)} haber bulundu")
+        """InfoQ SRE haberlerini resmi RSS akisindan ceker"""
+        entries = self.fetch_standard_rss_entries(self.FEED_URL, 'InfoQ SRE', days)
+        # utm_* kampanya parametreleri atilir: ayni makale ikinci kez farkli linkle yazilmasin
+        for entry in entries:
+            entry['link'] = entry['link'].split('?')[0]
+            entry['description'] = entry['description'][:4000]
         return entries
 
 
@@ -371,7 +321,9 @@ class GoogleCloudSREScraper(SREScraper):
 class DZoneDevOpsScraper(SREScraper):
     """DZone DevOps RSS scraper"""
 
-    FEED_URL = "https://feeds.dzone.com/devops"
+    # 2026-10-08: eski /devops adresi http://feeds.dzone.com:7455'e yonlendirip zaman asimina
+    # dusuyordu (0 kayit). Guncel akis dogrudan https ile yanit veriyor.
+    FEED_URL = "https://feeds.dzone.com/devops-and-cicd"
 
     def fetch_entries(self, days: int = 30) -> List[Dict]:
         """DZone DevOps RSS'ten haberleri ceker"""

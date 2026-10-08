@@ -52,6 +52,69 @@ class CVEScraper(BaseRSSScraper):
         else:
             return "Düşük"
 
+    NVD_SEVERITY_TR = {'CRITICAL': 'Kritik', 'HIGH': 'Yüksek', 'MEDIUM': 'Orta', 'LOW': 'Düşük'}
+
+    def _nvd_kaydi(self, cve_data: Dict, source: str) -> Optional[Dict]:
+        """NVD 2.0 API'sinin tek `cve` nesnesini kayit sozlugune cevirir.
+
+        Reddedilmis/ayrilmis, aciklamasiz ya da CVSS'siz kayitlar None doner
+        (NVDScraper.fetch_cves ile ayni elemeler). CISA KEV kaynagi kullanir.
+        """
+        cve_id = cve_data.get('id', '')
+        if not cve_id or cve_data.get('vulnStatus', '') in ('Rejected', 'Reserved'):
+            return None
+
+        descriptions = cve_data.get('descriptions', [])
+        description = next((d.get('value', '') for d in descriptions if d.get('lang') == 'en'), '')
+        if not description and descriptions:
+            description = descriptions[0].get('value', '')
+        desc_lower = description.lower()
+        if any(p in desc_lower for p in [
+            'rejected reason', '** reserved **', '** reject **',
+            'this cve id has been rejected', 'not used', 'this candidate has been reserved',
+        ]):
+            return None
+        if len(description.strip()) < 20:
+            return None
+
+        cvss_score = None
+        severity = "Bilinmiyor"
+        metrics = cve_data.get('metrics', {})
+        for anahtar in ('cvssMetricV40', 'cvssMetricV31', 'cvssMetricV30', 'cvssMetricV2'):
+            if anahtar in metrics and metrics[anahtar]:
+                cvss_data = metrics[anahtar][0].get('cvssData', {})
+                cvss_score = cvss_data.get('baseScore')
+                severity = self.NVD_SEVERITY_TR.get(cvss_data.get('baseSeverity', ''),
+                                                    self.get_severity_from_score(cvss_score))
+                break
+        if cvss_score is None:
+            return None
+
+        references = [r['url'] for r in cve_data.get('references', []) if r.get('url')]
+        cwe_ids = [d['value'] for w in cve_data.get('weaknesses', [])
+                   for d in w.get('description', []) if d.get('value', '').startswith('CWE-')]
+
+        def _tarih(deger):
+            try:
+                return datetime.strptime(deger[:10], '%Y-%m-%d').date() if deger else None
+            except ValueError:
+                return None
+
+        return {
+            'cve_id': cve_id,
+            'source': source,
+            'original_title': f"{cve_id} - Güvenlik Açığı",
+            'original_description': description,
+            'severity': severity,
+            'cvss_score': cvss_score,
+            'published_date': _tarih(cve_data.get('published', '')) or datetime.now().date(),
+            'modified_date': _tarih(cve_data.get('lastModified', '')),
+            'link': f"https://nvd.nist.gov/vuln/detail/{cve_id}",
+            'cwe_ids': cwe_ids,
+            'references': references[:5],
+            'affected_products': '',
+        }
+
 
 class NVDScraper(CVEScraper):
     """NVD (National Vulnerability Database) scraper"""
@@ -771,11 +834,78 @@ class NVDRecentScraper(CVEScraper):
         return cves
 
 
+class CISAKEVScraper(CVEScraper):
+    """CISA Known Exploited Vulnerabilities (KEV) — NVD API'sinin `hasKev` filtresiyle.
+
+    cisa.gov'daki resmi JSON akisi (known_exploited_vulnerabilities.json) bot korumasi
+    nedeniyle sunucudan 403 donuyor (2026-10-08). NVD ayni kayitlari `cisaExploitAdd`,
+    `cisaActionDue` ve `cisaVulnerabilityName` alanlariyla verir; yeni host ve anahtar
+    gerekmez. Pencere: KEV'e eklenme tarihi (cisaExploitAdd) son `days` gun icinde olanlar.
+    API lastMod penceresini zorunlu kildigi icin o da ayni gun sayisiyla verilir.
+    """
+
+    BASE_URL = NVDScraper.BASE_URL
+    KEV_KATALOG = "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+
+    def fetch_cves(self, days: int = 30) -> List[Dict]:
+        print(f"[CISA KEV] Son {days} günde KEV'e eklenen CVE'ler çekiliyor...")
+        cves = []
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        cutoff = start_date.date()
+
+        try:
+            params = {
+                'lastModStartDate': start_date.strftime('%Y-%m-%dT00:00:00.000'),
+                'lastModEndDate': end_date.strftime('%Y-%m-%dT23:59:59.999'),
+                'resultsPerPage': 200,
+            }
+            # hasKev degersiz bir bayrak; requests params ile `hasKev=` uretir, API onu kabul etmez
+            response = self.session.get(f"{self.BASE_URL}?hasKev", params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            for item in data.get('vulnerabilities', []):
+                try:
+                    cve_data = item.get('cve', {})
+                    eklenme = cve_data.get('cisaExploitAdd', '')
+                    try:
+                        eklenme_tarihi = datetime.strptime(eklenme[:10], '%Y-%m-%d').date()
+                    except ValueError:
+                        continue
+                    if eklenme_tarihi < cutoff:
+                        continue
+
+                    kayit = self._nvd_kaydi(cve_data, 'CISA KEV')
+                    if not kayit:
+                        continue
+
+                    ad = (cve_data.get('cisaVulnerabilityName') or '').strip()
+                    kayit['original_title'] = f"{kayit['cve_id']} - {ad}" if ad else f"{kayit['cve_id']} - Aktif Sömürülen Zafiyet"
+                    son_tarih = (cve_data.get('cisaActionDue') or '')[:10]
+                    onek = f"Added to the CISA KEV catalog on {eklenme[:10]}"
+                    if son_tarih:
+                        onek += f"; required action due {son_tarih}"
+                    kayit['original_description'] = f"{onek}. {kayit['original_description']}"
+                    kayit['references'] = [self.KEV_KATALOG] + kayit['references'][:4]
+                    cves.append(kayit)
+                except Exception as e:
+                    print(f"[CISA KEV] CVE işleme hatası: {e}")
+                    continue
+
+            print(f"[CISA KEV] {len(cves)} CVE bulundu")
+        except Exception as e:
+            print(f"[CISA KEV] Hata: {e}")
+
+        return cves
+
+
 class MultiCVEScraper(CVEScraper):
     """Tum CVE kaynaklarini birlestiren scraper"""
-    
+
     def __init__(self):
         super().__init__()
+        self.kev_scraper = CISAKEVScraper()
         self.nvd_scraper = NVDScraper()
         self.github_scraper = GitHubAdvisoryScraper()
         self.tenable_scraper = TenableScraper()
@@ -790,7 +920,10 @@ class MultiCVEScraper(CVEScraper):
         print(f"TÜM CVE KAYNAKLARINDAN VERİ ÇEKİLİYOR ({days} gün)")
         print("=" * 80)
         
+        # KEV once: ayni CVE birden fazla kaynaktan gelirse ilk goruleni kalir ve
+        # KEV kaydi somuru bilgisini (baslik/aciklama oneki) tasir.
         sources = {
+            'CISA KEV': self.kev_scraper,
             'NVD': self.nvd_scraper,
             'GitHub Advisory': self.github_scraper,
             'Tenable': self.tenable_scraper,
