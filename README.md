@@ -806,7 +806,7 @@ helm upgrade --install tech-radar ./helm/tech-radar \
   --wait --wait-for-jobs --timeout 15m
 ```
 
-`secrets.secretKey` ve `secrets.dbPassword` zorunludur (bos birakilirsa render reddedilir); PostgreSQL ve uygulama ayni `dbPassword`'u kullanir. `secrets.geminiApiKey` istege baglidir. Uretimde harici secret yonetimi (external-secrets, sealed-secrets, vault) tercih edin: Secret'i chart disinda yonetiyorsaniz `secrets.existingSecret=<ad>` verin; chart Secret olusturmaz, `secrets.*` zorunlu olmaz. Secret `SECRET_KEY`, `DB_USER`, `DB_PASSWORD`, `GEMINI_API_KEY` anahtarlarini icermelidir.
+`secrets.secretKey` ve `secrets.dbPassword` zorunludur (bos birakilirsa render reddedilir); PostgreSQL ve uygulama ayni `dbPassword`'u kullanir. `secrets.geminiApiKey` istege baglidir. Uretimde harici secret yonetimi (external-secrets, sealed-secrets, vault) tercih edin: Secret'i chart disinda yonetiyorsaniz `secrets.existingSecret=<ad>` verin; chart Secret olusturmaz, `secrets.*` zorunlu olmaz. Secret `SECRET_KEY`, `DB_USER`, `DB_PASSWORD`, `GEMINI_API_KEY` anahtarlarini icermelidir; `GITHUB_TOKEN` ve `NVD_API_KEY` istege baglidir (pod'a `optional: true` ile baglanir, yoksa ozellik kapali kalir). Chart 2.2.0'dan itibaren `config.app.logLevel/logFormat`, `sourceSilentRuns`, `celeryTaskSoftTimeLimit/celeryTaskTimeLimit`, `axesFailureLimit/axesCooloffMinutes` degerleri ConfigMap'e yazilir ([CHANGELOG](helm/tech-radar/CHANGELOG.md)).
 
 ### Nasil calisir
 

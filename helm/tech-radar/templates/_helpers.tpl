@@ -164,6 +164,19 @@ env:
       secretKeyRef:
         name: {{ include "tech-radar.secretAdi" . }}
         key: GEMINI_API_KEY
+  # optional: existingSecret (VSO) bu anahtarlari tasimiyorsa pod yine acilir (chart 2.2.0)
+  - name: GITHUB_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "tech-radar.secretAdi" . }}
+        key: GITHUB_TOKEN
+        optional: true
+  - name: NVD_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "tech-radar.secretAdi" . }}
+        key: NVD_API_KEY
+        optional: true
 {{- end }}
 
 {{/*

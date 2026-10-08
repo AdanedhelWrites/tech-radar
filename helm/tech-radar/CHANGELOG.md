@@ -6,6 +6,23 @@ dizinindeki her degisiklik `Chart.yaml` `version`'ini artirir ve buraya `## [sur
 basligi ekler; CI (`scripts/chart_surum_kontrol.sh`) bunu zorlar. `appVersion`
 uygulama imajinin etiketidir (CalVer `YYYY.M.N`).
 
+## [2.2.0] - 2026-10-08 — appVersion 2026.10.2
+
+Yeni istege bagli degerler; varsayilanlarla render farki yalniz ConfigMap'teki yeni anahtarlar (koddaki
+varsayilanlarla ayni) ve Secret'teki iki bos anahtar. Uygulama kodu (main) 2026.10.2 imajindan ileridedir:
+48 kaynak, kaynak sagligi, django-axes, logging; imaj yerelde derlenir (surum/etiket yok, ADR-0008 kapsami).
+
+### Eklenenler
+- `secrets.githubToken`, `secrets.nvdApiKey` (`""`): GitHub ve NVD API anahtarlari. Pod env'inde `optional: true`
+  ile baglanir; `secrets.existingSecret` bu anahtarlari tasimiyorsa pod yine acilir.
+- `config.app.logLevel` (`INFO`), `config.app.logFormat` (`text` | `json`).
+- `config.app.sourceSilentRuns` (`4`): `/api/v1/status/` `silent_sources` esigi.
+- `config.app.celeryTaskSoftTimeLimit` (`1500`), `config.app.celeryTaskTimeLimit` (`1800`).
+- `config.app.axesFailureLimit` (`5`), `config.app.axesCooloffMinutes` (`30`): admin giris kilidi.
+
+### Not
+- django-axes tablolari migration Job'u ile gelir; `migration.mode=argocd`'de Sync hook'u kapsar.
+
 ## [2.1.1] - 2026-10-08 — appVersion 2026.10.2
 
 Yalniz `appVersion` yukseltmesi; sablon ve values degismedi (render farki yalniz imaj etiketi ve `helm.sh/chart`).
