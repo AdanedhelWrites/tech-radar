@@ -169,7 +169,7 @@ Ayni kod uc bicimde calisir:
 
 | Katman | Teknolojiler |
 |--------|-------------|
-| **Backend** | Python 3.11, Django 5.2, Django REST Framework 3.18, drf-spectacular (OpenAPI 3), Celery 5.6 + django-celery-beat, Gunicorn 22, Whitenoise |
+| **Backend** | Python 3.11, Django 5.2, Django REST Framework 3.18, drf-spectacular (OpenAPI 3), django-csp, Celery 5.6 + django-celery-beat, Gunicorn 22, Whitenoise |
 | **Frontend** | React 18, Vite 6, React Bootstrap 2.9, React Router DOM 7, Axios, react-hot-toast; Node 22 |
 | **Veri** | PostgreSQL 16 (compose ve K8s; SQLite yalniz `DEBUG=True` ile hostta), Redis 7 (cache + Celery broker, django-redis) |
 | **Scraping** | BeautifulSoup4, lxml, Requests |
@@ -541,7 +541,8 @@ icin bu sayfa **admin'de oturum acmis** bir kullaniciyla acilir.
 ```
 cybersecurity_news/
 ├── cybernews/                  # Django proje ayarlari
-│   ├── settings.py             # Env-var tabanli config (DB, Redis, CORS)
+│   ├── settings.py             # Env-var tabanli config (DB, Redis, CORS, CSP)
+│   ├── guvenlik_basliklari.py  # Permissions-Policy, CORP, COEP middleware'i
 │   ├── urls.py                 # Root URL yapilandirmasi
 │   ├── celery.py               # Celery yapilandirmasi
 │   └── wsgi.py
@@ -888,7 +889,7 @@ Dependabot pip, npm, Docker (digest) ve GitHub Actions bagimliliklarini haftalik
 
 Bulgular nerede: kod ve imaj zafiyetleri, ZAP (DAST) bulgulari, sirlar ve workflow sorunlari **Security → Code scanning** (Tool filtresi); bagimlilik CVE'leri **Security → Dependabot**; ZAP'in HTML raporu ayrica ilgili Actions kosusunun artefaktinda. Zafiyet bildirimi icin [SECURITY.md](SECURITY.md) (GitHub private vulnerability reporting; ilk yanit 7 gun).
 
-Uygulama tarafindaki korumalar: `DEBUG=False` iken bos, ornek, `django-insecure` onekli veya 32 karakterden kisa `SECRET_KEY` ile uygulama acilmaz (`cybernews/ayar_dogrulama.py`); `DB_HOST` bossa yalniz `DEBUG=True` ile SQLite; veritabanini silen uclar admin oturumu ister; `/api/v1/` token + hiz siniri + paylasilan soguma; imajlar non-root, Kubernetes'te kok dosya sistemi salt okunur.
+Uygulama tarafindaki korumalar: `DEBUG=False` iken bos, ornek, `django-insecure` onekli veya 32 karakterden kisa `SECRET_KEY` ile uygulama acilmaz (`cybernews/ayar_dogrulama.py`); `DB_HOST` bossa yalniz `DEBUG=True` ile SQLite; veritabanini silen uclar admin oturumu ister; `/api/v1/` token + hiz siniri + paylasilan soguma; imajlar non-root, Kubernetes'te kok dosya sistemi salt okunur. Yanit basliklari: Content-Security-Policy (django-csp; `script-src 'self'` + nonce, inline script yok), Permissions-Policy, Cross-Origin-Resource-Policy, Cross-Origin-Embedder-Policy (`cybernews/guvenlik_basliklari.py`) ve Django varsayilanlari (nosniff, Referrer-Policy, COOP, X-Frame-Options DENY); WhiteNoise statik dosyalara `Access-Control-Allow-Origin: *` eklemez. Yeni inline `<script>` eklenmez; gerekirse `nonce="{{ request.csp_nonce }}"`.
 
 ---
 

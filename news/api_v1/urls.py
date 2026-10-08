@@ -1,6 +1,6 @@
 """v1 yol tanimlari."""
 from django.urls import path
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerSplitView
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 
@@ -20,7 +20,9 @@ SemaGorunumu = SpectacularAPIView.as_view(
     permission_classes=[IsAuthenticated],
 )
 
-DocsGorunumu = SpectacularSwaggerView.as_view(
+# SplitView: Swagger UI'nin baslatma betigi inline <script> yerine ayni uctan `?script=` ile ayri
+# bir JavaScript yaniti olarak gelir; boylece CSP script-src 'self' + nonce ile calisir (inline yok).
+DocsGorunumu = SpectacularSwaggerSplitView.as_view(
     url_name='v1-schema',
     authentication_classes=[TokenAuthentication, SessionAuthentication],
     permission_classes=[IsAuthenticated],
