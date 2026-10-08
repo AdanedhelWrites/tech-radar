@@ -99,7 +99,7 @@ function HomePage() {
               <FaNewspaper size={48} className="text-primary mb-3" />
               <h5 className="card-title">Siber Güvenlik</h5>
               <p className="card-text">
-                5 kaynaktan siber güvenlik haberlerini çekin, Türkçeye çevrilmiş
+                12 kaynaktan siber güvenlik haberlerini çekin, Türkçeye çevrilmiş
                 tam makale içeriklerini okuyun ve HTML rapor olarak indirin.
               </p>
               <NavLink to="/news" className="btn btn-primary">
@@ -115,7 +115,7 @@ function HomePage() {
               <FaShieldAlt size={48} className="text-danger mb-3" />
               <h5 className="card-title">CVE Zafiyetleri</h5>
               <p className="card-text">
-                5 kaynaktan güncel CVE zafiyetlerini çekin, CVSS şiddet seviyesine
+                6 kaynaktan (CISA KEV dahil) güncel CVE zafiyetlerini çekin, CVSS şiddet seviyesine
                 göre filtreleyin ve Türkçe açıklamalarını okuyun.
               </p>
               <NavLink to="/cve" className="btn btn-danger">
@@ -165,8 +165,9 @@ function HomePage() {
               <FaToolbox size={48} className="mb-3" style={{ color: '#e67e22' }} />
               <h5 className="card-title">DevTools</h5>
               <p className="card-text">
-                9 kaynaktan altyapı araçları güncellemelerini çekin — MinIO, PostgreSQL,
-                MongoDB, Redis, Elasticsearch, RabbitMQ, Ceph, Seq ve Moodle.
+                14 kaynaktan altyapı araçları güncellemelerini çekin — PostgreSQL, MongoDB,
+                Redis, Elasticsearch, RabbitMQ, Ceph, Seq, Moodle, MinIO, LiteLLM, LangGraph,
+                Langfuse, GitLab ve Keycloak.
               </p>
               <NavLink to="/devtools" className="btn" style={{ backgroundColor: '#e67e22', color: '#fff' }}>
                 Güncellemeleri Görüntüle

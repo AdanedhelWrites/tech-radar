@@ -8,7 +8,9 @@ import CeviriEtiketi from './CeviriEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
   FaNewspaper, FaChartBar, FaCogs,
-  FaSkullCrossbones, FaLaptopCode, FaShieldAlt, FaMoon, FaUserSecret
+  FaSkullCrossbones, FaLaptopCode, FaShieldAlt, FaMoon, FaUserSecret,
+  FaGlobeAmericas, FaBullhorn, FaLifeRing, FaBookOpen, FaBroadcastTower,
+  FaTerminal, FaUserShield
 } from 'react-icons/fa'
 import { newsApi, istekHataMesaji } from '../services/api'
 
@@ -18,6 +20,13 @@ const sources = [
   { id: 'source3', name: 'SecurityWeek', value: 'SecurityWeek', icon: FaShieldAlt, color: '#2ecc71' },
   { id: 'source4', name: 'Dark Reading', value: 'Dark Reading', icon: FaMoon, color: '#9b59b6' },
   { id: 'source5', name: 'Krebs on Security', value: 'Krebs on Security', icon: FaUserSecret, color: '#f39c12' },
+  { id: 'source6', name: 'The Record', value: 'The Record', icon: FaGlobeAmericas, color: '#1abc9c' },
+  { id: 'source7', name: 'CyberScoop', value: 'CyberScoop', icon: FaBullhorn, color: '#e67e22' },
+  { id: 'source8', name: 'Help Net Security', value: 'Help Net Security', icon: FaLifeRing, color: '#16a085' },
+  { id: 'source9', name: 'Infosecurity Magazine', value: 'Infosecurity Magazine', icon: FaBookOpen, color: '#8e44ad' },
+  { id: 'source10', name: 'SANS ISC', value: 'SANS ISC', icon: FaBroadcastTower, color: '#c0392b' },
+  { id: 'source11', name: 'The Register', value: 'The Register', icon: FaTerminal, color: '#d35400' },
+  { id: 'source12', name: 'Security Affairs', value: 'Security Affairs', icon: FaUserShield, color: '#2980b9' },
 ]
 
 function NewsComponent() {

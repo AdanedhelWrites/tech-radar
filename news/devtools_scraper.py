@@ -1,17 +1,23 @@
 """
 DevTools Scraper Module — Altyapi Araclari Guncelleme Takibi
-9 kaynak:
-  - MinIO (GitHub Releases API)
+14 kaynak:
+  - MinIO (GitHub Releases API) — ust kaynak Ekim 2025'ten beri surum yayinlamiyor
   - Seq (Datalust Blog RSS)
   - Ceph (GitHub Releases Atom)
-  - MongoDB (Blog RSS, filtreli)
+  - MongoDB (GitHub Tags Atom + resmi surum notlari sayfasi)
   - PostgreSQL (Resmi News RSS)
   - RabbitMQ (GitHub Releases API)
   - Elasticsearch + Kibana (GitHub Releases API)
   - Redis (Blog RSS, filtreli)
   - Moodle (GitHub Tags API + Download page)
+  - LiteLLM, LangGraph, Langfuse, Keycloak (GitHub Releases API, ortak sinif)
+  - GitLab (docs.gitlab.com resmi surum notlari Atom)
+
+GitHub API anonim limiti 60 istek/saat/IP'dir; GITHUB_TOKEN verilirse yalniz
+api.github.com isteklerine Bearer baslik eklenir (bkz. DevToolsScraper._github_get).
 """
 
+import os
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
@@ -27,12 +33,28 @@ from news.base_scraper import BaseRSSScraper
 class DevToolsScraper(BaseRSSScraper):
     """DevTools Scraper temel sinifi"""
 
+    GITHUB_API = "https://api.github.com/"
+
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json, text/html, application/xhtml+xml, application/xml;q=0.9,*/*;q=0.8',
         })
+
+    def _github_get(self, url: str, **kwargs):
+        """api.github.com istegi: GITHUB_TOKEN tanimliysa Bearer baslik ekler.
+
+        Baslik oturuma degil tek istege konur ve yalniz api.github.com'a gider;
+        ayni oturum datalust.co, redis.io gibi hostlara da istek attigi icin token
+        oraya sizmamali. Token'siz anonim limit 60/saat/IP, token ile 5000/saat.
+        """
+        headers = dict(kwargs.pop('headers', None) or {})
+        token = os.environ.get('GITHUB_TOKEN', '').strip()
+        if token and url.startswith(self.GITHUB_API):
+            headers['Authorization'] = f'Bearer {token}'
+        headers.setdefault('Accept', 'application/vnd.github+json')
+        return self.session.get(url, headers=headers, **kwargs)
     def _markdown_to_text(self, md: str) -> str:
         """Markdown'dan temiz metin cikarir"""
         if not md:
@@ -40,6 +62,9 @@ class DevToolsScraper(BaseRSSScraper):
         text = md
         # Link'leri temizle [text](url) -> text
         text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        # Liste maddeleri ("* **Fix** ..."): once soyulmazsa bold deseni "* **" ile
+        # eslesip "Fix**" artigi birakiyordu (2026-10-08, LiteLLM/Keycloak notlari)
+        text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
         # Bold/italic
         text = re.sub(r'\*{1,3}([^*]+)\*{1,3}', r'\1', text)
         # Headers
@@ -207,58 +232,101 @@ class CephScraper(DevToolsScraper):
 
 
 # ============================================================
-# 4. MongoDB — Blog RSS (filtreli)
+# 4. MongoDB — GitHub Tags Atom + resmi surum notlari
 # ============================================================
 class MongoDBScraper(DevToolsScraper):
-    """MongoDB Blog RSS scraper — release filtreli"""
+    """MongoDB sunucu surumleri: GitHub tags Atom akisi + mongodb.com surum notlari.
 
-    FEED_URL = "https://www.mongodb.com/blog/rss"
+    2026-10-08: blog RSS'i (mongodb.com/company/blog/rss) Haziran 2026'da donmus ve
+    surum yazisi tasimiyordu (60 gunde 0 kayit, veritabaninda hic MongoDB kaydi yoktu).
+    tags.atom API limitine girmez; yalniz stabil tag'ler (rX.Y.Z; alpha/rc elenir).
+    Aciklama, mongodb.com/docs/manual/release-notes/<X.Y>/ sayfasindaki
+    "X.Y.Z - <tarih>" basligi altindaki notlardan alinir (sayfa seri basina bir kez cekilir).
+    """
+
+    TAGS_ATOM = "https://github.com/mongodb/mongo/tags.atom"
+    RELEASE_NOTES_URL = "https://www.mongodb.com/docs/manual/release-notes/{seri}/"
+    STABIL_TAG = re.compile(r'^r(\d+\.\d+\.\d+)$')
+
+    def __init__(self):
+        super().__init__()
+        self._notes_cache = {}  # seri (8.0, 8.3...) basina sayfa; ornek omrunde, worker omrunde degil
+
+    def _surum_notu(self, version: str) -> str:
+        seri = '.'.join(version.split('.')[:2])
+        url = self.RELEASE_NOTES_URL.format(seri=seri)
+        try:
+            if url not in self._notes_cache:
+                resp = self.session.get(url, timeout=30)
+                self._notes_cache[url] = resp.content if resp.ok else b''
+            if not self._notes_cache[url]:
+                return ''
+            soup = BeautifulSoup(self._notes_cache[url], 'html.parser')
+            for heading in soup.find_all(['h2', 'h3']):
+                metin = heading.get_text(strip=True)
+                if not (metin == version or metin.startswith(f"{version} ")):
+                    continue
+                # Sphinx/Snooty: <section><h3>8.0.34 - Sept 24, 2026</h3><p>..</p>..</section>
+                parent = heading.parent
+                if parent is not None and parent.name == 'section':
+                    parts = [sib.get_text(' ', strip=True) for sib in heading.find_next_siblings()
+                             if sib.name not in ('h2', 'h3', 'section')]
+                else:
+                    parts = []
+                    for sib in heading.find_next_siblings():
+                        if sib.name in ('h2', 'h3'):
+                            break
+                        parts.append(sib.get_text(' ', strip=True))
+                text = re.sub(r'\n{3,}', '\n\n', '\n'.join(p for p in parts if p))
+                if len(text) > 50:
+                    print(f"    [MongoDB] {version} icin {len(text)} karakter surum notu bulundu")
+                    return text
+                return ''
+        except Exception as e:
+            print(f"    [MongoDB] Surum notu cekilemedi ({version}): {e}")
+        return ''
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[MongoDB] Son {days} gunun guncellemeleri cekiliyor (RSS)...")
+        print(f"[MongoDB] Son {days} gunun surumleri cekiliyor (GitHub tags Atom)...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
-            resp = self.session.get(self.FEED_URL, timeout=20)
+            resp = self.session.get(self.TAGS_ATOM, timeout=20)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.content, 'xml')
-            items = soup.find_all('item')
-            print(f"  [MongoDB] RSS'te {len(items)} paylasim bulundu")
-            for item in items:
-                title = item.find('title')
-                title_text = title.get_text(strip=True) if title else ''
-                if not title_text:
+            atom_entries = soup.find_all('entry')
+            print(f"  [MongoDB] Atom feed'de {len(atom_entries)} tag bulundu")
+            for entry in atom_entries:
+                title_tag = entry.find('title')
+                tag = title_tag.get_text(strip=True) if title_tag else ''
+                match = self.STABIL_TAG.match(tag)
+                if not match:
                     continue
-                title_lower = title_text.lower()
-                is_relevant = any(kw in title_lower for kw in [
-                    'release', 'released', 'update', 'mongodb',
-                    'what\'s new', 'announcing', 'launch',
-                    'security', 'patch', 'upgrade',
-                ])
-                if not is_relevant:
-                    continue
-                pub_tag = item.find('pubDate')
-                pub_date = self._parse_rss_date(pub_tag.get_text(strip=True)) if pub_tag else None
+                version = match.group(1)
+                updated_tag = entry.find('updated')
+                pub_date = self._parse_rss_date(updated_tag.get_text(strip=True)) if updated_tag else None
                 if pub_date and pub_date.replace(tzinfo=None) < cutoff:
                     continue
-                link_tag = item.find('link')
-                link = link_tag.get_text(strip=True) if link_tag else ''
-                desc_tag = item.find('description')
-                description = self._html_to_text(desc_tag.get_text()) if desc_tag else title_text
+                link_tag = entry.find('link')
+                link = link_tag.get('href', '') if link_tag else ''
+                if not link:
+                    continue
+                seri = '.'.join(version.split('.')[:2])
+                notes_url = self.RELEASE_NOTES_URL.format(seri=seri)
+                description = self._surum_notu(version) or (
+                    f"MongoDB {version} has been tagged. Release notes: {notes_url}")
                 date_str = pub_date.strftime('%Y-%m-%d') if pub_date else datetime.now().strftime('%Y-%m-%d')
-                version_match = re.search(r'(\d+\.\d+(?:\.\d+)?)', title_text)
-                version = version_match.group(1) if version_match else ''
                 entries.append({
-                    'title': title_text,
+                    'title': f"MongoDB {version}",
                     'description': description[:4000],
                     'link': link,
                     'date': date_str,
                     'source': 'MongoDB',
                     'version': version,
-                    'entry_type': 'release' if 'release' in title_lower else 'blog',
+                    'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[MongoDB] RSS hatasi: {e}")
+            print(f"[MongoDB] Atom hatasi: {e}")
         print(f"[MongoDB] {len(entries)} guncelleme bulundu")
         return entries
 
@@ -368,7 +436,11 @@ class ElasticScraper(DevToolsScraper):
     ES_RELEASE_NOTES_URL = "https://www.elastic.co/docs/release-notes/elasticsearch"
     KIBANA_RELEASE_NOTES_URL = "https://www.elastic.co/docs/release-notes/kibana"
 
-    _release_notes_cache = {}
+    def __init__(self):
+        super().__init__()
+        # Ornek duzeyinde: sinif duzeyinde tutulsaydi Celery worker surecinin omru
+        # boyunca kalir, yeni surumlerin notlari bayat sayfadan aranirdi (2026-10-08).
+        self._release_notes_cache = {}
 
     def _fetch_release_notes_section(self, url: str, version_tag: str) -> str:
         """elastic.co release notes sayfasindan belirli bir versiyonun notlarini cikar.
@@ -760,6 +832,122 @@ class MoodleScraper(DevToolsScraper):
 
 
 # ============================================================
+# 10-13. GitHub Releases API — ortak sinif (LiteLLM, LangGraph, Langfuse, Keycloak)
+# ============================================================
+class GitHubReleasesScraper(DevToolsScraper):
+    """GitHub Releases API tabanli genel scraper.
+
+    `tag_deseni` ile eslesmeyen tag'ler (dev, rc, nightly, alt paketler) ve on
+    surumler (prerelease/draft) elenir. Baslik release adindan gelir; kaynak adiyla
+    baslamiyorsa onune eklenir. "paket==1.2.3" bicimli adlar "paket 1.2.3" olur.
+    """
+
+    def __init__(self, source: str, repo: str, tag_deseni: str, per_page: int = 20):
+        super().__init__()
+        self.source = source
+        self.repo = repo
+        self.tag_deseni = re.compile(tag_deseni)
+        self.per_page = per_page
+
+    @property
+    def api_url(self) -> str:
+        return f"{self.GITHUB_API}repos/{self.repo}/releases"
+
+    def _baslik(self, rel: Dict) -> str:
+        ad = (rel.get('name') or rel.get('tag_name') or '').strip().replace('==', ' ')
+        if ad.lower().startswith(self.source.lower()):
+            return ad
+        return f"{self.source} {ad}"
+
+    def fetch_entries(self, days: int = 60) -> List[Dict]:
+        print(f"[{self.source}] Son {days} gunun guncellemeleri cekiliyor (GitHub Releases)...")
+        entries = []
+        cutoff = datetime.now() - timedelta(days=days)
+        try:
+            resp = self._github_get(self.api_url, params={'per_page': self.per_page}, timeout=20)
+            resp.raise_for_status()
+            releases = resp.json()
+            print(f"  [{self.source}] {len(releases)} release bulundu")
+            for rel in releases:
+                tag = rel.get('tag_name', '') or ''
+                if rel.get('prerelease') or rel.get('draft') or not self.tag_deseni.match(tag):
+                    continue
+                pub_date = self._parse_rss_date(rel.get('published_at', ''))
+                if pub_date and pub_date.replace(tzinfo=None) < cutoff:
+                    continue
+                title = self._baslik(rel)
+                body = self._markdown_to_text(rel.get('body', ''))
+                date_str = pub_date.strftime('%Y-%m-%d') if pub_date else datetime.now().strftime('%Y-%m-%d')
+                entries.append({
+                    'title': title,
+                    'description': body[:4000] if body else f"{title} released",
+                    'link': rel.get('html_url', ''),
+                    'date': date_str,
+                    'source': self.source,
+                    'version': tag,
+                    'entry_type': 'release',
+                })
+        except Exception as e:
+            print(f"[{self.source}] Hata: {e}")
+        print(f"[{self.source}] {len(entries)} guncelleme bulundu")
+        return entries
+
+
+# ============================================================
+# 14. GitLab — docs.gitlab.com resmi surum notlari Atom
+# ============================================================
+class GitLabScraper(DevToolsScraper):
+    """GitLab ay surumleri ve yama surumleri (docs.gitlab.com/releases/all-releases.xml).
+
+    gitlab.com/api/v4 anonim istege 403 donuyor, about.gitlab.com blog akisi yalniz
+    son 20 yaziyi tasiyor (2026-10-08). Resmi surum akisi tam HTML icerik verir.
+    """
+
+    FEED_URL = "https://docs.gitlab.com/releases/all-releases.xml"
+
+    def fetch_entries(self, days: int = 60) -> List[Dict]:
+        print(f"[GitLab] Son {days} gunun surumleri cekiliyor (Atom)...")
+        entries = []
+        cutoff = datetime.now() - timedelta(days=days)
+        try:
+            resp = self.session.get(self.FEED_URL, timeout=20)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.content, 'xml')
+            atom_entries = soup.find_all('entry')
+            print(f"  [GitLab] Atom feed'de {len(atom_entries)} surum bulundu")
+            for entry in atom_entries:
+                title_tag = entry.find('title')
+                title = title_tag.get_text(strip=True) if title_tag else ''
+                if not title:
+                    continue
+                pub_tag = entry.find('published') or entry.find('updated')
+                pub_date = self._parse_rss_date(pub_tag.get_text(strip=True)) if pub_tag else None
+                if pub_date and pub_date.replace(tzinfo=None) < cutoff:
+                    continue
+                link_tag = entry.find('link')
+                link = link_tag.get('href', '') if link_tag else ''
+                if not link:
+                    continue
+                content_tag = entry.find('content')
+                description = self._html_to_text(content_tag.get_text()) if content_tag else title
+                version_match = re.search(r'(\d+\.\d+(?:\.\d+)?)', title)
+                date_str = pub_date.strftime('%Y-%m-%d') if pub_date else datetime.now().strftime('%Y-%m-%d')
+                entries.append({
+                    'title': title if title.lower().startswith('gitlab') else f"GitLab {title}",
+                    'description': description[:4000] if description else title,
+                    'link': link,
+                    'date': date_str,
+                    'source': 'GitLab',
+                    'version': version_match.group(1) if version_match else '',
+                    'entry_type': 'release',
+                })
+        except Exception as e:
+            print(f"[GitLab] Atom hatasi: {e}")
+        print(f"[GitLab] {len(entries)} guncelleme bulundu")
+        return entries
+
+
+# ============================================================
 # Multi DevTools Scraper — Tum kaynaklari birlestiren sinif
 # ============================================================
 class MultiDevToolsScraper(DevToolsScraper):
@@ -777,18 +965,32 @@ class MultiDevToolsScraper(DevToolsScraper):
             'Elastic': ElasticScraper(),
             'Redis': RedisScraper(),
             'Moodle': MoodleScraper(),
+            # 2026-10-08: AI/platform araclari. LiteLLM gunde bircok dev/rc/backport
+            # yayinlar; yalniz vX.Y.Z stabil tag'ler. LangGraph tek repoda cekirdek
+            # (X.Y.Z), sdk== ve cli== paketlerini etiketler; checkpoint/prebuilt elenir.
+            'LiteLLM': GitHubReleasesScraper('LiteLLM', 'BerriAI/litellm', r'^v\d+\.\d+\.\d+$', per_page=50),
+            'LangGraph': GitHubReleasesScraper('LangGraph', 'langchain-ai/langgraph',
+                                               r'^(\d+\.\d+\.\d+|(sdk|cli)==\d+\.\d+\.\d+)$', per_page=30),
+            'Langfuse': GitHubReleasesScraper('Langfuse', 'langfuse/langfuse', r'^v\d+\.\d+\.\d+$'),
+            'GitLab': GitLabScraper(),
+            'Keycloak': GitHubReleasesScraper('Keycloak', 'keycloak/keycloak', r'^\d+\.\d+\.\d+$'),
         }
 
     def fetch_all(self, days: int = 60, selected_sources: list = None, max_total: int = 30) -> List[Dict]:
         all_entries = []
-        print("=" * 80)
-        print(f"TUM DEVTOOLS KAYNAKLARINDAN GUNCELLEME CEKILIYOR ({days} gun, maks {max_total})")
-        print("=" * 80)
 
         sources = dict(self.scrapers)
         if selected_sources:
             selected_lower = {s.lower() for s in selected_sources}
             sources = {k: v for k, v in sources.items() if k.lower() in selected_lower}
+
+        # 14 kaynakta sabit 30 tavan, gunluk yayinlayan LiteLLM/Langfuse'un aylik
+        # yayinlayan Keycloak/GitLab'i tarih siralamasinda dusurmesine yol acardi.
+        max_total = max(max_total, 3 * len(sources))
+
+        print("=" * 80)
+        print(f"TUM DEVTOOLS KAYNAKLARINDAN GUNCELLEME CEKILIYOR ({days} gun, maks {max_total})")
+        print("=" * 80)
 
         per_source_limit = max(5, max_total // max(len(sources), 1))
 

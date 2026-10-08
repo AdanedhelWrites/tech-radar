@@ -1,6 +1,6 @@
 # Teknoloji Radar
 
-Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri, DevTools altyapi araclari guncellemeleri ve yapay zeka (AI) gelismelerini **35 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
+Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri, DevTools altyapi araclari guncellemeleri ve yapay zeka (AI) gelismelerini **48 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
 
 > Bu proje **Vibe Coding** yaklasimiyla, Claude Code (claude-opus-4-6) ile birlikte gelistirilmistir.
 
@@ -9,7 +9,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Uygulama surumu** | `appVersion` 2026.10.1 (CalVer; imaj etiketi) |
 | **Helm chart** | 2.1.0 (SemVer; etiket `chart-2.1.0`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 369 Django testi (`news/tests/`), PostgreSQL uzerinde CI'da kosar |
+| **Testler** | 417 Django testi (`news/tests/`), PostgreSQL uzerinde CI'da kosar |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -71,7 +71,7 @@ Ayni kod uc bicimde calisir:
 
 ## Ozellikler
 
-- **35 farkli kaynak** — 5 siber guvenlik, 5 CVE, 3 Kubernetes, 5 SRE, 9 DevTools, 8 Yapay Zeka
+- **48 farkli kaynak** — 12 siber guvenlik, 6 CVE, 3 Kubernetes, 5 SRE, 14 DevTools, 8 Yapay Zeka; hepsi anahtarsiz ve ucretsiz (GitHub API icin istege bagli `GITHUB_TOKEN`)
 - **Asenkron cekim** — "Getir" istegi Celery worker'a devredilir; arayuz 5 saniyede bir yeni kayitlari otomatik yansitir
 - **Periyodik cekim** — Celery Beat tum bolumleri 6 saatte bir otomatik gunceller (sadece yeni kayitlar cevrilir)
 - **Yonetici korumali sifirlama** — Veritabanini silen `clear` endpoint'leri yalnizca Django admin oturumuyla calisir
@@ -80,7 +80,8 @@ Ayni kod uc bicimde calisir:
 - **Turkce imla post-processing** — Cumle basi buyuk harf, noktalama duzeltme, URL/surum koruma
 - **Parca tabanli ceviri** — Uzun makaleler cumle sinirlarindan 4500 karakterlik parcalara bolunerek cevrilir
 - **Karanlik mod** — Koyu tonlarda arayuz (steel blue `#5b86a7` vurgu rengi)
-- **DevTools takibi** — MinIO, Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle release guncellemeleri
+- **DevTools takibi** — MinIO, Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle, LiteLLM, LangGraph, Langfuse, GitLab, Keycloak release guncellemeleri
+- **CISA KEV** — Aktif somurulen zafiyetler (Known Exploited Vulnerabilities) CVE bolumunde ayri kaynak; NVD API'sinin `hasKev` filtresiyle, eklenme tarihi ve federal son tarih bilgisiyle
 - **Tarih filtresi** — 1-15 gun (haberler) / 1-60 gun (DevTools, Yapay Zeka) slider ile filtreleme
 - **CVSS siddet filtresi** — Kritik / Yuksek / Orta / Dusuk (CVE sayfasi)
 - **HTML rapor disa aktarma** — Her bolumden koyu temali, yazdirilabilir HTML rapor indirilebilir
@@ -96,20 +97,30 @@ Ayni kod uc bicimde calisir:
 
 ## Veri Kaynaklari
 
-### Siber Guvenlik Haberleri (5 kaynak)
+### Siber Guvenlik Haberleri (12 kaynak)
 
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
 | The Hacker News | HTML Scraping | Tam makale icerigi cekilir |
-| Bleeping Computer | HTML Scraping | Sponsorlu icerik filtrelenir |
-| SecurityWeek | HTML Scraping | Guvenlik odakli haberler |
+| Bleeping Computer | HTML Scraping | Sponsorlu icerik filtrelenir; Cloudflare Chrome UA'sini 403'ledigi icin Firefox UA, tur basina 10 makale ve 1 sn bekleme (429) |
+| SecurityWeek | RSS + tam makale | RSS linkleri tasir, govde makale sayfasindan cekilir (ana sayfa HTML'inde link bos geliyordu) |
 | Dark Reading | RSS Feed | HTML 403 dondugu icin RSS kullanilir |
 | Krebs on Security | HTML Scraping | Brian Krebs'in guvenlik blogu |
+| The Record | RSS + tam makale | Recorded Future'in haber sitesi |
+| CyberScoop | RSS Feed | Tam metin `content:encoded` icinde gelir |
+| Help Net Security | RSS + tam makale | Sektor haberleri, arastirma ozetleri |
+| Infosecurity Magazine | RSS Feed | Kisa ozet; govde makale sayfasindaki paragraflardan tamamlanir |
+| SANS ISC | RSS Feed | Internet Storm Center gunlukleri; tam metin RSS'te |
+| The Register | RSS Feed | Security bolumu; tam metin RSS'te |
+| Security Affairs | RSS Feed | Tam metin `content:encoded` icinde gelir |
 
-### CVE Zafiyetleri (5 kaynak)
+> Yeni RSS kaynaklari `scraper_multi.RSSNewsSource` ile okunur: tur basina en fazla 15 haber, `days` penceresi, 200 karakterden kisa ozetler makale sayfasindan tamamlanir. `fetch_all_news` tavani kaynak sayisiyla buyur (`max(30, 3 x kaynak)`), boylece seyrek yazan kaynaklar (Krebs, SANS) tarih siralamasinda dusmez.
+
+### CVE Zafiyetleri (6 kaynak)
 
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
+| CISA KEV | NVD REST API (`hasKev`) | Son `days` gunde KEV katalogu'na eklenen, aktif somurulen CVE'ler; baslikta CISA'nin zafiyet adi, aciklamada eklenme ve son tarih. cisa.gov JSON akisi bot korumasi nedeniyle 403 dondugu icin NVD uzerinden |
 | NVD (Yayinlanan) | REST API | Yeni yayinlanan CVE'ler |
 | NVD (Guncel) | REST API | Son guncellenen CVE'ler |
 | GitHub Advisory | REST API | CVSS, CWE, etkilenen paketler dahil |
@@ -129,24 +140,31 @@ Ayni kod uc bicimde calisir:
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
 | SRE Weekly | RSS Feed | Haftalik bulten, bireysel makalelere ayristirilir |
-| InfoQ SRE | HTML Scraping | SRE etiketli makaleler |
+| InfoQ SRE | RSS Feed | `feed.infoq.com/sre/` konu akisi (HTML kartlari istemci tarafinda cizildigi icin RSS'e gecildi) |
 | PagerDuty Eng | RSS Feed | Incident management ve SRE makaleleri |
 | Google Cloud SRE | RSS Feed | SRE anahtar kelime filtresiyle |
-| DZone DevOps | RSS Feed | SRE/DevOps konulu makaleler |
+| DZone DevOps | RSS Feed | `feeds.dzone.com/devops-and-cicd` (eski `/devops` adresi olu bir porta yonlendiriyordu) |
 
-### DevTools — Altyapi Araclari (9 kaynak)
+### DevTools — Altyapi Araclari (14 kaynak)
 
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
-| MinIO | GitHub Releases API | S3 uyumlu object storage, detayli changelog |
+| MinIO | GitHub Releases API | S3 uyumlu object storage, detayli changelog. **Ust kaynak Ekim 2025'ten beri GitHub'da surum yayinlamiyor**; kaynak bilincli olarak tutuluyor, yeni kayit beklenmez |
 | Seq | Datalust Blog RSS | Yapilandirilmis log arama motoru, release filtreli |
 | Ceph | GitHub Releases Atom | Dagitik storage, version tag tabanli |
-| MongoDB | Blog RSS | Release ve guncelleme filtreli blog yazilari |
+| MongoDB | GitHub Tags Atom + mongodb.com release notes | Stabil `rX.Y.Z` tag'leri; aciklama resmi surum notlari sayfasindaki surum basligindan (blog RSS'i Haziran 2026'da donmustu) |
 | PostgreSQL | Resmi News RSS | Resmi haberler, release notlari, ekosistem |
 | RabbitMQ | GitHub Releases API | Mesaj kuyrugu, tam changelog |
 | Elasticsearch + Kibana | GitHub Releases API + elastic.co release notes | Resmi release notes sayfasindan detayli changelog |
 | Redis | Blog RSS + tam makale | Blog sayfasindan tam icerik cekilir (blockContent) |
 | Moodle | GitHub Tags API + moodledev.io | Resmi release notes sayfasindan gercek icerik |
+| LiteLLM | GitHub Releases API | LLM gateway; yalniz `vX.Y.Z` stabil surumler (gunluk dev/rc/backport elenir) |
+| LangGraph | GitHub Releases API | Ajan orkestrasyonu; cekirdek `X.Y.Z`, `sdk==` ve `cli==` paketleri (checkpoint/prebuilt elenir) |
+| Langfuse | GitHub Releases API | LLM gozlemlenebilirlik; `vX.Y.Z` surumleri, changelog |
+| GitLab | docs.gitlab.com surum Atom'u | Ay surumleri ve yama surumleri, tam surum notu (`gitlab.com/api/v4` anonim istege 403 donuyor) |
+| Keycloak | GitHub Releases API | Kimlik yonetimi; `X.Y.Z` surumleri (nightly elenir) |
+
+> LiteLLM, LangGraph, Langfuse ve Keycloak `devtools_scraper.GitHubReleasesScraper` ortak sinifiyla okunur (tag deseni + prerelease elemesi). GitHub API anonim limiti 60 istek/saat/IP'dir; `GITHUB_TOKEN` verilirse yalniz `api.github.com` isteklerine eklenir (bkz. [Ortam Degiskenleri](#ortam-degiskenleri)). `fetch_all` tavani kaynak sayisiyla buyur (`max(30, 3 x kaynak)`).
 
 ### Yapay Zeka (8 kaynak)
 
@@ -279,7 +297,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-369 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+417 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -645,7 +663,7 @@ cybersecurity_news/
 ├── entrypoint.sh               # Startup: wait-for-db + migrate + collectstatic (compose)
 ├── requirements.txt            # Python bagimliliklari (surumler sabit)
 ├── SECURITY.md                 # Zafiyet bildirimi: GitHub private vulnerability reporting
-├── .env.example                # SECRET_KEY, DB_PASSWORD (zorunlu), GEMINI_API_KEY
+├── .env.example                # SECRET_KEY, DB_PASSWORD (zorunlu), GEMINI_API_KEY, GITHUB_TOKEN
 ├── .gitleaksignore             # Gecmis commit'lere sabitli placeholder baseline'i (silinmez)
 ├── .gitignore                  # .env, .fazb/, db.sqlite3*, staticfiles/, node_modules
 ├── .dockerignore               # .env ve .env.* imaja girmez
@@ -949,6 +967,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,...` | Frontend origin'leri |
 | `CSRF_TRUSTED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Admin oturumuyla POST yapabilecek frontend origin'leri (Vite proxy `changeOrigin` kullandigi icin gerekli) |
 | `GEMINI_API_KEY` | (bos) | Google AI Studio anahtari; bos ise Gemini hic denenmez |
+| `GITHUB_TOKEN` | (bos) | Istege bagli. GitHub Releases/Tags/Advisory isteklerinde Bearer baslik (anonim limit 60/saat/IP, token ile 5000). Yalniz `api.github.com` isteklerine eklenir; "Public repositories (read-only)" fine-grained token yeterlidir |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model |
 | `GEMINI_DAILY_BUDGET` | `400` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD) |
 | `GEMINI_MIN_INTERVAL` | `5` | Istekler arasi saniye (15 RPM'in altinda) |
@@ -1017,6 +1036,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | 2026-10-02 | Faz B1: SQLite → paylasilan yerel PostgreSQL, kayipsiz gecis (ozet birebir) | ADR-0007 |
 | 2026-10-03 | Faz B2: Helm chart 2.0.0 docker-desktop'ta S1-S7 ile dogrulandi; CI chart kapilari | ADR-0007 |
 | 2026-10-04 | B3: Terraform + Argo CD + Vault/VSO ile yerel GitOps; chart 2.1.0; T1-T12 gecti | ADR-0008 |
+| 2026-10-08 | Kaynak turu: 35 → 48 kaynak (7 haber, CISA KEV, LiteLLM/LangGraph/Langfuse/GitLab/Keycloak); olu kaynak onarimi (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone akislari); `GITHUB_TOKEN` | `news/tests/test_kaynaklar.py` |
 
 ### Acik isler ve adaylar
 

@@ -19,6 +19,7 @@ const sources = [
   { id: 'source3', name: 'Tenable', value: 'Tenable', icon: FaShieldVirus, color: '#00b894' },
   { id: 'source4', name: 'CIRCL', value: 'CIRCL', icon: FaGlobe, color: '#f39c12' },
   { id: 'source5', name: 'NVD Güncel', value: 'NVD Güncel', icon: FaClock, color: '#6c5ce7' },
+  { id: 'source6', name: 'CISA KEV', value: 'CISA KEV', icon: FaExclamationTriangle, color: '#d63031' },
 ]
 
 function CVEComponent() {

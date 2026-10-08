@@ -21,6 +21,7 @@ services:
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - RETENTION_DAYS=90
       - GEMINI_CVE_RESERVE=0.5
     depends_on:
@@ -107,6 +108,7 @@ services:
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - RETENTION_DAYS=90
       - GEMINI_CVE_RESERVE=0.5
     depends_on:

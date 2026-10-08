@@ -10,7 +10,8 @@ import {
   FaChartBar, FaCogs, FaExternalLinkAlt,
   FaDatabase, FaStream, FaHdd, FaLeaf,
   FaEnvelope, FaSearch, FaBolt, FaGraduationCap,
-  FaToolbox, FaTag
+  FaToolbox, FaTag, FaRobot, FaProjectDiagram, FaChartLine,
+  FaGitlab, FaKey
 } from 'react-icons/fa'
 import { devtoolsApi, istekHataMesaji } from '../services/api'
 
@@ -24,6 +25,11 @@ const sources = [
   { id: 'dt_source7', name: 'Elastic', value: 'Elastic', icon: FaSearch, color: '#fed10a' },
   { id: 'dt_source8', name: 'Redis', value: 'Redis', icon: FaBolt, color: '#dc382d' },
   { id: 'dt_source9', name: 'Moodle', value: 'Moodle', icon: FaGraduationCap, color: '#f98012' },
+  { id: 'dt_source10', name: 'LiteLLM', value: 'LiteLLM', icon: FaRobot, color: '#6c5ce7' },
+  { id: 'dt_source11', name: 'LangGraph', value: 'LangGraph', icon: FaProjectDiagram, color: '#1c3c3c' },
+  { id: 'dt_source12', name: 'Langfuse', value: 'Langfuse', icon: FaChartLine, color: '#0a60ff' },
+  { id: 'dt_source13', name: 'GitLab', value: 'GitLab', icon: FaGitlab, color: '#fc6d26' },
+  { id: 'dt_source14', name: 'Keycloak', value: 'Keycloak', icon: FaKey, color: '#4d9de0' },
 ]
 
 function DevToolsComponent() {
