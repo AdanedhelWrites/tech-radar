@@ -11,6 +11,7 @@ from pathlib import Path
 from csp.constants import NONCE, NONE, SELF, UNSAFE_INLINE
 
 from cybernews.ayar_dogrulama import dogrulanmis_secret_key, veritabani_ayari
+from cybernews.loglama import loglama_ayari
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -204,6 +205,10 @@ STORAGES = {
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Loglama (2026-10-08): scraper ve ceviri katmani print yerine logging kullanir.
+# LOG_LEVEL (INFO) ve LOG_FORMAT (text | json) ortamdan; bkz. cybernews/loglama.py.
+LOGGING = loglama_ayari(os.environ)
+
 # Yerel LibreTranslate servisi: cekim aninda tek ceviri saglayicisi.
 # Bos ise hic denenmez (bkz. news/translation_providers.py).
 LIBRETRANSLATE_URL = os.environ.get('LIBRETRANSLATE_URL', '')
@@ -226,6 +231,24 @@ CELERY_TIMEZONE = 'Europe/Istanbul'
 # Worker isi aldiginda durum STARTED olur; aksi halde is bitene kadar PENDING gorunur.
 # /api/v1/jobs/<id>/ uc noktasinin 'started' durumunu gosterebilmesi icin gerekli.
 CELERY_TASK_TRACK_STARTED = True
+
+# Celery varsayilan olarak root logger'i ele gecirip kendi handler'ini kurar; o zaman
+# worker'da LOGGING (bicim, seviye, JSON) gecersiz kalirdi. Worker da Django ayarini kullanir.
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+
+# Gorev sure sinirlari (2026-10-08). Onceden yoktu: takilan tek bir kaynak istegi
+# bolum kilidini REFRESH_LOCK_TTL (3600 sn) boyunca tutar, worker tek concurrency ile
+# calistigi icin Beat'in diger gorevleri kuyrukta beklerdi.
+#   soft: task icinde SoftTimeLimitExceeded yukselir; fetch task'lari bunu yakalayip
+#         {'success': False, 'error': 'SoftTimeLimitExceeded: ...'} doner, FetchRun 'failure' olur.
+#   hard: worker alt surecini oldurur; FetchRun 'running' kalir (fetch_runs.py), bolum
+#         kilidi TTL sonunda kendiliginden duser. Soft'tan en az 60 sn buyuk tutulur.
+# En uzun gozlenen cekim 751 sn (CVE, 2026-09-12); 12 haber kaynagiyla ~15 dk beklenir.
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.environ.get('CELERY_TASK_SOFT_TIME_LIMIT', '1500'))
+CELERY_TASK_TIME_LIMIT = max(int(os.environ.get('CELERY_TASK_TIME_LIMIT', '1800')),
+                             CELERY_TASK_SOFT_TIME_LIMIT + 60)
+# Uzun omurlu alt surecte requests oturumlari ve BeautifulSoup agaclari birikmesin
+CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.environ.get('CELERY_WORKER_MAX_TASKS_PER_CHILD', '50'))
 
 # Celery Beat — tum bolumler 6 saatte bir otomatik cekilir.
 # Ceviri bekleyen kayitlar 2 saatte bir (tek saatlerde) yeniden cevrilir.

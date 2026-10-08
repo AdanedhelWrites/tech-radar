@@ -3,6 +3,7 @@ CVE Scraper Module
 NVD, CVEDetails, Rapid7, Tenable, VulDB gibi kaynaklardan CVE verilerini çeker.
 """
 
+import os
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
@@ -13,16 +14,34 @@ import time
 
 from news.translation_utils import translate_text, translate_long_text
 from news.base_scraper import BaseRSSScraper
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class CVEScraper(BaseRSSScraper):
     """CVE Scraper temel sınıfı"""
-    
+
+    NVD_API = "https://services.nvd.nist.gov/"
+
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
+
+    def _nvd_get(self, url: str, **kwargs):
+        """NVD istegi: NVD_API_KEY tanimliysa `apiKey` basligi ekler (2026-10-08).
+
+        Anonim limit 5 istek / 30 sn; CVE turu artik 3 NVD istegi yapiyor (KEV,
+        yayinlanan, guncel) ve 429'da scraper bos doner. Anahtarla 50 / 30 sn.
+        Baslik tek istege konur ve yalniz services.nvd.nist.gov'a gider.
+        """
+        headers = dict(kwargs.pop('headers', None) or {})
+        anahtar = os.environ.get('NVD_API_KEY', '').strip()
+        if anahtar and url.startswith(self.NVD_API):
+            headers['apiKey'] = anahtar
+        return self.session.get(url, headers=headers, **kwargs)
     def parse_cvss_score(self, severity_text: str) -> Optional[float]:
         """CVSS skorunu metinden çıkarır"""
         if not severity_text:
@@ -123,7 +142,7 @@ class NVDScraper(CVEScraper):
     
     def fetch_cves(self, days: int = 30) -> List[Dict]:
         """NVD'den CVE verilerini çeker"""
-        print(f"[NVD] Son {days} gunun CVE'leri cekiliyor...")
+        log.info(f"[NVD] Son {days} gunun CVE'leri cekiliyor...")
         
         cves = []
         end_date = datetime.now()
@@ -136,13 +155,13 @@ class NVDScraper(CVEScraper):
                 'resultsPerPage': 100
             }
             
-            response = self.session.get(self.BASE_URL, params=params, timeout=30)
+            response = self._nvd_get(self.BASE_URL, params=params, timeout=30)
             response.raise_for_status()
             
             data = response.json()
             
             if 'vulnerabilities' not in data:
-                print("[NVD] Veri bulunamadi")
+                log.warning("[NVD] Veri bulunamadi")
                 return cves
             
             # NVD severity İngilizce -> Türkçe eşleme
@@ -261,15 +280,15 @@ class NVDScraper(CVEScraper):
                     cves.append(cve)
                     
                 except Exception as e:
-                    print(f"[NVD] CVE işleme hatası: {e}")
+                    log.warning(f"[NVD] CVE işleme hatası: {e}")
                     continue
             
-            print(f"[NVD] Atlanan: {skipped_rejected} reddedilmiş/ayrılmış, {skipped_no_cvss} CVSS'siz")
+            log.info(f"[NVD] Atlanan: {skipped_rejected} reddedilmiş/ayrılmış, {skipped_no_cvss} CVSS'siz")
             
-            print(f"[NVD] {len(cves)} CVE bulundu")
+            log.info(f"[NVD] {len(cves)} CVE bulundu")
             
         except Exception as e:
-            print(f"[NVD] Hata: {e}")
+            log.warning(f"[NVD] Hata: {e}")
         
         return cves
 
@@ -288,7 +307,7 @@ class GitHubAdvisoryScraper(CVEScraper):
     
     def fetch_cves(self, days: int = 30) -> List[Dict]:
         """GitHub Advisory Database'den CVE verilerini çeker"""
-        print(f"[GitHub Advisory] Son {days} günün CVE'leri çekiliyor...")
+        log.info(f"[GitHub Advisory] Son {days} günün CVE'leri çekiliyor...")
         
         cves = []
         
@@ -399,13 +418,13 @@ class GitHubAdvisoryScraper(CVEScraper):
                     cves.append(cve)
                     
                 except Exception as e:
-                    print(f"[GitHub Advisory] CVE işleme hatası: {e}")
+                    log.warning(f"[GitHub Advisory] CVE işleme hatası: {e}")
                     continue
             
-            print(f"[GitHub Advisory] {len(cves)} CVE bulundu")
+            log.info(f"[GitHub Advisory] {len(cves)} CVE bulundu")
             
         except Exception as e:
-            print(f"[GitHub Advisory] Hata: {e}")
+            log.warning(f"[GitHub Advisory] Hata: {e}")
         
         return cves
 
@@ -424,7 +443,7 @@ class TenableScraper(CVEScraper):
     
     def fetch_cves(self, days: int = 30) -> List[Dict]:
         """Tenable'dan CVE verilerini __NEXT_DATA__ JSON'dan çeker"""
-        print(f"[Tenable] Son {days} günün CVE'leri çekiliyor...")
+        log.info(f"[Tenable] Son {days} günün CVE'leri çekiliyor...")
         
         cves = []
         
@@ -506,10 +525,10 @@ class TenableScraper(CVEScraper):
                         cves.append(cve)
                         
                     except Exception as e:
-                        print(f"[Tenable] CVE işleme hatası: {e}")
+                        log.warning(f"[Tenable] CVE işleme hatası: {e}")
                         continue
             else:
-                print("[Tenable] __NEXT_DATA__ bulunamadı, HTML fallback deneniyor...")
+                log.warning("[Tenable] __NEXT_DATA__ bulunamadı, HTML fallback deneniyor...")
                 # Fallback: li.list-group-item parse
                 items = soup.select('li.list-group-item')
                 for item in items[:30]:
@@ -553,13 +572,13 @@ class TenableScraper(CVEScraper):
                         }
                         cves.append(cve)
                     except Exception as e:
-                        print(f"[Tenable] Fallback CVE işleme hatası: {e}")
+                        log.warning(f"[Tenable] Fallback CVE işleme hatası: {e}")
                         continue
             
-            print(f"[Tenable] {len(cves)} CVE bulundu")
+            log.info(f"[Tenable] {len(cves)} CVE bulundu")
             
         except Exception as e:
-            print(f"[Tenable] Hata: {e}")
+            log.warning(f"[Tenable] Hata: {e}")
         
         return cves
 
@@ -596,7 +615,7 @@ class CIRCLScraper(CVEScraper):
     
     def fetch_cves(self, days: int = 30) -> List[Dict]:
         """CIRCL API'den son CVE'leri çeker"""
-        print(f"[CIRCL] Son CVE'ler çekiliyor...")
+        log.info(f"[CIRCL] Son CVE'ler çekiliyor...")
         
         cves = []
         
@@ -681,13 +700,13 @@ class CIRCLScraper(CVEScraper):
                     cves.append(cve)
                     
                 except Exception as e:
-                    print(f"[CIRCL] CVE işleme hatası: {e}")
+                    log.warning(f"[CIRCL] CVE işleme hatası: {e}")
                     continue
             
-            print(f"[CIRCL] {len(cves)} CVE bulundu")
+            log.info(f"[CIRCL] {len(cves)} CVE bulundu")
             
         except Exception as e:
-            print(f"[CIRCL] Hata: {e}")
+            log.warning(f"[CIRCL] Hata: {e}")
         
         return cves
 
@@ -699,7 +718,7 @@ class NVDRecentScraper(CVEScraper):
     
     def fetch_cves(self, days: int = 30) -> List[Dict]:
         """NVD'den son değiştirilen CVE'leri çeker"""
-        print(f"[NVD Güncel] Son {days} günde değiştirilen CVE'ler çekiliyor...")
+        log.info(f"[NVD Güncel] Son {days} günde değiştirilen CVE'ler çekiliyor...")
         
         cves = []
         end_date = datetime.now()
@@ -724,13 +743,13 @@ class NVDRecentScraper(CVEScraper):
             # NVD rate limit - ilk scraper'dan sonra biraz bekle
             time.sleep(2)
             
-            response = self.session.get(self.BASE_URL, params=params, timeout=30)
+            response = self._nvd_get(self.BASE_URL, params=params, timeout=30)
             response.raise_for_status()
             
             data = response.json()
             
             if 'vulnerabilities' not in data:
-                print("[NVD Güncel] Veri bulunamadı")
+                log.warning("[NVD Güncel] Veri bulunamadı")
                 return cves
             
             for item in data['vulnerabilities']:
@@ -823,13 +842,13 @@ class NVDRecentScraper(CVEScraper):
                     cves.append(cve)
                     
                 except Exception as e:
-                    print(f"[NVD Güncel] CVE işleme hatası: {e}")
+                    log.warning(f"[NVD Güncel] CVE işleme hatası: {e}")
                     continue
             
-            print(f"[NVD Güncel] {len(cves)} CVE bulundu")
+            log.info(f"[NVD Güncel] {len(cves)} CVE bulundu")
             
         except Exception as e:
-            print(f"[NVD Güncel] Hata: {e}")
+            log.warning(f"[NVD Güncel] Hata: {e}")
         
         return cves
 
@@ -848,7 +867,7 @@ class CISAKEVScraper(CVEScraper):
     KEV_KATALOG = "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
 
     def fetch_cves(self, days: int = 30) -> List[Dict]:
-        print(f"[CISA KEV] Son {days} günde KEV'e eklenen CVE'ler çekiliyor...")
+        log.info(f"[CISA KEV] Son {days} günde KEV'e eklenen CVE'ler çekiliyor...")
         cves = []
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
@@ -861,7 +880,7 @@ class CISAKEVScraper(CVEScraper):
                 'resultsPerPage': 200,
             }
             # hasKev degersiz bir bayrak; requests params ile `hasKev=` uretir, API onu kabul etmez
-            response = self.session.get(f"{self.BASE_URL}?hasKev", params=params, timeout=30)
+            response = self._nvd_get(f"{self.BASE_URL}?hasKev", params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
 
@@ -890,12 +909,12 @@ class CISAKEVScraper(CVEScraper):
                     kayit['references'] = [self.KEV_KATALOG] + kayit['references'][:4]
                     cves.append(kayit)
                 except Exception as e:
-                    print(f"[CISA KEV] CVE işleme hatası: {e}")
+                    log.warning(f"[CISA KEV] CVE işleme hatası: {e}")
                     continue
 
-            print(f"[CISA KEV] {len(cves)} CVE bulundu")
+            log.info(f"[CISA KEV] {len(cves)} CVE bulundu")
         except Exception as e:
-            print(f"[CISA KEV] Hata: {e}")
+            log.warning(f"[CISA KEV] Hata: {e}")
 
         return cves
 
@@ -911,18 +930,10 @@ class MultiCVEScraper(CVEScraper):
         self.tenable_scraper = TenableScraper()
         self.circl_scraper = CIRCLScraper()
         self.nvd_recent_scraper = NVDRecentScraper()
-    
-    def fetch_all_cves(self, days: int = 30, selected_sources: list = None) -> List[Dict]:
-        """Tum kaynaklardan CVE ceker"""
-        all_cves = []
-        
-        print("=" * 80)
-        print(f"TÜM CVE KAYNAKLARINDAN VERİ ÇEKİLİYOR ({days} gün)")
-        print("=" * 80)
-        
         # KEV once: ayni CVE birden fazla kaynaktan gelirse ilk goruleni kalir ve
         # KEV kaydi somuru bilgisini (baslik/aciklama oneki) tasir.
-        sources = {
+        # Kayit defteri news/kaynaklar.py tarafindan da okunur (kaynak sagligi).
+        self.sources = {
             'CISA KEV': self.kev_scraper,
             'NVD': self.nvd_scraper,
             'GitHub Advisory': self.github_scraper,
@@ -930,17 +941,27 @@ class MultiCVEScraper(CVEScraper):
             'CIRCL': self.circl_scraper,
             'NVD Güncel': self.nvd_recent_scraper,
         }
+    
+    def fetch_all_cves(self, days: int = 30, selected_sources: list = None) -> List[Dict]:
+        """Tum kaynaklardan CVE ceker"""
+        all_cves = []
         
+        log.info("=" * 80)
+        log.info(f"TÜM CVE KAYNAKLARINDAN VERİ ÇEKİLİYOR ({days} gün)")
+        log.info("=" * 80)
+        
+        sources = dict(self.sources)
+
         if selected_sources:
             sources = {k: v for k, v in sources.items() if k in selected_sources}
         
         for source_name, scraper in sources.items():
             try:
                 cves = scraper.fetch_cves(days=days)
-                print(f"  -> {source_name}: {len(cves)} CVE")
+                log.info(f"  -> {source_name}: {len(cves)} CVE")
                 all_cves.extend(cves)
             except Exception as e:
-                print(f"  -> {source_name}: HATA - {e}")
+                log.warning(f"  -> {source_name}: HATA - {e}")
         
         seen_ids = set()
         unique_cves = []
@@ -949,15 +970,15 @@ class MultiCVEScraper(CVEScraper):
                 seen_ids.add(cve['cve_id'])
                 unique_cves.append(cve)
         
-        print("=" * 80)
-        print(f"TOPLAM {len(unique_cves)} CVE CEKILDI")
-        print("=" * 80)
+        log.info("=" * 80)
+        log.info(f"TOPLAM {len(unique_cves)} CVE CEKILDI")
+        log.info("=" * 80)
         
         return unique_cves
     
     def process_cves(self, cves: List[Dict]) -> List[Dict]:
         """CVE'leri Türkçeye çevirir ve işler"""
-        print(f"\nCVE'ler işleniyor ve Türkçeye çevriliyor ({len(cves)} adet)...")
+        log.info(f"\nCVE'ler işleniyor ve Türkçeye çevriliyor ({len(cves)} adet)...")
         total = len(cves)
         
         for i, cve in enumerate(cves, 1):
@@ -969,7 +990,7 @@ class MultiCVEScraper(CVEScraper):
                 desc = cve.get('original_description', '')
                 if desc and len(desc.strip()) > 30:
                     if i % 20 == 0:
-                        print(f"Çevriliyor: {i}/{total}")
+                        log.info(f"Çevriliyor: {i}/{total}")
                     cve['turkish_description'] = translate_text(desc)
                 else:
                     cve['turkish_description'] = desc
@@ -977,7 +998,7 @@ class MultiCVEScraper(CVEScraper):
                 yield cve
                 
             except Exception as e:
-                print(f"İşleme hatası ({cve['cve_id']}): {e}")
+                log.warning(f"İşleme hatası ({cve['cve_id']}): {e}")
                 cve['turkish_title'] = cve['original_title']
                 cve['turkish_description'] = cve['original_description']
                 yield cve

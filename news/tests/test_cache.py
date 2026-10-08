@@ -36,6 +36,8 @@ class FetchCacheYenilemeTests(TranslationGateMixin, TestCase):
 
     def test_25_kayitta_cache_uc_kez_kurulur(self):
         sonuc, casus = self._cek(25)
+        # by_source kaynak sagligi sayaci (2026-10-08); burada cache davranisi sinanir
+        sonuc.pop('by_source', None)
         self.assertEqual(sonuc, {'success': True, 'count': 25,
                                   'fetched_count': 25, 'translation_failures': 50})
         self.assertEqual(casus.call_count, 3)  # 10. kayit, 20. kayit, cekim sonu

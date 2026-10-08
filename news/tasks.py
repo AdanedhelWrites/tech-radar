@@ -10,6 +10,7 @@ from .translation_utils import (
     consume_translation_failures, consume_translation_providers, kayit_saglayicisi,
 )
 from .cache_utils import CACHE_YENILEME_ARALIGI, cache_yenile
+from .kaynaklar import kaynak_sayaclari, kaynak_yazildi
 
 from scraper_multi import MultiSourceScraper
 from .cve_scraper import MultiCVEScraper
@@ -17,6 +18,9 @@ from .k8s_scraper import MultiK8sScraper
 from .sre_scraper import MultiSREScraper
 from .devtools_scraper import MultiDevToolsScraper
 from .ai_scraper import MultiAINewsScraper
+import logging
+
+log = logging.getLogger(__name__)
 
 
 # ADR-0005: saklama olcusu "kaydin yayim tarihi" degil "bu kayda en son ne zaman
@@ -66,6 +70,7 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
         scraper = MultiSourceScraper()
         articles = scraper.fetch_all_news(days=days, selected_sources=selected_sources)
         kaynaktan_gelen = len(articles)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
+        kaynak_sayaci = kaynak_sayaclari('news', selected_sources, articles)
         if skip_existing:
             articles = _drop_existing(articles, NewsArticle, 'link')
         if articles:
@@ -92,15 +97,19 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
                     }
                 )
                 saved_count += 1
+                kaynak_yazildi(kaynak_sayaci, article['source'])
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('news')
             cache_yenile('news')
             return {'success': True, 'count': saved_count,
-                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
+                    'by_source': kaynak_sayaci}
         return {'success': False, 'count': 0,
-                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0,
+                'by_source': kaynak_sayaci}
     except Exception as e:
-        return {'success': False, 'error': str(e)}
+        # Tur adi da yazilir: SoftTimeLimitExceeded'in metni bostur, FetchRun.error'da gorunsun
+        return {'success': False, 'error': f'{type(e).__name__}: {e}'}
 
 @shared_task
 def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
@@ -112,6 +121,7 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
         scraper = MultiCVEScraper()
         cves = scraper.fetch_all_cves(days=days, selected_sources=selected_sources)
         kaynaktan_gelen = len(cves)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
+        kaynak_sayaci = kaynak_sayaclari('cve', selected_sources, cves)
         if skip_existing:
             cves = _drop_existing(cves, CVEEntry, 'cve_id', key='cve_id')
         if cves:
@@ -143,15 +153,19 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
+                kaynak_yazildi(kaynak_sayaci, cve['source'])
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('cve')
             cache_yenile('cve')
             return {'success': True, 'count': saved_count,
-                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
+                    'by_source': kaynak_sayaci}
         return {'success': False, 'count': 0,
-                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0,
+                'by_source': kaynak_sayaci}
     except Exception as e:
-        return {'success': False, 'error': str(e)}
+        # Tur adi da yazilir: SoftTimeLimitExceeded'in metni bostur, FetchRun.error'da gorunsun
+        return {'success': False, 'error': f'{type(e).__name__}: {e}'}
 
 @shared_task
 def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
@@ -163,6 +177,7 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
         scraper = MultiK8sScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
         kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
+        kaynak_sayaci = kaynak_sayaclari('kubernetes', selected_sources, entries)
         if skip_existing:
             entries = _drop_existing(entries, KubernetesEntry, 'link')
         if entries:
@@ -189,15 +204,19 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
+                kaynak_yazildi(kaynak_sayaci, entry['source'])
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('kubernetes')
             cache_yenile('kubernetes')
             return {'success': True, 'count': saved_count,
-                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
+                    'by_source': kaynak_sayaci}
         return {'success': False, 'count': 0,
-                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0,
+                'by_source': kaynak_sayaci}
     except Exception as e:
-        return {'success': False, 'error': str(e)}
+        # Tur adi da yazilir: SoftTimeLimitExceeded'in metni bostur, FetchRun.error'da gorunsun
+        return {'success': False, 'error': f'{type(e).__name__}: {e}'}
 
 @shared_task
 def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
@@ -209,6 +228,7 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
         scraper = MultiSREScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
         kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
+        kaynak_sayaci = kaynak_sayaclari('sre', selected_sources, entries)
         if skip_existing:
             entries = _drop_existing(entries, SREEntry, 'link')
         if entries:
@@ -233,15 +253,19 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
+                kaynak_yazildi(kaynak_sayaci, entry['source'])
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('sre')
             cache_yenile('sre')
             return {'success': True, 'count': saved_count,
-                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
+                    'by_source': kaynak_sayaci}
         return {'success': False, 'count': 0,
-                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0,
+                'by_source': kaynak_sayaci}
     except Exception as e:
-        return {'success': False, 'error': str(e)}
+        # Tur adi da yazilir: SoftTimeLimitExceeded'in metni bostur, FetchRun.error'da gorunsun
+        return {'success': False, 'error': f'{type(e).__name__}: {e}'}
 
 @shared_task
 def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
@@ -253,6 +277,7 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
         scraper = MultiDevToolsScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
         kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
+        kaynak_sayaci = kaynak_sayaclari('devtools', selected_sources, entries)
         if skip_existing:
             entries = _drop_existing(entries, DevToolsEntry, 'link')
         if entries:
@@ -279,15 +304,19 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
+                kaynak_yazildi(kaynak_sayaci, entry['source'])
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('devtools')
             cache_yenile('devtools')
             return {'success': True, 'count': saved_count,
-                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
+                    'by_source': kaynak_sayaci}
         return {'success': False, 'count': 0,
-                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0,
+                'by_source': kaynak_sayaci}
     except Exception as e:
-        return {'success': False, 'error': str(e)}
+        # Tur adi da yazilir: SoftTimeLimitExceeded'in metni bostur, FetchRun.error'da gorunsun
+        return {'success': False, 'error': f'{type(e).__name__}: {e}'}
 
 @shared_task
 def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
@@ -299,6 +328,7 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
         scraper = MultiAINewsScraper()
         entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
         kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
+        kaynak_sayaci = kaynak_sayaclari('ai', selected_sources, entries)
         if skip_existing:
             entries = _drop_existing(entries, AINewsEntry, 'link')
         if entries:
@@ -323,15 +353,19 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
                     }
                 )
                 saved_count += 1
+                kaynak_yazildi(kaynak_sayaci, entry['source'])
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
                     cache_yenile('ai')
             cache_yenile('ai')
             return {'success': True, 'count': saved_count,
-                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari}
+                    'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
+                    'by_source': kaynak_sayaci}
         return {'success': False, 'count': 0,
-                'fetched_count': kaynaktan_gelen, 'translation_failures': 0}
+                'fetched_count': kaynaktan_gelen, 'translation_failures': 0,
+                'by_source': kaynak_sayaci}
     except Exception as e:
-        return {'success': False, 'error': str(e)}
+        # Tur adi da yazilir: SoftTimeLimitExceeded'in metni bostur, FetchRun.error'da gorunsun
+        return {'success': False, 'error': f'{type(e).__name__}: {e}'}
 
 
 @shared_task
@@ -345,5 +379,5 @@ def retranslate_pending_task():
     try:
         eski_kayitlari_temizle()  # 30 gunden eski FetchRun satirlari (spec 3.4)
     except Exception as e:
-        print(f'  [FetchRun] Eski kayitlar temizlenemedi: {e}')
+        log.warning(f'  [FetchRun] Eski kayitlar temizlenemedi: {e}')
     return sonuc

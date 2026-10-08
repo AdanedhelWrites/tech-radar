@@ -17,6 +17,9 @@ import os
 import re
 import time
 from typing import Dict, Iterable, List, Optional, Set, Tuple
+import logging
+
+log = logging.getLogger(__name__)
 
 # ============================================================
 # 1. KORUNACAK TEKNIK TERIMLER
@@ -400,7 +403,7 @@ def translate_text(text: str) -> str:
     try:
         protected, replacements = _protect_terms(text)
     except Exception as e:
-        print(f"  [Ceviri] Hata: {e}")
+        log.warning(f"  [Ceviri] Hata: {e}")
         _failure_count += 1
         return text
 
@@ -419,11 +422,11 @@ def translate_text(text: str) -> str:
                 if any(kod in restored for kod in replacements):
                     sorun = 'yer tutucu kalintisi'
             if sorun:
-                print(f"  [Ceviri] {saglayici.name} dogrulama basarisiz ({sorun}).")
+                log.warning(f"  [Ceviri] {saglayici.name} dogrulama basarisiz ({sorun}).")
                 continue
             sonuc = turkish_post_process(restored)
         except Exception as e:
-            print(f"  [Ceviri] {saglayici.name} hata: {e}")
+            log.warning(f"  [Ceviri] {saglayici.name} hata: {e}")
             continue
         _used_providers.add(saglayici.name)
         return sonuc
@@ -479,7 +482,7 @@ def translate_long_text(text: str, chunk_size: int = 4500) -> str:
             translated = translate_text(chunk)
             translated_parts.append(translated)
         except Exception as e:
-            print(f"  [Ceviri] Chunk {i+1}/{len(chunks)} hatasi: {e}")
+            log.warning(f"  [Ceviri] Chunk {i+1}/{len(chunks)} hatasi: {e}")
             translated_parts.append(chunk)
 
     result = ' '.join(translated_parts)

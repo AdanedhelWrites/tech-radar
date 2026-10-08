@@ -19,6 +19,9 @@ import requests
 from django.conf import settings
 
 from . import translation_utils as tu
+import logging
+
+log = logging.getLogger(__name__)
 
 PASIFIK = ZoneInfo('America/Los_Angeles')  # Google RPD kotasi bu saat diliminde sifirlanir
 
@@ -168,7 +171,7 @@ def hazir(bolum: Optional[str] = None) -> bool:
 
 
 def _devre_kesici(sebep: str) -> None:
-    print(f"  [Gemini] erisilemiyor ({sebep}); {GEMINI_COOLDOWN} sn atlanacak.")
+    log.warning(f"  [Gemini] erisilemiyor ({sebep}); {GEMINI_COOLDOWN} sn atlanacak.")
     _get_gate().start_cooldown(GEMINI_COOLDOWN)
 
 
@@ -209,14 +212,14 @@ def _yaniti_coz(yanit) -> Optional[dict]:
     try:
         aday = yanit.json()['candidates'][0]
         if aday.get('finishReason') not in (None, 'STOP'):
-            print(f"  [Gemini] yanit tamamlanmadi ({aday.get('finishReason')}).")
+            log.warning(f"  [Gemini] yanit tamamlanmadi ({aday.get('finishReason')}).")
             return None
         cikti = json.loads(aday['content']['parts'][0]['text'])
     except Exception as hata:  # ValueError/KeyError/IndexError/TypeError/AttributeError vb.
-        print(f"  [Gemini] yanit cozulemedi ({type(hata).__name__}).")
+        log.warning(f"  [Gemini] yanit cozulemedi ({type(hata).__name__}).")
         return None
     if not isinstance(cikti, dict):
-        print("  [Gemini] yanit JSON nesnesi degil.")
+        log.warning("  [Gemini] yanit JSON nesnesi degil.")
         return None
     return cikti
 
@@ -230,7 +233,7 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
     butce, anahtar = _get_butce(), butce_anahtari()
     if butce.artir(anahtar) > butce_tavani(bolum):
         butce.azalt(anahtar)
-        print(f"  [Gemini] {bolum or 'genel'} bolumu gunluk butce payini doldurdu "
+        log.warning(f"  [Gemini] {bolum or 'genel'} bolumu gunluk butce payini doldurdu "
               f"({butce_tavani(bolum)}/{GEMINI_DAILY_BUDGET}).")
         return None
 
@@ -246,7 +249,7 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
         _devre_kesici(type(hata).__name__)
         return None
     except Exception as hata:  # beklenmeyen hata retranslate'i durdurmasin
-        print(f"  [Gemini] beklenmeyen hata: {type(hata).__name__}")
+        log.warning(f"  [Gemini] beklenmeyen hata: {type(hata).__name__}")
         return None
 
     if yanit.status_code == 429 or yanit.status_code >= 500:
@@ -255,7 +258,7 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
     if yanit.status_code != 200:
         # Istek sorunu (anahtar, gecersiz govde): kota harcanmadi, devre kesici acilmaz
         butce.azalt(anahtar)
-        print(f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {yanit.text[:200]}")
+        log.info(f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {yanit.text[:200]}")
         return None
 
     cikti = _yaniti_coz(yanit)
@@ -265,7 +268,7 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
     for ad, orijinal in alanlar.items():
         sorun = _alan_sorunu(orijinal, cikti.get(ad))
         if sorun:
-            print(f"  [Gemini] dogrulama basarisiz ({ad}: {sorun}).")
+            log.warning(f"  [Gemini] dogrulama basarisiz ({ad}: {sorun}).")
             return None
         sonuc[ad] = cikti[ad].strip()
     return sonuc

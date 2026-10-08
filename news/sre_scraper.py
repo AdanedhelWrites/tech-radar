@@ -19,6 +19,9 @@ from email.utils import parsedate_to_datetime
 
 from news.translation_utils import translate_text, translate_long_text
 from news.base_scraper import BaseRSSScraper
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class SREScraper(BaseRSSScraper):
@@ -40,7 +43,7 @@ class SREWeeklyScraper(SREScraper):
 
     def fetch_entries(self, days: int = 30) -> List[Dict]:
         """SRE Weekly RSS'ten bireysel makaleleri ceker"""
-        print(f"[SRE Weekly] Son {days} gunun haberleri cekiliyor (RSS)...")
+        log.info(f"[SRE Weekly] Son {days} gunun haberleri cekiliyor (RSS)...")
 
         entries = []
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -51,7 +54,7 @@ class SREWeeklyScraper(SREScraper):
 
             soup = BeautifulSoup(response.content, 'xml')
             items = soup.find_all('item')
-            print(f"  [SRE Weekly] RSS'te {len(items)} sayi bulundu")
+            log.info(f"  [SRE Weekly] RSS'te {len(items)} sayi bulundu")
 
             for item in items:
                 try:
@@ -115,17 +118,17 @@ class SREWeeklyScraper(SREScraper):
                                 'source': 'SRE Weekly',
                 })
                         except Exception as e:
-                            print(f"  [SRE Weekly] Makale isleme hatasi: {e}")
+                            log.warning(f"  [SRE Weekly] Makale isleme hatasi: {e}")
                             continue
 
                 except Exception as e:
-                    print(f"  [SRE Weekly] Sayi isleme hatasi: {e}")
+                    log.warning(f"  [SRE Weekly] Sayi isleme hatasi: {e}")
                     continue
 
         except Exception as e:
-            print(f"[SRE Weekly] RSS hatasi: {e}")
+            log.warning(f"[SRE Weekly] RSS hatasi: {e}")
 
-        print(f"[SRE Weekly] {len(entries)} haber bulundu")
+        log.info(f"[SRE Weekly] {len(entries)} haber bulundu")
         return entries
 
 
@@ -159,7 +162,7 @@ class PagerDutyEngScraper(SREScraper):
 
     def fetch_entries(self, days: int = 30) -> List[Dict]:
         """PagerDuty Engineering Blog'dan haberleri ceker"""
-        print(f"[PagerDuty Eng] Son {days} gunun haberleri cekiliyor (RSS)...")
+        log.info(f"[PagerDuty Eng] Son {days} gunun haberleri cekiliyor (RSS)...")
 
         entries = []
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -170,7 +173,7 @@ class PagerDutyEngScraper(SREScraper):
 
             soup = BeautifulSoup(response.content, 'xml')
             items = soup.find_all('item')
-            print(f"  [PagerDuty Eng] RSS'te {len(items)} makale bulundu")
+            log.info(f"  [PagerDuty Eng] RSS'te {len(items)} makale bulundu")
 
             for item in items:
                 try:
@@ -217,13 +220,13 @@ class PagerDutyEngScraper(SREScraper):
                         'source': 'PagerDuty Eng',
                 })
                 except Exception as e:
-                    print(f"  [PagerDuty Eng] Makale isleme hatasi: {e}")
+                    log.warning(f"  [PagerDuty Eng] Makale isleme hatasi: {e}")
                     continue
 
         except Exception as e:
-            print(f"[PagerDuty Eng] RSS hatasi: {e}")
+            log.warning(f"[PagerDuty Eng] RSS hatasi: {e}")
 
-        print(f"[PagerDuty Eng] {len(entries)} haber bulundu")
+        log.info(f"[PagerDuty Eng] {len(entries)} haber bulundu")
         return entries
 
 
@@ -247,7 +250,7 @@ class GoogleCloudSREScraper(SREScraper):
 
     def fetch_entries(self, days: int = 30) -> List[Dict]:
         """Google Cloud Blog'dan SRE ile ilgili haberleri ceker"""
-        print(f"[Google Cloud SRE] Son {days} gunun haberleri cekiliyor (RSS)...")
+        log.info(f"[Google Cloud SRE] Son {days} gunun haberleri cekiliyor (RSS)...")
 
         entries = []
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -258,7 +261,7 @@ class GoogleCloudSREScraper(SREScraper):
 
             soup = BeautifulSoup(response.content, 'xml')
             items = soup.find_all('item')
-            print(f"  [Google Cloud SRE] RSS'te {len(items)} toplam makale")
+            log.info(f"  [Google Cloud SRE] RSS'te {len(items)} toplam makale")
 
             sre_count = 0
             for item in items:
@@ -303,15 +306,15 @@ class GoogleCloudSREScraper(SREScraper):
                     sre_count += 1
 
                 except Exception as e:
-                    print(f"  [Google Cloud SRE] Makale isleme hatasi: {e}")
+                    log.warning(f"  [Google Cloud SRE] Makale isleme hatasi: {e}")
                     continue
 
-            print(f"  [Google Cloud SRE] {sre_count} SRE makalesi filtrelendi")
+            log.info(f"  [Google Cloud SRE] {sre_count} SRE makalesi filtrelendi")
 
         except Exception as e:
-            print(f"[Google Cloud SRE] RSS hatasi: {e}")
+            log.warning(f"[Google Cloud SRE] RSS hatasi: {e}")
 
-        print(f"[Google Cloud SRE] {len(entries)} haber bulundu")
+        log.info(f"[Google Cloud SRE] {len(entries)} haber bulundu")
         return entries
 
 
@@ -327,7 +330,7 @@ class DZoneDevOpsScraper(SREScraper):
 
     def fetch_entries(self, days: int = 30) -> List[Dict]:
         """DZone DevOps RSS'ten haberleri ceker"""
-        print(f"[DZone DevOps] Son {days} gunun haberleri cekiliyor (RSS)...")
+        log.info(f"[DZone DevOps] Son {days} gunun haberleri cekiliyor (RSS)...")
 
         entries = []
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -338,7 +341,7 @@ class DZoneDevOpsScraper(SREScraper):
 
             soup = BeautifulSoup(response.content, 'xml')
             items = soup.find_all('item')
-            print(f"  [DZone DevOps] RSS'te {len(items)} makale bulundu")
+            log.info(f"  [DZone DevOps] RSS'te {len(items)} makale bulundu")
 
             for item in items:
                 try:
@@ -371,13 +374,13 @@ class DZoneDevOpsScraper(SREScraper):
                         'source': 'DZone DevOps',
                 })
                 except Exception as e:
-                    print(f"  [DZone DevOps] Makale isleme hatasi: {e}")
+                    log.warning(f"  [DZone DevOps] Makale isleme hatasi: {e}")
                     continue
 
         except Exception as e:
-            print(f"[DZone DevOps] RSS hatasi: {e}")
+            log.warning(f"[DZone DevOps] RSS hatasi: {e}")
 
-        print(f"[DZone DevOps] {len(entries)} haber bulundu")
+        log.info(f"[DZone DevOps] {len(entries)} haber bulundu")
         return entries
 
 
@@ -394,22 +397,24 @@ class MultiSREScraper(SREScraper):
         self.pagerduty_eng = PagerDutyEngScraper()
         self.google_cloud_sre = GoogleCloudSREScraper()
         self.dzone_devops = DZoneDevOpsScraper()
-
-    def fetch_all(self, days: int = 30, selected_sources: list = None, max_total: int = 30) -> List[Dict]:
-        """Tum kaynaklardan SRE haberi ceker"""
-        all_entries = []
-
-        print("=" * 80)
-        print(f"TUM SRE KAYNAKLARINDAN HABER CEKILIYOR ({days} gun, maks {max_total})")
-        print("=" * 80)
-
-        sources = {
+        # Kayit defteri news/kaynaklar.py tarafindan da okunur (kaynak sagligi)
+        self.sources = {
             'SRE Weekly': self.sre_weekly,
             'InfoQ SRE': self.infoq_sre,
             'PagerDuty Eng': self.pagerduty_eng,
             'Google Cloud SRE': self.google_cloud_sre,
             'DZone DevOps': self.dzone_devops,
         }
+
+    def fetch_all(self, days: int = 30, selected_sources: list = None, max_total: int = 30) -> List[Dict]:
+        """Tum kaynaklardan SRE haberi ceker"""
+        all_entries = []
+
+        log.info("=" * 80)
+        log.info(f"TUM SRE KAYNAKLARINDAN HABER CEKILIYOR ({days} gun, maks {max_total})")
+        log.info("=" * 80)
+
+        sources = dict(self.sources)
 
         if selected_sources:
             sources = {k: v for k, v in sources.items() if k in selected_sources}
@@ -421,12 +426,12 @@ class MultiSREScraper(SREScraper):
                 entries = scraper.fetch_entries(days=days)
                 if len(entries) > per_source_limit:
                     entries = entries[:per_source_limit]
-                    print(f"  -> {source_name}: {per_source_limit} haber (sinirlandirildi)")
+                    log.info(f"  -> {source_name}: {per_source_limit} haber (sinirlandirildi)")
                 else:
-                    print(f"  -> {source_name}: {len(entries)} haber")
+                    log.info(f"  -> {source_name}: {len(entries)} haber")
                 all_entries.extend(entries)
             except Exception as e:
-                print(f"  -> {source_name}: HATA - {e}")
+                log.warning(f"  -> {source_name}: HATA - {e}")
 
         # Tarihe gore sirala
         all_entries.sort(key=lambda x: x['date'], reverse=True)
@@ -443,9 +448,9 @@ class MultiSREScraper(SREScraper):
                 seen_links.add(entry['link'])
                 unique.append(entry)
 
-        print("=" * 80)
-        print(f"TOPLAM {len(unique)} SRE HABERI CEKILDI")
-        print("=" * 80)
+        log.info("=" * 80)
+        log.info(f"TOPLAM {len(unique)} SRE HABERI CEKILDI")
+        log.info("=" * 80)
 
         return unique
 
@@ -453,12 +458,12 @@ class MultiSREScraper(SREScraper):
         """SRE haberlerini Turkceye cevirir"""
         total = len(entries)
 
-        print(f"\nSRE haberleri cevriliyor ({total} adet)...")
+        log.info(f"\nSRE haberleri cevriliyor ({total} adet)...")
 
         for i, entry in enumerate(entries, 1):
             try:
                 if i % 10 == 0:
-                    print(f"  Cevriliyor: {i}/{total}")
+                    log.info(f"  Cevriliyor: {i}/{total}")
 
                 # Baslik cevirisi
                 try:
@@ -479,7 +484,7 @@ class MultiSREScraper(SREScraper):
                     'source': entry['source'],
                 }
             except Exception as e:
-                print(f"  SRE haber isleme hatasi: {e}")
+                log.warning(f"  SRE haber isleme hatasi: {e}")
                 yield {
                     'original_title': entry['title'],
                     'turkish_title': entry['title'],

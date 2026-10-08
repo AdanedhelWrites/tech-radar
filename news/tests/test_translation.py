@@ -183,6 +183,8 @@ class FetchAINewsTaskTranslationTests(TranslationGateMixin, TestCase):
             self.raw('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'farmers'),
         ])
 
+        # by_source kaynak sagligi sayaci (2026-10-08); burada ceviri isaretleme sinanir
+        result.pop('by_source', None)
         self.assertEqual(result, {'success': True, 'count': 2,
                                    'fetched_count': 2, 'translation_failures': 2})
         failed = AINewsEntry.objects.get(link='https://example.com/robots')

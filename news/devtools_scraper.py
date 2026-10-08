@@ -28,6 +28,9 @@ from email.utils import parsedate_to_datetime
 
 from news.translation_utils import translate_text, translate_long_text
 from news.base_scraper import BaseRSSScraper
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class DevToolsScraper(BaseRSSScraper):
@@ -88,14 +91,14 @@ class MinIOScraper(DevToolsScraper):
     API_URL = "https://api.github.com/repos/minio/minio/releases"
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[MinIO] Son {days} gunun guncellemeleri cekiliyor...")
+        log.info(f"[MinIO] Son {days} gunun guncellemeleri cekiliyor...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
             resp = self.session.get(self.API_URL, params={'per_page': 15}, timeout=20)
             resp.raise_for_status()
             releases = resp.json()
-            print(f"  [MinIO] {len(releases)} release bulundu")
+            log.info(f"  [MinIO] {len(releases)} release bulundu")
             for rel in releases:
                 pub_date = self._parse_rss_date(rel.get('published_at', ''))
                 if pub_date and pub_date.replace(tzinfo=None) < cutoff:
@@ -114,8 +117,8 @@ class MinIOScraper(DevToolsScraper):
                     'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[MinIO] Hata: {e}")
-        print(f"[MinIO] {len(entries)} guncelleme bulundu")
+            log.warning(f"[MinIO] Hata: {e}")
+        log.info(f"[MinIO] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -128,7 +131,7 @@ class SeqScraper(DevToolsScraper):
     FEED_URL = "https://blog.datalust.co/rss/"
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[Seq] Son {days} gunun guncellemeleri cekiliyor (RSS)...")
+        log.info(f"[Seq] Son {days} gunun guncellemeleri cekiliyor (RSS)...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
@@ -136,7 +139,7 @@ class SeqScraper(DevToolsScraper):
             resp.raise_for_status()
             soup = BeautifulSoup(resp.content, 'xml')
             items = soup.find_all('item')
-            print(f"  [Seq] RSS'te {len(items)} paylasim bulundu")
+            log.info(f"  [Seq] RSS'te {len(items)} paylasim bulundu")
             for item in items:
                 title = item.find('title')
                 title_text = title.get_text(strip=True) if title else ''
@@ -179,8 +182,8 @@ class SeqScraper(DevToolsScraper):
                     'entry_type': 'release' if 'release' in title_lower else 'blog',
                 })
         except Exception as e:
-            print(f"[Seq] RSS hatasi: {e}")
-        print(f"[Seq] {len(entries)} guncelleme bulundu")
+            log.warning(f"[Seq] RSS hatasi: {e}")
+        log.info(f"[Seq] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -193,7 +196,7 @@ class CephScraper(DevToolsScraper):
     ATOM_URL = "https://github.com/ceph/ceph/releases.atom"
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[Ceph] Son {days} gunun guncellemeleri cekiliyor (Atom)...")
+        log.info(f"[Ceph] Son {days} gunun guncellemeleri cekiliyor (Atom)...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
@@ -201,7 +204,7 @@ class CephScraper(DevToolsScraper):
             resp.raise_for_status()
             soup = BeautifulSoup(resp.content, 'xml')
             atom_entries = soup.find_all('entry')
-            print(f"  [Ceph] Atom feed'de {len(atom_entries)} release bulundu")
+            log.info(f"  [Ceph] Atom feed'de {len(atom_entries)} release bulundu")
             for entry in atom_entries:
                 title_tag = entry.find('title')
                 title = title_tag.get_text(strip=True) if title_tag else ''
@@ -226,8 +229,8 @@ class CephScraper(DevToolsScraper):
                     'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[Ceph] Atom hatasi: {e}")
-        print(f"[Ceph] {len(entries)} guncelleme bulundu")
+            log.warning(f"[Ceph] Atom hatasi: {e}")
+        log.info(f"[Ceph] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -279,15 +282,15 @@ class MongoDBScraper(DevToolsScraper):
                         parts.append(sib.get_text(' ', strip=True))
                 text = re.sub(r'\n{3,}', '\n\n', '\n'.join(p for p in parts if p))
                 if len(text) > 50:
-                    print(f"    [MongoDB] {version} icin {len(text)} karakter surum notu bulundu")
+                    log.info(f"    [MongoDB] {version} icin {len(text)} karakter surum notu bulundu")
                     return text
                 return ''
         except Exception as e:
-            print(f"    [MongoDB] Surum notu cekilemedi ({version}): {e}")
+            log.warning(f"    [MongoDB] Surum notu cekilemedi ({version}): {e}")
         return ''
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[MongoDB] Son {days} gunun surumleri cekiliyor (GitHub tags Atom)...")
+        log.info(f"[MongoDB] Son {days} gunun surumleri cekiliyor (GitHub tags Atom)...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
@@ -295,7 +298,7 @@ class MongoDBScraper(DevToolsScraper):
             resp.raise_for_status()
             soup = BeautifulSoup(resp.content, 'xml')
             atom_entries = soup.find_all('entry')
-            print(f"  [MongoDB] Atom feed'de {len(atom_entries)} tag bulundu")
+            log.info(f"  [MongoDB] Atom feed'de {len(atom_entries)} tag bulundu")
             for entry in atom_entries:
                 title_tag = entry.find('title')
                 tag = title_tag.get_text(strip=True) if title_tag else ''
@@ -326,8 +329,8 @@ class MongoDBScraper(DevToolsScraper):
                     'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[MongoDB] Atom hatasi: {e}")
-        print(f"[MongoDB] {len(entries)} guncelleme bulundu")
+            log.warning(f"[MongoDB] Atom hatasi: {e}")
+        log.info(f"[MongoDB] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -340,7 +343,7 @@ class PostgreSQLScraper(DevToolsScraper):
     FEED_URL = "https://www.postgresql.org/news.rss"
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[PostgreSQL] Son {days} gunun guncellemeleri cekiliyor (RSS)...")
+        log.info(f"[PostgreSQL] Son {days} gunun guncellemeleri cekiliyor (RSS)...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
@@ -348,7 +351,7 @@ class PostgreSQLScraper(DevToolsScraper):
             resp.raise_for_status()
             soup = BeautifulSoup(resp.content, 'xml')
             items = soup.find_all('item')
-            print(f"  [PostgreSQL] RSS'te {len(items)} haber bulundu")
+            log.info(f"  [PostgreSQL] RSS'te {len(items)} haber bulundu")
             for item in items:
                 title = item.find('title')
                 title_text = title.get_text(strip=True) if title else ''
@@ -377,8 +380,8 @@ class PostgreSQLScraper(DevToolsScraper):
                     'entry_type': entry_type,
                 })
         except Exception as e:
-            print(f"[PostgreSQL] RSS hatasi: {e}")
-        print(f"[PostgreSQL] {len(entries)} guncelleme bulundu")
+            log.warning(f"[PostgreSQL] RSS hatasi: {e}")
+        log.info(f"[PostgreSQL] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -391,14 +394,14 @@ class RabbitMQScraper(DevToolsScraper):
     API_URL = "https://api.github.com/repos/rabbitmq/rabbitmq-server/releases"
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[RabbitMQ] Son {days} gunun guncellemeleri cekiliyor...")
+        log.info(f"[RabbitMQ] Son {days} gunun guncellemeleri cekiliyor...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
             resp = self.session.get(self.API_URL, params={'per_page': 15}, timeout=20)
             resp.raise_for_status()
             releases = resp.json()
-            print(f"  [RabbitMQ] {len(releases)} release bulundu")
+            log.info(f"  [RabbitMQ] {len(releases)} release bulundu")
             for rel in releases:
                 if rel.get('prerelease', False):
                     continue
@@ -420,8 +423,8 @@ class RabbitMQScraper(DevToolsScraper):
                     'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[RabbitMQ] Hata: {e}")
-        print(f"[RabbitMQ] {len(entries)} guncelleme bulundu")
+            log.warning(f"[RabbitMQ] Hata: {e}")
+        log.info(f"[RabbitMQ] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -488,15 +491,15 @@ class ElasticScraper(DevToolsScraper):
             result = '\n'.join(content_parts)
             result = re.sub(r'\n{3,}', '\n\n', result)
             if len(result) > 100:
-                print(f"    [Elastic] {version} icin {len(result)} karakter release notes bulundu")
+                log.info(f"    [Elastic] {version} icin {len(result)} karakter release notes bulundu")
                 return result
             return ""
         except Exception as e:
-            print(f"    [Elastic] Release notes cekilemedi ({version_tag}): {e}")
+            log.warning(f"    [Elastic] Release notes cekilemedi ({version_tag}): {e}")
             return ""
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[Elastic] Son {days} gunun guncellemeleri cekiliyor...")
+        log.info(f"[Elastic] Son {days} gunun guncellemeleri cekiliyor...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
 
@@ -505,7 +508,7 @@ class ElasticScraper(DevToolsScraper):
             resp = self.session.get(self.ES_API, params={'per_page': 10}, timeout=20)
             resp.raise_for_status()
             releases = resp.json()
-            print(f"  [Elasticsearch] {len(releases)} release bulundu")
+            log.info(f"  [Elasticsearch] {len(releases)} release bulundu")
             for rel in releases:
                 pub_date = self._parse_rss_date(rel.get('published_at', ''))
                 if pub_date and pub_date.replace(tzinfo=None) < cutoff:
@@ -535,7 +538,7 @@ class ElasticScraper(DevToolsScraper):
                     'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[Elasticsearch] Hata: {e}")
+            log.warning(f"[Elasticsearch] Hata: {e}")
 
         # Kibana releases (sadece ES'te olmayanlari ekle)
         es_versions = {e['version'] for e in entries}
@@ -543,7 +546,7 @@ class ElasticScraper(DevToolsScraper):
             resp = self.session.get(self.KIBANA_API, params={'per_page': 10}, timeout=20)
             resp.raise_for_status()
             releases = resp.json()
-            print(f"  [Kibana] {len(releases)} release bulundu")
+            log.info(f"  [Kibana] {len(releases)} release bulundu")
             for rel in releases:
                 tag = rel.get('tag_name', '')
                 if tag in es_versions:
@@ -573,9 +576,9 @@ class ElasticScraper(DevToolsScraper):
                     'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[Kibana] Hata: {e}")
+            log.warning(f"[Kibana] Hata: {e}")
 
-        print(f"[Elastic] {len(entries)} guncelleme bulundu")
+        log.info(f"[Elastic] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -633,15 +636,15 @@ class RedisScraper(DevToolsScraper):
             result = re.sub(r'\n{3,}', '\n\n', result)
 
             if len(result) > 200:
-                print(f"    [Redis] Tam makale cekildi: {len(result)} karakter")
+                log.info(f"    [Redis] Tam makale cekildi: {len(result)} karakter")
                 return result
             return ""
         except Exception as e:
-            print(f"    [Redis] Makale cekilemedi: {e}")
+            log.warning(f"    [Redis] Makale cekilemedi: {e}")
             return ""
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[Redis] Son {days} gunun guncellemeleri cekiliyor (RSS + tam icerik)...")
+        log.info(f"[Redis] Son {days} gunun guncellemeleri cekiliyor (RSS + tam icerik)...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
@@ -649,7 +652,7 @@ class RedisScraper(DevToolsScraper):
             resp.raise_for_status()
             soup = BeautifulSoup(resp.content, 'xml')
             items = soup.find_all('item')
-            print(f"  [Redis] RSS'te {len(items)} paylasim bulundu")
+            log.info(f"  [Redis] RSS'te {len(items)} paylasim bulundu")
             for item in items:
                 title = item.find('title')
                 title_text = title.get_text(strip=True) if title else ''
@@ -691,8 +694,8 @@ class RedisScraper(DevToolsScraper):
                     'entry_type': 'release' if 'announcing' in title_lower or 'release' in title_lower else 'blog',
                 })
         except Exception as e:
-            print(f"[Redis] RSS hatasi: {e}")
-        print(f"[Redis] {len(entries)} guncelleme bulundu")
+            log.warning(f"[Redis] RSS hatasi: {e}")
+        log.info(f"[Redis] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -715,10 +718,10 @@ class MoodleScraper(DevToolsScraper):
                 return ""
             major_minor = f"{parts[0]}.{parts[1]}"
             url = f"https://moodledev.io/general/releases/{major_minor}/{version}"
-            print(f"    [Moodle] Release notes cekiliyor: {url}")
+            log.info(f"    [Moodle] Release notes cekiliyor: {url}")
             resp = self.session.get(url, timeout=20)
             if not resp.ok:
-                print(f"    [Moodle] Sayfa acilamadi: HTTP {resp.status_code}")
+                log.warning(f"    [Moodle] Sayfa acilamadi: HTTP {resp.status_code}")
                 return ""
             soup = BeautifulSoup(resp.content, 'html.parser')
             # Ana icerik alani
@@ -756,15 +759,15 @@ class MoodleScraper(DevToolsScraper):
             result = '\n'.join(clean_lines)
             result = re.sub(r'\n{3,}', '\n\n', result)
             if len(result) > 50:
-                print(f"    [Moodle] {version} icin {len(result)} karakter release notes bulundu")
+                log.info(f"    [Moodle] {version} icin {len(result)} karakter release notes bulundu")
                 return result
             return ""
         except Exception as e:
-            print(f"    [Moodle] Release notes cekilemedi ({version}): {e}")
+            log.warning(f"    [Moodle] Release notes cekilemedi ({version}): {e}")
             return ""
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[Moodle] Son {days} gunun guncellemeleri cekiliyor...")
+        log.info(f"[Moodle] Son {days} gunun guncellemeleri cekiliyor...")
         entries = []
 
         # GitHub Tags — son stabil versiyonlar
@@ -772,7 +775,7 @@ class MoodleScraper(DevToolsScraper):
             resp = self.session.get(self.TAGS_API, params={'per_page': 20}, timeout=20)
             resp.raise_for_status()
             tags = resp.json()
-            print(f"  [Moodle] {len(tags)} tag bulundu")
+            log.info(f"  [Moodle] {len(tags)} tag bulundu")
 
             stable_tags = []
             for tag in tags:
@@ -825,9 +828,9 @@ class MoodleScraper(DevToolsScraper):
                     'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[Moodle] Tags hatasi: {e}")
+            log.warning(f"[Moodle] Tags hatasi: {e}")
 
-        print(f"[Moodle] {len(entries)} guncelleme bulundu")
+        log.info(f"[Moodle] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -860,14 +863,14 @@ class GitHubReleasesScraper(DevToolsScraper):
         return f"{self.source} {ad}"
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[{self.source}] Son {days} gunun guncellemeleri cekiliyor (GitHub Releases)...")
+        log.info(f"[{self.source}] Son {days} gunun guncellemeleri cekiliyor (GitHub Releases)...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
             resp = self._github_get(self.api_url, params={'per_page': self.per_page}, timeout=20)
             resp.raise_for_status()
             releases = resp.json()
-            print(f"  [{self.source}] {len(releases)} release bulundu")
+            log.info(f"  [{self.source}] {len(releases)} release bulundu")
             for rel in releases:
                 tag = rel.get('tag_name', '') or ''
                 if rel.get('prerelease') or rel.get('draft') or not self.tag_deseni.match(tag):
@@ -888,8 +891,8 @@ class GitHubReleasesScraper(DevToolsScraper):
                     'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[{self.source}] Hata: {e}")
-        print(f"[{self.source}] {len(entries)} guncelleme bulundu")
+            log.warning(f"[{self.source}] Hata: {e}")
+        log.info(f"[{self.source}] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -906,7 +909,7 @@ class GitLabScraper(DevToolsScraper):
     FEED_URL = "https://docs.gitlab.com/releases/all-releases.xml"
 
     def fetch_entries(self, days: int = 60) -> List[Dict]:
-        print(f"[GitLab] Son {days} gunun surumleri cekiliyor (Atom)...")
+        log.info(f"[GitLab] Son {days} gunun surumleri cekiliyor (Atom)...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
@@ -914,7 +917,7 @@ class GitLabScraper(DevToolsScraper):
             resp.raise_for_status()
             soup = BeautifulSoup(resp.content, 'xml')
             atom_entries = soup.find_all('entry')
-            print(f"  [GitLab] Atom feed'de {len(atom_entries)} surum bulundu")
+            log.info(f"  [GitLab] Atom feed'de {len(atom_entries)} surum bulundu")
             for entry in atom_entries:
                 title_tag = entry.find('title')
                 title = title_tag.get_text(strip=True) if title_tag else ''
@@ -942,8 +945,8 @@ class GitLabScraper(DevToolsScraper):
                     'entry_type': 'release',
                 })
         except Exception as e:
-            print(f"[GitLab] Atom hatasi: {e}")
-        print(f"[GitLab] {len(entries)} guncelleme bulundu")
+            log.warning(f"[GitLab] Atom hatasi: {e}")
+        log.info(f"[GitLab] {len(entries)} guncelleme bulundu")
         return entries
 
 
@@ -988,9 +991,9 @@ class MultiDevToolsScraper(DevToolsScraper):
         # yayinlayan Keycloak/GitLab'i tarih siralamasinda dusurmesine yol acardi.
         max_total = max(max_total, 3 * len(sources))
 
-        print("=" * 80)
-        print(f"TUM DEVTOOLS KAYNAKLARINDAN GUNCELLEME CEKILIYOR ({days} gun, maks {max_total})")
-        print("=" * 80)
+        log.info("=" * 80)
+        log.info(f"TUM DEVTOOLS KAYNAKLARINDAN GUNCELLEME CEKILIYOR ({days} gun, maks {max_total})")
+        log.info("=" * 80)
 
         per_source_limit = max(5, max_total // max(len(sources), 1))
 
@@ -999,12 +1002,12 @@ class MultiDevToolsScraper(DevToolsScraper):
                 entries = scraper.fetch_entries(days=days)
                 if len(entries) > per_source_limit:
                     entries = entries[:per_source_limit]
-                    print(f"  -> {source_name}: {per_source_limit} guncelleme (sinirlandirildi)")
+                    log.info(f"  -> {source_name}: {per_source_limit} guncelleme (sinirlandirildi)")
                 else:
-                    print(f"  -> {source_name}: {len(entries)} guncelleme")
+                    log.info(f"  -> {source_name}: {len(entries)} guncelleme")
                 all_entries.extend(entries)
             except Exception as e:
-                print(f"  -> {source_name}: HATA - {e}")
+                log.warning(f"  -> {source_name}: HATA - {e}")
 
         all_entries.sort(key=lambda x: x['date'], reverse=True)
 
@@ -1019,20 +1022,20 @@ class MultiDevToolsScraper(DevToolsScraper):
                 seen_links.add(entry['link'])
                 unique.append(entry)
 
-        print("=" * 80)
-        print(f"TOPLAM {len(unique)} DEVTOOLS GUNCELLEMESI CEKILDI")
-        print("=" * 80)
+        log.info("=" * 80)
+        log.info(f"TOPLAM {len(unique)} DEVTOOLS GUNCELLEMESI CEKILDI")
+        log.info("=" * 80)
         return unique
 
     def process_entries(self, entries: List[Dict]) -> List[Dict]:
         """DevTools haberlerini Turkceye cevirir"""
         total = len(entries)
-        print(f"\nDevTools guncellemeleri cevriliyor ({total} adet)...")
+        log.info(f"\nDevTools guncellemeleri cevriliyor ({total} adet)...")
 
         for i, entry in enumerate(entries, 1):
             try:
                 if i % 10 == 0:
-                    print(f"  Cevriliyor: {i}/{total}")
+                    log.info(f"  Cevriliyor: {i}/{total}")
                 try:
                     translated_title = translate_text(entry['title'])
                 except Exception:
@@ -1050,7 +1053,7 @@ class MultiDevToolsScraper(DevToolsScraper):
                     'entry_type': entry.get('entry_type', 'release'),
                 }
             except Exception as e:
-                print(f"  DevTools haber isleme hatasi: {e}")
+                log.warning(f"  DevTools haber isleme hatasi: {e}")
                 yield {
                     'original_title': entry['title'],
                     'turkish_title': entry['title'],

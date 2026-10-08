@@ -18,6 +18,9 @@ import requests
 from django.conf import settings
 
 from . import translation_utils as tu
+import logging
+
+log = logging.getLogger(__name__)
 
 # LibreTranslate uzun, noktalamasi zayif bolumlerde yer tutucu dusuruyor.
 # Denemede (60 gercek metin) <=160 karakterlik parcalar kaybi 14'ten 4'e indirdi.
@@ -95,7 +98,7 @@ class LibreTranslateProvider:
         return bool(self._adres()) and not _get_lt_gate().cooldown_active()
 
     def _devre_kesici(self, sebep: str) -> None:
-        print(f"  [Ceviri] LibreTranslate erisilemiyor ({sebep}); "
+        log.warning(f"  [Ceviri] LibreTranslate erisilemiyor ({sebep}); "
               f"{LIBRETRANSLATE_COOLDOWN} sn atlanacak.")
         _get_lt_gate().start_cooldown(LIBRETRANSLATE_COOLDOWN)
 
@@ -123,16 +126,16 @@ class LibreTranslateProvider:
             return None
         if yanit.status_code != 200:
             # Istek sorunu; servis ayakta, devre kesici acilmaz
-            print(f"  [Ceviri] LibreTranslate istegi reddetti (HTTP {yanit.status_code}).")
+            log.warning(f"  [Ceviri] LibreTranslate istegi reddetti (HTTP {yanit.status_code}).")
             return None
 
         try:
             cevrilen = yanit.json()['translatedText']
         except (ValueError, KeyError, TypeError):
-            print("  [Ceviri] LibreTranslate gecersiz yanit dondurdu.")
+            log.warning("  [Ceviri] LibreTranslate gecersiz yanit dondurdu.")
             return None
         if not isinstance(cevrilen, list) or len(cevrilen) != len(parcalar):
-            print("  [Ceviri] LibreTranslate parca sayisi uyusmadi.")
+            log.warning("  [Ceviri] LibreTranslate parca sayisi uyusmadi.")
             return None
         return birlestir(satirlar, cevrilen)
 

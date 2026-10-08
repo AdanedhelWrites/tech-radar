@@ -12,6 +12,9 @@ from django.utils import timezone
 from .models import (
     AINewsEntry, CVEEntry, DevToolsEntry, FetchRun, KubernetesEntry, NewsArticle, SREEntry,
 )
+import logging
+
+log = logging.getLogger(__name__)
 
 TASK_BOLUMLERI = {
     'news.tasks.fetch_news_task': 'news',
@@ -64,7 +67,7 @@ def tur_basladi(sender=None, task_id=None, **kwargs):
         kayit = FetchRun.objects.create(section=bolum, trigger=_tetikleyici(sender), status='running')
         _acik_turlar[task_id] = kayit.id
     except Exception as hata:
-        print(f'  [FetchRun] Satir acilamadi ({task_id}): {hata}')
+        log.warning(f'  [FetchRun] Satir acilamadi ({task_id}): {hata}')
 
 
 def _kapat(task_id, **alanlar):
@@ -103,10 +106,11 @@ def tur_bitti(sender=None, task_id=None, retval=None, **kwargs):
                 'fetched_count': retval.get('fetched_count', 0),
                 'translation_failures': retval.get('translation_failures', 0),
                 'total_after': model.objects.count(),
+                'by_source': retval.get('by_source') or {},
             }
         _kapat(task_id, status='failure' if hata_var else 'success', error=hata, **sayaclar)
     except Exception as hata:
-        print(f'  [FetchRun] Satir kapatilamadi ({task_id}): {hata}')
+        log.warning(f'  [FetchRun] Satir kapatilamadi ({task_id}): {hata}')
 
 
 @task_failure.connect
@@ -116,4 +120,4 @@ def tur_coktu(sender=None, task_id=None, exception=None, **kwargs):
             return
         _kapat(task_id, status='failure', error=f'{type(exception).__name__}: {exception}'[:HATA_TAVANI])
     except Exception as hata:
-        print(f'  [FetchRun] Cokme yazilamadi ({task_id}): {hata}')
+        log.warning(f'  [FetchRun] Cokme yazilamadi ({task_id}): {hata}')
