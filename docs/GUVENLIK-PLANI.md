@@ -1,6 +1,6 @@
 # Güvenlik Hattı ve Bekleyen İşler Planı
 
-> Son güncelleme: 2026-10-08 (P3 ve P4 tamamlandı; kalan yalnız P5). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
+> Son güncelleme: 2026-10-08 (P3, P4 ve P5-a tamamlandı; kalan P5-b/c). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
 > Bir iş bitince kutusunu işaretle ve ilgili PR numarasını yanına yaz.
 
 ## 1. Hatlar ne zaman çalışır?
@@ -11,7 +11,7 @@
 | `Dependency Review` | PR | **Kapı** | PR, HIGH/CRITICAL zafiyetli bir paket getiriyor |
 | `gitleaks` | PR, `main` push, Pazartesi | PR'da **kapı**, diğerlerinde rapor | PR'da: yeni secret commit'lenmiş. Push/schedule'da: araç bozuk |
 | `trivy` | PR, `main` push, Çarşamba | Rapor | Bulgu değil, **araç** bozuk: DB bayat ya da paketler taranmadı |
-| `DAST (ZAP baseline)` | PR, `main` push, Pazartesi | Rapor | Uygulama ayağa kalkmadı ya da ZAP hedefe ulaşamadı |
+| `DAST (ZAP baseline)` | PR, `main` push, Pazartesi | Rapor (SARIF → Code scanning, kategori `zap-baseline`) | Uygulama ayağa kalkmadı, ZAP hedefe ulaşamadı ya da SARIF üretilemedi |
 | `CodeQL Advanced` | PR, `main` push, Pazar | Rapor | Analiz çalışmadı |
 | `zizmor` | `.github/` değişince, Perşembe | Rapor | Workflow denetimi çalışmadı |
 | `OpenSSF Scorecard` | `main` push, Salı | Rapor | Skor üretilemedi |
@@ -27,14 +27,14 @@ Hat sadece taramanın kendisi yapılamadıysa kırmızı olur. Bulgu yok diye "b
 | Merge sonrası kırmızı olan hat | **Actions** sekmesi (ayrıca GitHub bildirimi / mail gelir) |
 | Kod ve imaj zafiyetleri, secret'lar, workflow sorunları | **Security → Code scanning** (Tool filtresi: Trivy, CodeQL, gitleaks, zizmor, Scorecard) |
 | Bağımlılık CVE'leri | **Security → Dependabot** |
-| ZAP (DAST) bulguları | Actions → `DAST (ZAP baseline)` koşusu → **Summary** tablosu + `zap-baseline` artefaktı (HTML rapor) |
+| ZAP (DAST) bulguları | **Security → Code scanning** (Tool: OWASP ZAP, kategori `zap-baseline`; konum sanal yol `dast/<url-yolu>`, tam URL mesajda; severity ZAP riskinden); ayrıca Actions → `DAST (ZAP baseline)` koşusu → **Summary** tablosu + `zap-baseline` artefaktı (HTML/JSON rapor) |
 | SBOM (CycloneDX) | Actions → `trivy` koşusu → `sbom-*` artefaktları |
 
 ### Haftalık kontrol rutini (~10 dk)
 1. **Actions:** Son 7 günde kırmızı koşu var mı? Varsa önce onu çöz, çünkü rapor hattı bozuksa bulgu listesi eksiktir.
 2. **Security → Dependabot:** Açık security PR'larına bak (bkz. §3).
 3. **Security → Code scanning:** Severity'e göre sırala; `critical` ve `high` olanları §4'teki P4 listesine ekle.
-4. **ZAP Summary:** `FAIL-NEW` sıfırdan büyükse issue aç.
+4. **ZAP:** Code scanning'de Tool = OWASP ZAP filtresiyle `warning`/`error` seviyesindekilere bak (Summary tablosu yedek).
 
 Terminalden tek liste halinde görmek istersen:
 
@@ -120,7 +120,7 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıy
   - `.gitleaksignore` **değiştirilmedi**: girdiler geçmiş commit'lere sabitli; silinirse geçmiş taraması yeniden kırmızı olur. (İlk plandaki "baseline'dan da silinmeli" maddesi bu yüzden geçersiz.)
 
 ### P5: Görünürlük
-- [ ] ZAP sonucunu SARIF'e çevirip Security sekmesine yükle; tek kontrol yeri Security olsun
+- [x] ZAP sonucunu SARIF'e çevirip Security sekmesine yükle; tek kontrol yeri Security olsun — `scripts/zap_sarif.py` (stdlib; alert tipi = kural, instance = sonuç, konum `dast/<url-yolu>` (Code Scanning `http` şemalı konum kabul etmiyor; tam URL mesajda), `security-severity` High 8.0 / Medium 5.0 / Low 3.0 / Info 1.0, kararlı `partialFingerprints`), 8 birim testi `news/tests/test_zap_sarif.py`; `upload-sarif` kategori `zap-baseline` (2026-10-08)
 - [ ] Haftalık güvenlik özeti: araç × severity tablosuyla GitHub Issue açan bir workflow
 - [ ] A5 (OpenAPI şeması) çıkınca `zaproxy/action-api-scan` ile `/api/v1/` tam taransın
 
@@ -134,3 +134,4 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıy
 - **2026-09-30:** PR #43 (Django 5.2.17) merge. P4 SECRET_KEY/ALLOWED_HOSTS koruması (superpowers/specs/2026-09-30-hizli-isler-design.md).
 - **2026-10-03:** Faz B: SQLite → paylaşılan yerel PostgreSQL geçişi (B1) ve Helm chart 2.0.0 yerel docker-desktop doğrulaması (B2, ADR-0007). CI'a chart sürüm/imaj etiket kapıları ve kubeconform eklendi; DAST PostgreSQL ile çalışır.
 - **2026-10-08:** Dependabot PR #46/#47/#48 (nginx ve node digest, actions grubu) merge. P4 Scorecard triajı: 9 gerekçeli dismiss + `source-map-js` düzeltmesi (`c05ac5a`). P3: `main-koruma` ruleset'ine PR zorunluluğu ve 5 zorunlu check (strict, bypass yok) eklendi; `main`'e doğrudan push kapandı.
+- **2026-10-08:** P5-a: ZAP baseline raporu SARIF'e çevrilip Security → Code scanning'e yükleniyor (`scripts/zap_sarif.py`, kategori `zap-baseline`).

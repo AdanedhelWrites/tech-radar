@@ -329,6 +329,7 @@ Frontend icin `frontend/` altinda `npm install && npm run dev` yeterlidir; `vite
 | `scripts/chart_surum_kontrol.sh <taban-ref>` | Chart dizini degistiyse `Chart.yaml version` artmis ve CHANGELOG girdisi var mi (CI kapisi) |
 | `scripts/imaj_etiket_kontrol.sh <render.yaml>` | Render'daki imajlar etiketli mi, `latest` yok mu, ucuncu taraf imajlar digest ile sabit mi (CI kapisi) |
 | `scripts/chart_etiket_kontrol.sh chart-<surum>` | `chart-*` etiketi `Chart.yaml` ile ayni mi (etiket push'unda CI kapisi) |
+| `scripts/zap_sarif.py <report_json.json> <cikti.sarif>` | ZAP baseline JSON raporunu SARIF 2.1.0'a cevirir (DAST is akisi Security sekmesine yukler) |
 
 ### Kod kurallari
 
@@ -581,7 +582,8 @@ cybersecurity_news/
 │   ├── helm_yerel_dogrulama.sh # Chart'i yalniz docker-desktop'ta dogrular (S1-S7)
 │   ├── chart_surum_kontrol.sh  # CI kapisi: chart degistiyse surum + CHANGELOG
 │   ├── imaj_etiket_kontrol.sh  # CI kapisi: render'da etiketsiz / latest imaj yok
-│   └── chart_etiket_kontrol.sh # CI kapisi: chart-<surum> etiketi Chart.yaml ile ayni
+│   ├── chart_etiket_kontrol.sh # CI kapisi: chart-<surum> etiketi Chart.yaml ile ayni
+│   └── zap_sarif.py            # ZAP JSON raporu -> SARIF (DAST bulgulari Security sekmesine)
 │
 ├── scraper_multi.py            # 5 siber guvenlik kaynagi scraper'i
 │
@@ -877,14 +879,14 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 | `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
 | `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |
 | `CodeQL Advanced` | PR, push, Pazar | Rapor | Python ve JavaScript statik analiz |
-| `DAST (ZAP baseline)` | PR, push, Pazartesi | Rapor | Uygulamayi PostgreSQL ile ayaga kaldirip OWASP ZAP baseline taramasi; HTML rapor artefakti |
+| `DAST (ZAP baseline)` | PR, push, Pazartesi | Rapor | Uygulamayi PostgreSQL ile ayaga kaldirip OWASP ZAP baseline taramasi; JSON rapor `scripts/zap_sarif.py` ile SARIF'e cevrilip Code scanning'e yuklenir (kategori `zap-baseline`); HTML rapor artefakti |
 | `zizmor` | `.github/` degisince, Persembe | Rapor | Workflow dosyalarinin guvenlik denetimi |
 | `OpenSSF Scorecard` | push, Sali | Rapor | Depo guvenlik puani |
 | `chart etiketi` | `chart-*` etiketi push'u | Kapi | Etiket `Chart.yaml version` ile ayni mi, CHANGELOG girdisi var mi |
 
 Dependabot pip, npm, Docker (digest) ve GitHub Actions bagimliliklarini haftalik gunceller; major surumler filtrelidir. Dependabot PR'i gelince: eski bir `main`'den acildiysa **Update branch** (ruleset `strict` oldugu icin zaten zorunlu), bes zorunlu check yesilse merge; `CI` kirmiziysa merge etme, planlanmis yukseltme listesine ekle. `main-koruma` ruleset'i PR'siz push'u, silmeyi ve force-push'u engeller.
 
-Bulgular nerede: kod ve imaj zafiyetleri, sirlar ve workflow sorunlari **Security → Code scanning**; bagimlilik CVE'leri **Security → Dependabot**; ZAP bulgulari ilgili Actions kosusunun Summary tablosu ve artefakti. Zafiyet bildirimi icin [SECURITY.md](SECURITY.md) (GitHub private vulnerability reporting; ilk yanit 7 gun).
+Bulgular nerede: kod ve imaj zafiyetleri, ZAP (DAST) bulgulari, sirlar ve workflow sorunlari **Security → Code scanning** (Tool filtresi); bagimlilik CVE'leri **Security → Dependabot**; ZAP'in HTML raporu ayrica ilgili Actions kosusunun artefaktinda. Zafiyet bildirimi icin [SECURITY.md](SECURITY.md) (GitHub private vulnerability reporting; ilk yanit 7 gun).
 
 Uygulama tarafindaki korumalar: `DEBUG=False` iken bos, ornek, `django-insecure` onekli veya 32 karakterden kisa `SECRET_KEY` ile uygulama acilmaz (`cybernews/ayar_dogrulama.py`); `DB_HOST` bossa yalniz `DEBUG=True` ile SQLite; veritabanini silen uclar admin oturumu ister; `/api/v1/` token + hiz siniri + paylasilan soguma; imajlar non-root, Kubernetes'te kok dosya sistemi salt okunur.
 
@@ -1019,7 +1021,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 
 Siraya konmus (GUVENLIK-PLANI; P3 ve P4 2026-10-08'de tamamlandi):
 
-- **P5** ZAP sonucunun SARIF olarak Security sekmesine yuklenmesi; haftalik guvenlik ozeti is akisi; `/api/v1/` icin ZAP API taramasi.
+- **P5** (kalan) haftalik guvenlik ozeti is akisi; `/api/v1/` icin ZAP API taramasi. ZAP SARIF yuklemesi 2026-10-08'de tamamlandi.
 
 Aday (henuz tasarlanmadi; kapsam notlari ADR-0002 ve B3 spec bolum 13):
 
