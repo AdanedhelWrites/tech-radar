@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from urllib.parse import urlsplit
 
 from news.translation_utils import translate_text, translate_long_text
-from news.base_scraper import BaseRSSScraper, kok_alan, link_guvenli
+from news.base_scraper import BaseRSSScraper, kok_alan, link_guvenli, oturum_kur
 import logging
 
 log = logging.getLogger(__name__)
@@ -29,8 +29,7 @@ class NewsSource(BaseRSSScraper):
     """Haber kaynagi icin abstract base class"""
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.session = oturum_kur({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',

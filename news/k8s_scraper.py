@@ -1,4 +1,4 @@
-from news.base_scraper import BaseRSSScraper, link_guvenli
+from news.base_scraper import BaseRSSScraper, link_guvenli, oturum_kur
 """
 Kubernetes Scraper Module
 kubernetes.io/blog, GitHub Releases, CNCF Blog kaynaklarindan
@@ -26,8 +26,7 @@ class K8sScraper(BaseRSSScraper):
     """Kubernetes Scraper temel sinifi"""
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.session = oturum_kur({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         })

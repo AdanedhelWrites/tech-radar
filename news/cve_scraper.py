@@ -13,7 +13,7 @@ from typing import List, Dict, Optional
 import time
 
 from news.translation_utils import translate_text, translate_long_text
-from news.base_scraper import BaseRSSScraper
+from news.base_scraper import BaseRSSScraper, oturum_kur
 import logging
 
 log = logging.getLogger(__name__)
@@ -25,8 +25,7 @@ class CVEScraper(BaseRSSScraper):
     NVD_API = "https://services.nvd.nist.gov/"
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.session = oturum_kur({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
 

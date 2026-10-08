@@ -1,5 +1,7 @@
 import ipaddress
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import re
@@ -9,6 +11,32 @@ from urllib.parse import urlsplit
 import logging
 
 log = logging.getLogger(__name__)
+
+def oturum_kur(headers: Optional[Dict[str, str]] = None) -> requests.Session:
+    """Yeniden denemeli HTTP oturumu (2026-10-08). Tum scraper tabanlari bunu kullanir.
+
+    Onceden gecici bir 503 ya da baglanti kopmasi kaynagi o tur bos birakiyordu ve
+    FetchRun bunu "success" sayiyordu. Simdi: 2 ek deneme, ussel bekleme (1, 2 sn),
+    429/5xx'te Retry-After basligina uyulur, yalniz GET/HEAD. Denemeler bitince son
+    yanit DONER (raise_on_status=False): scraper'lardaki raise_for_status eskisi gibi
+    calisir, davranis degismez.
+    """
+    oturum = requests.Session()
+    yeniden = Retry(
+        total=2, connect=2, read=2, status=2,
+        backoff_factor=1,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({'GET', 'HEAD'}),
+        respect_retry_after_header=True,
+        raise_on_status=False,
+    )
+    adaptor = HTTPAdapter(max_retries=yeniden)
+    oturum.mount('https://', adaptor)
+    oturum.mount('http://', adaptor)
+    if headers:
+        oturum.headers.update(headers)
+    return oturum
+
 
 def kok_alan(host: str) -> str:
     """Kayitli kok alan yaklasimi: son iki etiket (api.theregister.com -> theregister.com)."""
@@ -53,8 +81,7 @@ class BaseRSSScraper:
     _aktif_kok: Optional[str] = None
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.session = oturum_kur({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         })
 
