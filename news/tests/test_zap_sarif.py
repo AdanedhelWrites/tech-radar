@@ -193,6 +193,33 @@ class ZapSarifTests(SimpleTestCase):
         self.assertEqual(uriler['zap/10021'], 'dast/api/v1/cve/')
         self.assertEqual(uriler['zap/10015'], 'dast/')
 
+    def test_ignore_kurallari_sarife_girmez(self):
+        # ZAP'in rules.tsv'si yalniz konsol ozetini etkiler; JSON rapor IGNORE'lari da tasir.
+        # Donusturucu ayni dosyayi okur: IGNORE eklentileri (alertRef on eki dahil) atlanir.
+        rapor = json.loads(json.dumps(ORNEK_RAPOR))
+        rapor['site'][0]['alerts'].append({
+            "pluginid": "90005", "alertRef": "90005-2", "name": "Sec-Fetch-Mode Header is Missing",
+            "riskcode": "1", "confidence": "2", "riskdesc": "Low (Medium)", "desc": "",
+            "instances": [{"uri": "http://localhost:8000/", "method": "GET", "param": "Sec-Fetch-Mode"}],
+            "count": "1", "solution": "", "otherinfo": "", "reference": "", "cweid": "", "wascid": "", "sourceid": "3"})
+        with tempfile.TemporaryDirectory() as d:
+            kurallar = os.path.join(d, 'rules.tsv')
+            with open(kurallar, 'w', encoding='utf-8') as f:
+                f.write("# yorum\n\n90005\tIGNORE\t(Sec-Fetch)\n10021\tIGNORE\t(nosniff)\n10038\tWARN\t(csp kalir)\n")
+            yok_say = self.m.ignore_eklentileri(kurallar)
+            self.assertEqual(yok_say, {'90005', '10021'})
+            run = self.m.donustur(rapor, yok_say=yok_say)['runs'][0]
+            self.assertEqual({k['id'] for k in run['tool']['driver']['rules']}, {'zap/10038-1', 'zap/10015'})
+            self.assertEqual({s['ruleId'] for s in run['results']}, {'zap/10038-1', 'zap/10015'})
+            # CLI: --kurallar ile ayni filtre; dosya yoksa hata
+            girdi = os.path.join(d, 'r.json'); cikti = os.path.join(d, 'o.sarif')
+            with open(girdi, 'w', encoding='utf-8') as f:
+                json.dump(rapor, f)
+            self.assertEqual(self.m.main([girdi, cikti, '--kurallar', kurallar]), 0)
+            with open(cikti, encoding='utf-8') as f:
+                self.assertEqual(len(json.load(f)['runs'][0]['results']), 3)
+            self.assertNotEqual(self.m.main([girdi, cikti, '--kurallar', os.path.join(d, 'yok.tsv')]), 0)
+
     def test_bos_rapor_gecerli_sarif(self):
         sarif = self.m.donustur({"@version": "2.16.1", "site": []})
         self.assertEqual(sarif['runs'][0]['results'], [])

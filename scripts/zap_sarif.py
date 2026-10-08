@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """ZAP baseline JSON raporunu SARIF 2.1.0'a cevirir (GUVENLIK-PLANI P5).
 
-    scripts/zap_sarif.py report_json.json zap-baseline.sarif
+    scripts/zap_sarif.py report_json.json zap-baseline.sarif [--kurallar .zap/rules.tsv]
 
 Yalniz standart kutuphane. Her ZAP alert tipi (alertRef; yoksa pluginid) bir SARIF kurali,
-her instance bir sonuc olur. Gurultu kurallari ZAP tarafinda .zap/rules.tsv ile IGNORE edilir,
-bu betik filtrelemez. DAST'ta dosya yoktur ve GitHub Code Scanning "http" semali artifactLocation
+her instance bir sonuc olur. `--kurallar`: ZAP'in rules.tsv'sindeki IGNORE eklentileri SARIF'e
+alinmaz. ZAP'in kendi IGNORE'u yalniz konsol ozetini ve cikis kodunu etkiler, JSON rapor
+onlari yine tasir; Security sekmesine dusmemeleri icin filtre burada. DAST'ta dosya yoktur ve GitHub Code Scanning "http" semali artifactLocation
 kabul etmez (checkout semasi "file" ile eslesmeli); bu yuzden konum sanal goreli yoldur
 (`dast/<url-yolu>`), tam URL mesajda ve logicalLocations'ta tasinir. GitHub Security sekmesi
 `security-severity` ile siddeti, `partialFingerprints` ile ayni bulgunun kosular arasinda
@@ -135,14 +136,32 @@ def _sonuc(alert, instance, kural_id, kural_index):
     }
 
 
-def donustur(rapor):
-    """ZAP JSON raporu (dict) -> SARIF 2.1.0 (dict)."""
+def ignore_eklentileri(yol):
+    """ZAP rules.tsv -> IGNORE satirlarindaki pluginid kumesi. Bicim: <pluginid>\\t<IGNORE|WARN|FAIL>\\t(...)."""
+    eklentiler = set()
+    with open(yol, encoding="utf-8") as f:
+        for satir in f:
+            satir = satir.strip()
+            if not satir or satir.startswith("#"):
+                continue
+            alanlar = satir.split("\t")
+            if len(alanlar) >= 2 and alanlar[1].strip().upper() == "IGNORE":
+                eklentiler.add(alanlar[0].strip())
+    return eklentiler
+
+
+def donustur(rapor, yok_say=frozenset()):
+    """ZAP JSON raporu (dict) -> SARIF 2.1.0 (dict). yok_say: atlanacak pluginid'ler."""
     kurallar = []
     indeks = {}
     sonuclar = []
+    atlanan = 0
 
     for site in rapor.get("site") or []:
         for alert in site.get("alerts") or []:
+            if str(alert.get("pluginid", "")).strip() in yok_say:
+                atlanan += 1
+                continue
             kural = _kural(alert)
             kid = kural["id"]
             if kid not in indeks:
@@ -173,14 +192,25 @@ def donustur(rapor):
             "properties": {
                 "generated": str(rapor.get("@generated") or ""),
                 "sites": [str(s.get("@name") or "") for s in (rapor.get("site") or [])],
+                "ignoredPlugins": sorted(yok_say),
+                "ignoredAlertTypes": atlanan,
             },
         }],
     }
 
 
 def main(argv):
+    argv = list(argv)
+    kurallar_yolu = None
+    if "--kurallar" in argv:
+        i = argv.index("--kurallar")
+        if i + 1 >= len(argv):
+            print("--kurallar bir dosya yolu ister", file=sys.stderr)
+            return 2
+        kurallar_yolu = argv[i + 1]
+        del argv[i:i + 2]
     if len(argv) != 2:
-        print("kullanim: zap_sarif.py <report_json.json> <cikti.sarif>", file=sys.stderr)
+        print("kullanim: zap_sarif.py <report_json.json> <cikti.sarif> [--kurallar rules.tsv]", file=sys.stderr)
         return 2
     girdi, cikti = argv
     try:
@@ -189,11 +219,19 @@ def main(argv):
     except (OSError, ValueError) as hata:
         print(f"ZAP raporu okunamadi: {girdi}: {hata}", file=sys.stderr)
         return 1
-    sarif = donustur(rapor)
+    yok_say = frozenset()
+    if kurallar_yolu:
+        try:
+            yok_say = frozenset(ignore_eklentileri(kurallar_yolu))
+        except OSError as hata:
+            print(f"kural dosyasi okunamadi: {kurallar_yolu}: {hata}", file=sys.stderr)
+            return 1
+    sarif = donustur(rapor, yok_say=yok_say)
     with open(cikti, "w", encoding="utf-8") as f:
         json.dump(sarif, f, ensure_ascii=False, indent=2)
-    print(f"SARIF yazildi: {cikti} ({len(sarif['runs'][0]['results'])} sonuc, "
-          f"{len(sarif['runs'][0]['tool']['driver']['rules'])} kural)")
+    run = sarif["runs"][0]
+    print(f"SARIF yazildi: {cikti} ({len(run['results'])} sonuc, {len(run['tool']['driver']['rules'])} kural; "
+          f"IGNORE ile atlanan alert tipi: {run['properties']['ignoredAlertTypes']})")
     return 0
 
 
