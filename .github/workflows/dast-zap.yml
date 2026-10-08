@@ -6,6 +6,7 @@
 # Mod: RAPOR. Bulgular hatti durdurmaz; HTML/JSON/MD rapor artefakt olarak saklanir ve JSON
 # rapor SARIF'e cevrilip Security -> Code scanning'e (kategori zap-baseline) yuklenir (P5):
 # tek kontrol yeri Security sekmesidir. scripts/zap_sarif.py yalniz standart kutuphane kullanir.
+# Gurultu kurallari .zap/rules.tsv ile IGNORE edilir (raporda ve Security'de gorunmez).
 # Uygulama ayaga kalkmazsa veya ZAP hedefi gormezse job kirmizidir (bos hedefe yesil tarama yok).
 
 name: DAST (ZAP baseline)
@@ -101,6 +102,7 @@ jobs:
         with:
           target: http://localhost:8000/admin/login/
           cmd_options: "-a"
+          rules_file_name: .zap/rules.tsv   # IGNORE: gurultu kurallari (bkz. dosya)
           fail_action: false
           allow_issue_writing: false
           artifact_name: zap-baseline
