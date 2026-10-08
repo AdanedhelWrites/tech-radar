@@ -6,6 +6,13 @@ dizinindeki her degisiklik `Chart.yaml` `version`'ini artirir ve buraya `## [sur
 basligi ekler; CI (`scripts/chart_surum_kontrol.sh`) bunu zorlar. `appVersion`
 uygulama imajinin etiketidir (CalVer `YYYY.M.N`).
 
+## [2.1.1] - 2026-10-08 — appVersion 2026.10.2
+
+Yalniz `appVersion` yukseltmesi; sablon ve values degismedi (render farki yalniz imaj etiketi ve `helm.sh/chart`).
+Uygulama 2026.10.2: guvenlik basliklari (django-csp ile CSP, Permissions-Policy, CORP/COEP, WhiteNoise
+`Access-Control-Allow-Origin: *` kapali, Swagger UI SplitView; PR #55), `source-map-js` 1.2.2 (PR #52).
+Imajlar yerelde derlenir: `teknoloji-haberleri-{api,frontend}:2026.10.2`.
+
 ## [2.1.0] - 2026-10-04 — appVersion 2026.10.1
 
 GitOps (Argo CD) ve chart disi secret yonetimi (Vault Secrets Operator) icin istege bagli degerler
