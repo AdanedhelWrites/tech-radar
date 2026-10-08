@@ -6,7 +6,7 @@
 # Mod: RAPOR. Bulgular hatti durdurmaz; HTML/JSON/MD rapor artefakt olarak saklanir ve JSON
 # rapor SARIF'e cevrilip Security -> Code scanning'e (kategori zap-baseline) yuklenir (P5):
 # tek kontrol yeri Security sekmesidir. scripts/zap_sarif.py yalniz standart kutuphane kullanir.
-# Gurultu kurallari .zap/rules.tsv ile IGNORE edilir (raporda ve Security'de gorunmez).
+# Gurultu kurallari .zap/rules.tsv ile IGNORE edilir: ZAP ozetinde sayilmaz, SARIF'e cevrilirken atlanir.
 # Uygulama ayaga kalkmazsa veya ZAP hedefi gormezse job kirmizidir (bos hedefe yesil tarama yok).
 
 name: DAST (ZAP baseline)
@@ -123,7 +123,8 @@ jobs:
       - name: SARIF'e cevir
         run: |
           set -euo pipefail
-          python3 scripts/zap_sarif.py report_json.json zap-baseline.sarif
+          # --kurallar: .zap/rules.tsv IGNORE eklentileri SARIF'e girmez (ZAP JSON raporu onlari yine tasir)
+          python3 scripts/zap_sarif.py report_json.json zap-baseline.sarif --kurallar .zap/rules.tsv
           # Gecersiz JSON ile Security sekmesine bos bir kosu dusmesin
           python3 -c 'import json,sys; d=json.load(open("zap-baseline.sarif")); assert d["version"]=="2.1.0" and d["runs"], "SARIF iskeleti bozuk"'
 
