@@ -3,7 +3,9 @@
 # Hedef: backend kokunde sayfa yok (/ -> 404); HTML yuzeyi admin login. A5 OpenAPI semasi
 # hazir olunca zaproxy/action-api-scan ile /api/v1/ tamamen taranmali.
 #
-# Mod: RAPOR. Bulgular hatti durdurmaz; HTML/JSON/MD rapor artefakt olarak saklanir.
+# Mod: RAPOR. Bulgular hatti durdurmaz; HTML/JSON/MD rapor artefakt olarak saklanir ve JSON
+# rapor SARIF'e cevrilip Security -> Code scanning'e (kategori zap-baseline) yuklenir (P5):
+# tek kontrol yeri Security sekmesidir. scripts/zap_sarif.py yalniz standart kutuphane kullanir.
 # Uygulama ayaga kalkmazsa veya ZAP hedefi gormezse job kirmizidir (bos hedefe yesil tarama yok).
 
 name: DAST (ZAP baseline)
@@ -29,6 +31,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      security-events: write   # SARIF yukleme (Security -> Code scanning)
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -114,6 +117,19 @@ jobs:
             echo "|---|---|"
             jq -r '[.site[].alerts[]? | .riskdesc | split(" ")[0]] | group_by(.)[] | "| \(.[0]) | \(length) |"' report_json.json
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: SARIF'e cevir
+        run: |
+          set -euo pipefail
+          python3 scripts/zap_sarif.py report_json.json zap-baseline.sarif
+          # Gecersiz JSON ile Security sekmesine bos bir kosu dusmesin
+          python3 -c 'import json,sys; d=json.load(open("zap-baseline.sarif")); assert d["version"]=="2.1.0" and d["runs"], "SARIF iskeleti bozuk"'
+
+      - name: SARIF yukle
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: zap-baseline.sarif
+          category: zap-baseline
 
       - name: API loglari
         if: ${{ always() }}
