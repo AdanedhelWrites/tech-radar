@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 import re
 from typing import List, Dict, Optional
 from email.utils import parsedate_to_datetime
+import logging
+
+log = logging.getLogger(__name__)
 
 class BaseRSSScraper:
     """Tüm RSS tabanli scraperlar icin temel sinif."""
@@ -85,7 +88,7 @@ class BaseRSSScraper:
 
     def fetch_standard_rss_entries(self, feed_url: str, source_name: str, days: int = 30) -> List[Dict]:
         """Standart bir RSS akisini okuyup liste dondurur."""
-        print(f"[{source_name}] Son {days} gunun haberleri cekiliyor...")
+        log.info(f"[{source_name}] Son {days} gunun haberleri cekiliyor...")
         entries = []
         cutoff = datetime.now() - timedelta(days=days)
         try:
@@ -120,6 +123,6 @@ class BaseRSSScraper:
                     'source': source_name
                 })
         except Exception as e:
-            print(f"[{source_name}] Hata: {e}")
+            log.warning(f"[{source_name}] Hata: {e}")
             
         return entries

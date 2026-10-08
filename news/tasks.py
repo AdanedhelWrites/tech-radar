@@ -18,6 +18,9 @@ from .k8s_scraper import MultiK8sScraper
 from .sre_scraper import MultiSREScraper
 from .devtools_scraper import MultiDevToolsScraper
 from .ai_scraper import MultiAINewsScraper
+import logging
+
+log = logging.getLogger(__name__)
 
 
 # ADR-0005: saklama olcusu "kaydin yayim tarihi" degil "bu kayda en son ne zaman
@@ -376,5 +379,5 @@ def retranslate_pending_task():
     try:
         eski_kayitlari_temizle()  # 30 gunden eski FetchRun satirlari (spec 3.4)
     except Exception as e:
-        print(f'  [FetchRun] Eski kayitlar temizlenemedi: {e}')
+        log.warning(f'  [FetchRun] Eski kayitlar temizlenemedi: {e}')
     return sonuc

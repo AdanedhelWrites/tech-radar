@@ -17,6 +17,9 @@ from news.translation_utils import (
     translate_text, translate_long_text,
     _protect_terms, _restore_terms, turkish_post_process,
 )
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class K8sScraper(BaseRSSScraper):
@@ -96,7 +99,7 @@ class K8sScraper(BaseRSSScraper):
 
             time.sleep(0.3)
         except Exception as e:
-            print(f"  [fetch_article_content] Hata ({url[:60]}): {e}")
+            log.warning(f"  [fetch_article_content] Hata ({url[:60]}): {e}")
 
         return result
 
@@ -122,7 +125,7 @@ class K8sBlogScraper(K8sScraper):
     BASE_URL = "https://kubernetes.io/blog/"
 
     def fetch_entries(self, days: int = 30) -> List[Dict]:
-        print(f"[K8s Blog] Son {days} gunun haberleri cekiliyor...")
+        log.info(f"[K8s Blog] Son {days} gunun haberleri cekiliyor...")
         entries = []
         cutoff = datetime.now().date() - timedelta(days=days)
 
@@ -138,7 +141,7 @@ class K8sBlogScraper(K8sScraper):
                 sidebar_nav = soup.find('nav', class_=re.compile(r'sidebar', re.I))
 
             if not sidebar_nav:
-                print("[K8s Blog] Sidebar navigation bulunamadi, tum sayfa taranacak")
+                log.warning("[K8s Blog] Sidebar navigation bulunamadi, tum sayfa taranacak")
                 # Fallback: tum sayfadaki /blog/YYYY/MM/DD/ formatindaki linkleri bul
                 all_links = soup.find_all('a', href=re.compile(r'^/blog/\d{4}/\d{2}/\d{2}/'))
             else:
@@ -179,7 +182,7 @@ class K8sBlogScraper(K8sScraper):
                         continue
 
                     # Haberin icine girip gercek icerigi cek
-                    print(f"  [K8s Blog] Icerik cekiliyor: {title[:60]}...")
+                    log.info(f"  [K8s Blog] Icerik cekiliyor: {title[:60]}...")
                     content = self.fetch_article_content(full_url)
 
                     # Eger deep fetch'ten daha iyi baslik geldiyse kullan
@@ -199,12 +202,12 @@ class K8sBlogScraper(K8sScraper):
                         'version': self._extract_version(title + ' ' + desc),
                 })
                 except Exception as e:
-                    print(f"[K8s Blog] Isleme hatasi: {e}")
+                    log.warning(f"[K8s Blog] Isleme hatasi: {e}")
                     continue
 
-            print(f"[K8s Blog] {len(entries)} haber bulundu")
+            log.info(f"[K8s Blog] {len(entries)} haber bulundu")
         except Exception as e:
-            print(f"[K8s Blog] Hata: {e}")
+            log.warning(f"[K8s Blog] Hata: {e}")
         return entries
 
     def _extract_version(self, text: str) -> str:
@@ -369,13 +372,13 @@ class K8sGitHubScraper(K8sScraper):
                 break
 
         if not match:
-            print(f"  [K8s GitHub] Versiyon bolumu bulunamadi: {version}")
+            log.warning(f"  [K8s GitHub] Versiyon bolumu bulunamadi: {version}")
             # Debug: ilk 500 karakteri goster
-            print(f"  [K8s GitHub] CHANGELOG ilk 500 kar: {full_changelog[:500]}")
+            log.info(f"  [K8s GitHub] CHANGELOG ilk 500 kar: {full_changelog[:500]}")
             return ""
 
         start = match.start()
-        print(f"  [K8s GitHub] Versiyon bolumu bulundu: pozisyon {start}")
+        log.info(f"  [K8s GitHub] Versiyon bolumu bulundu: pozisyon {start}")
 
         # Sonraki versiyon basligini bul (bir sonraki "# v" satirina kadar)
         # Hem "# vX.Y.Z" hem "## vX.Y.Z" formatlarini destekle
@@ -386,7 +389,7 @@ class K8sGitHubScraper(K8sScraper):
             end = len(full_changelog)
 
         section = full_changelog[start:end]
-        print(f"  [K8s GitHub] Versiyon bolumu: {len(section)} karakter")
+        log.info(f"  [K8s GitHub] Versiyon bolumu: {len(section)} karakter")
         return section
 
     def _extract_changes_section(self, version_section: str) -> str:
@@ -452,7 +455,7 @@ class K8sGitHubScraper(K8sScraper):
             result_lines.append(line)
 
         text = '\n'.join(result_lines)
-        print(f"  [K8s GitHub] Filtrelenmis icerik: {len(text)} karakter")
+        log.info(f"  [K8s GitHub] Filtrelenmis icerik: {len(text)} karakter")
         return text
 
     def __init__(self):
@@ -467,15 +470,15 @@ class K8sGitHubScraper(K8sScraper):
 
         url = self.CHANGELOG_RAW_URL.format(major_minor=major_minor)
         try:
-            print(f"  [K8s GitHub] CHANGELOG dosyasi indiriliyor: CHANGELOG-{major_minor}.md")
+            log.info(f"  [K8s GitHub] CHANGELOG dosyasi indiriliyor: CHANGELOG-{major_minor}.md")
             response = self.session.get(url, timeout=60)
             response.raise_for_status()
             content = response.text
             self._changelog_cache[major_minor] = content
-            print(f"  [K8s GitHub] CHANGELOG-{major_minor}.md: {len(content)} karakter indirildi")
+            log.info(f"  [K8s GitHub] CHANGELOG-{major_minor}.md: {len(content)} karakter indirildi")
             return content
         except Exception as e:
-            print(f"  [K8s GitHub] CHANGELOG indirilemedi ({major_minor}): {e}")
+            log.info(f"  [K8s GitHub] CHANGELOG indirilemedi ({major_minor}): {e}")
             self._changelog_cache[major_minor] = ""
             return ""
 
@@ -488,7 +491,7 @@ class K8sGitHubScraper(K8sScraper):
         # tag_name'den major.minor cikar: v1.35.1 -> 1.35
         version_match = re.match(r'v?(\d+\.\d+)', tag_name)
         if not version_match:
-            print(f"  [K8s GitHub] Versiyon parse edilemedi: {tag_name}")
+            log.info(f"  [K8s GitHub] Versiyon parse edilemedi: {tag_name}")
             return ""
 
         major_minor = version_match.group(1)
@@ -509,15 +512,15 @@ class K8sGitHubScraper(K8sScraper):
             # Yapisal formata donustur
             structured = self._parse_changelog_to_structured(changes_only)
 
-            print(f"  [K8s GitHub] Yapisal CHANGELOG: {len(structured)} karakter ({tag_name})")
+            log.info(f"  [K8s GitHub] Yapisal CHANGELOG: {len(structured)} karakter ({tag_name})")
             return structured.strip()
 
         except Exception as e:
-            print(f"  [K8s GitHub] CHANGELOG cekilemedi ({tag_name}): {e}")
+            log.warning(f"  [K8s GitHub] CHANGELOG cekilemedi ({tag_name}): {e}")
             return ""
 
     def fetch_entries(self, days: int = 30) -> List[Dict]:
-        print(f"[K8s GitHub] Son {days} gunun release'leri cekiliyor (gercek CHANGELOG dahil)...")
+        log.info(f"[K8s GitHub] Son {days} gunun release'leri cekiliyor (gercek CHANGELOG dahil)...")
         entries = []
         cutoff = datetime.now().date() - timedelta(days=days)
 
@@ -559,14 +562,14 @@ class K8sGitHubScraper(K8sScraper):
                         'category': category,
                         'version': version,
                     })
-                    print(f"  [K8s GitHub] {name}: {len(body)} karakter icerik")
+                    log.info(f"  [K8s GitHub] {name}: {len(body)} karakter icerik")
                 except Exception as e:
-                    print(f"[K8s GitHub] Isleme hatasi: {e}")
+                    log.warning(f"[K8s GitHub] Isleme hatasi: {e}")
                     continue
 
-            print(f"[K8s GitHub] {len(entries)} release bulundu")
+            log.info(f"[K8s GitHub] {len(entries)} release bulundu")
         except Exception as e:
-            print(f"[K8s GitHub] Hata: {e}")
+            log.warning(f"[K8s GitHub] Hata: {e}")
         return entries
 
 
@@ -577,7 +580,7 @@ class CNCFBlogScraper(K8sScraper):
     API_URL = "https://www.cncf.io/wp-json/wp/v2/posts"
 
     def fetch_entries(self, days: int = 30) -> List[Dict]:
-        print(f"[CNCF Blog] Son {days} gunun haberleri cekiliyor (WP API)...")
+        log.info(f"[CNCF Blog] Son {days} gunun haberleri cekiliyor (WP API)...")
         entries = []
         cutoff = datetime.now().date() - timedelta(days=days)
 
@@ -652,12 +655,12 @@ class CNCFBlogScraper(K8sScraper):
                         'version': self._extract_version(title + ' ' + desc),
                 })
                 except Exception as e:
-                    print(f"[CNCF Blog] Isleme hatasi: {e}")
+                    log.warning(f"[CNCF Blog] Isleme hatasi: {e}")
                     continue
 
-            print(f"[CNCF Blog] {len(entries)} haber bulundu")
+            log.info(f"[CNCF Blog] {len(entries)} haber bulundu")
         except Exception as e:
-            print(f"[CNCF Blog] Hata: {e}")
+            log.warning(f"[CNCF Blog] Hata: {e}")
         return entries
 
     def _extract_version(self, text: str) -> str:
@@ -683,9 +686,9 @@ class MultiK8sScraper(K8sScraper):
     def fetch_all(self, days: int = 30, selected_sources: list = None) -> List[Dict]:
         all_entries = []
 
-        print("=" * 80)
-        print(f"TUM KUBERNETES KAYNAKLARINDAN VERI CEKILIYOR ({days} gun)")
-        print("=" * 80)
+        log.info("=" * 80)
+        log.info(f"TUM KUBERNETES KAYNAKLARINDAN VERI CEKILIYOR ({days} gun)")
+        log.info("=" * 80)
 
         sources = dict(self.sources)
 
@@ -695,10 +698,10 @@ class MultiK8sScraper(K8sScraper):
         for name, scraper in sources.items():
             try:
                 items = scraper.fetch_entries(days=days)
-                print(f"  -> {name}: {len(items)} haber")
+                log.info(f"  -> {name}: {len(items)} haber")
                 all_entries.extend(items)
             except Exception as e:
-                print(f"  -> {name}: HATA - {e}")
+                log.warning(f"  -> {name}: HATA - {e}")
 
         # Link bazli deduplicate
         seen = set()
@@ -709,9 +712,9 @@ class MultiK8sScraper(K8sScraper):
                 seen.add(key)
                 unique.append(e)
 
-        print("=" * 80)
-        print(f"TOPLAM {len(unique)} KUBERNETES HABERI CEKILDI")
-        print("=" * 80)
+        log.info("=" * 80)
+        log.info(f"TOPLAM {len(unique)} KUBERNETES HABERI CEKILDI")
+        log.info("=" * 80)
         return unique
 
     def _translate_structured_changelog(self, structured_text: str) -> str:
@@ -787,14 +790,14 @@ class MultiK8sScraper(K8sScraper):
         return '\n'.join(result_lines)
 
     def process_entries(self, entries: List[Dict]) -> List[Dict]:
-        print("\nKubernetes haberleri Turkceye cevriliyor...")
+        log.info("\nKubernetes haberleri Turkceye cevriliyor...")
         total = len(entries)
 
         for i, entry in enumerate(entries, 1):
             try:
                 desc = entry.get('original_description', '')
                 source = entry.get('source', '')
-                print(f"Isleniyor: {i}/{total} - {entry['original_title'][:50]}... ({len(desc)} karakter)")
+                log.info(f"Isleniyor: {i}/{total} - {entry['original_title'][:50]}... ({len(desc)} karakter)")
 
                 entry['turkish_title'] = translate_text(entry['original_title'])
 
@@ -807,7 +810,7 @@ class MultiK8sScraper(K8sScraper):
 
                 yield entry
             except Exception as e:
-                print(f"Isleme hatasi: {e}")
+                log.warning(f"Isleme hatasi: {e}")
                 entry['turkish_title'] = entry['original_title']
                 entry['turkish_description'] = entry['original_description']
                 yield entry

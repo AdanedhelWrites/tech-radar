@@ -33,6 +33,9 @@ from .cache_utils import cache_yenile
 from .models import (
     AINewsEntry, CVEEntry, DevToolsEntry, KubernetesEntry, NewsArticle, SREEntry,
 )
+import logging
+
+log = logging.getLogger(__name__)
 
 # Bolum basina. LibreTranslate yerel ve hizli oldugu icin bekleyen siniri yuksek.
 RETRANSLATE_BATCH = int(os.environ.get('RETRANSLATE_BATCH', '100'))
@@ -90,7 +93,7 @@ def _gemini_alanlari(ad: str, kayit) -> Dict[str, str]:
 
     uzunluk = sum(len(metin) for metin in alanlar.values())
     if uzunluk > gemini.GEMINI_MAX_CHARS:
-        print(f"  [Gemini] {ad} kaydi cok uzun ({uzunluk} kr), atlaniyor.")
+        log.warning(f"  [Gemini] {ad} kaydi cok uzun ({uzunluk} kr), atlaniyor.")
         return {}
     return alanlar
 
@@ -106,7 +109,7 @@ def _gemini_ile_cevir(ad: str, kayit) -> Optional[Dict[str, str]]:
     if ad == 'kubernetes' and 'description' in sonuc:
         for isaret in ('===SECTION:', '---ITEM---', '<<<PR#'):
             if alanlar['description'].count(isaret) != sonuc['description'].count(isaret):
-                print("  [Gemini] kubernetes yapisi bozuldu (isaret sayisi degisti).")
+                log.warning("  [Gemini] kubernetes yapisi bozuldu (isaret sayisi degisti).")
                 return None
     return {_GEMINI_DB_ALANI[alan]: metin for alan, metin in sonuc.items()}
 
@@ -167,7 +170,7 @@ def _yaz(kayit, alanlar, saglayici) -> bool:
     except OperationalError:
         raise
     except DatabaseError:
-        print(f"  [Retranslate] kayit {kayit.pk} tur ortasinda silinmis, atlaniyor.")
+        log.warning(f"  [Retranslate] kayit {kayit.pk} tur ortasinda silinmis, atlaniyor.")
         return False
     return True
 

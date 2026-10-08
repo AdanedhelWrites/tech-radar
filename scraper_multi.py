@@ -18,6 +18,9 @@ from abc import ABC, abstractmethod
 
 from news.translation_utils import translate_text, translate_long_text
 from news.base_scraper import BaseRSSScraper
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class NewsSource(BaseRSSScraper):
@@ -101,7 +104,7 @@ class NewsSource(BaseRSSScraper):
 
             time.sleep(0.3)
         except Exception as e:
-            print(f"  [fetch_full_article] Hata ({url[:60]}): {e}")
+            log.warning(f"  [fetch_full_article] Hata ({url[:60]}): {e}")
 
         return result
 
@@ -116,13 +119,13 @@ class TheHackerNewsSource(NewsSource):
         return "https://thehackernews.com"
 
     def fetch_news(self, days=7):
-        print(f"[{self.get_name()}] Haberler cekiliyor...")
+        log.info(f"[{self.get_name()}] Haberler cekiliyor...")
 
         try:
             response = self.session.get(self.get_base_url(), timeout=30)
             response.raise_for_status()
         except requests.RequestException as e:
-            print(f"[{self.get_name()}] Hata: {e}")
+            log.warning(f"[{self.get_name()}] Hata: {e}")
             return []
 
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -131,7 +134,7 @@ class TheHackerNewsSource(NewsSource):
         story_divs = soup.find_all('div', class_='body-post')
         cutoff_date = datetime.now() - timedelta(days=days)
 
-        print(f"[{self.get_name()}] {len(story_divs)} story div bulundu")
+        log.info(f"[{self.get_name()}] {len(story_divs)} story div bulundu")
 
         for story in story_divs:
             try:
@@ -155,7 +158,7 @@ class TheHackerNewsSource(NewsSource):
                     # Habere gidip tam icerik cek
                     content = ''
                     if link:
-                        print(f"  [THN] Tam icerik cekiliyor: {title[:50]}...")
+                        log.info(f"  [THN] Tam icerik cekiliyor: {title[:50]}...")
                         article_data = self.fetch_full_article(link)
                         if article_data['title'] and len(article_data['title']) > len(title):
                             title = article_data['title']
@@ -175,10 +178,10 @@ class TheHackerNewsSource(NewsSource):
                         'source': self.get_name()
                 })
             except Exception as e:
-                print(f"[{self.get_name()}] Haber islenirken hata: {e}")
+                log.warning(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
 
-        print(f"[{self.get_name()}] {len(articles)} haber bulundu.")
+        log.info(f"[{self.get_name()}] {len(articles)} haber bulundu.")
         return articles
 
     def _parse_date(self, date_str):
@@ -214,7 +217,7 @@ class BleepingComputerSource(NewsSource):
         return "https://www.bleepingcomputer.com"
 
     def fetch_news(self, days=7):
-        print(f"[{self.get_name()}] Haberler cekiliyor...")
+        log.info(f"[{self.get_name()}] Haberler cekiliyor...")
 
         try:
             response = self.session.get(
@@ -223,7 +226,7 @@ class BleepingComputerSource(NewsSource):
             )
             response.raise_for_status()
         except requests.RequestException as e:
-            print(f"[{self.get_name()}] Hata: {e}")
+            log.warning(f"[{self.get_name()}] Hata: {e}")
             return []
 
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -232,7 +235,7 @@ class BleepingComputerSource(NewsSource):
 
         # Gercek yapi: h4 > a (parent = div.bc_latest_news_text)
         news_divs = soup.find_all('div', class_='bc_latest_news_text')
-        print(f"[{self.get_name()}] {len(news_divs)} news div bulundu")
+        log.info(f"[{self.get_name()}] {len(news_divs)} news div bulundu")
 
         for news_div in news_divs:
             if len(articles) >= self.MAX_ITEMS:
@@ -281,7 +284,7 @@ class BleepingComputerSource(NewsSource):
 
                 # Habere gidip tam icerik cek
                 content = ''
-                print(f"  [BC] Tam icerik cekiliyor: {title[:50]}...")
+                log.info(f"  [BC] Tam icerik cekiliyor: {title[:50]}...")
                 time.sleep(self.ARTICLE_DELAY)
                 article_data = self.fetch_full_article(link)
                 if article_data['title'] and len(article_data['title']) > len(title):
@@ -300,10 +303,10 @@ class BleepingComputerSource(NewsSource):
                     'source': self.get_name()
                 })
             except Exception as e:
-                print(f"[{self.get_name()}] Haber islenirken hata: {e}")
+                log.warning(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
 
-        print(f"[{self.get_name()}] {len(articles)} haber bulundu.")
+        log.info(f"[{self.get_name()}] {len(articles)} haber bulundu.")
         return articles
 
     def _parse_date(self, date_str):
@@ -351,17 +354,17 @@ class RSSNewsSource(NewsSource):
         return title.strip(' ,')
 
     def fetch_news(self, days=7):
-        print(f"[{self._name}] RSS'den haberler cekiliyor...")
+        log.info(f"[{self._name}] RSS'den haberler cekiliyor...")
         try:
             response = self.session.get(self.feed_url, timeout=20)
             response.raise_for_status()
         except requests.RequestException as e:
-            print(f"[{self._name}] RSS Hatasi: {e}")
+            log.warning(f"[{self._name}] RSS Hatasi: {e}")
             return []
 
         soup = BeautifulSoup(response.content, 'xml')
         items = soup.find_all('item') or soup.find_all('entry')
-        print(f"[{self._name}] {len(items)} RSS item bulundu")
+        log.info(f"[{self._name}] {len(items)} RSS item bulundu")
 
         articles = []
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -391,7 +394,7 @@ class RSSNewsSource(NewsSource):
                         if len(article_data['content']) > len(content):
                             content = article_data['content']
                     except Exception as e:
-                        print(f"  [{self._name}] Tam icerik alinamadi: {e}")
+                        log.warning(f"  [{self._name}] Tam icerik alinamadi: {e}")
 
                 articles.append({
                     'title': title,
@@ -402,10 +405,10 @@ class RSSNewsSource(NewsSource):
                     'source': self._name,
                 })
             except Exception as e:
-                print(f"[{self._name}] Haber islenirken hata: {e}")
+                log.warning(f"[{self._name}] Haber islenirken hata: {e}")
                 continue
 
-        print(f"[{self._name}] {len(articles)} haber bulundu.")
+        log.info(f"[{self._name}] {len(articles)} haber bulundu.")
         return articles
 
 
@@ -432,7 +435,7 @@ class DarkReadingSource(NewsSource):
         return "https://www.darkreading.com"
 
     def fetch_news(self, days=7):
-        print(f"[{self.get_name()}] RSS'den haberler cekiliyor...")
+        log.info(f"[{self.get_name()}] RSS'den haberler cekiliyor...")
 
         try:
             response = self.session.get(
@@ -441,7 +444,7 @@ class DarkReadingSource(NewsSource):
             )
             response.raise_for_status()
         except requests.RequestException as e:
-            print(f"[{self.get_name()}] RSS Hatasi: {e}")
+            log.warning(f"[{self.get_name()}] RSS Hatasi: {e}")
             return []
 
         # html.parser ile XML parse (lxml gerekmiyor)
@@ -450,7 +453,7 @@ class DarkReadingSource(NewsSource):
         cutoff_date = datetime.now() - timedelta(days=days)
 
         items = soup.find_all('item')
-        print(f"[{self.get_name()}] {len(items)} RSS item bulundu")
+        log.info(f"[{self.get_name()}] {len(items)} RSS item bulundu")
 
         for item in items:
             try:
@@ -502,10 +505,10 @@ class DarkReadingSource(NewsSource):
                     'source': self.get_name()
                 })
             except Exception as e:
-                print(f"[{self.get_name()}] Haber islenirken hata: {e}")
+                log.warning(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
 
-        print(f"[{self.get_name()}] {len(articles)} haber bulundu.")
+        log.info(f"[{self.get_name()}] {len(articles)} haber bulundu.")
         return articles
 
 
@@ -519,13 +522,13 @@ class KrebsOnSecuritySource(NewsSource):
         return "https://krebsonsecurity.com"
 
     def fetch_news(self, days=7):
-        print(f"[{self.get_name()}] Haberler cekiliyor...")
+        log.info(f"[{self.get_name()}] Haberler cekiliyor...")
 
         try:
             response = self.session.get(self.get_base_url(), timeout=30)
             response.raise_for_status()
         except requests.RequestException as e:
-            print(f"[{self.get_name()}] Hata: {e}")
+            log.warning(f"[{self.get_name()}] Hata: {e}")
             return []
 
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -534,7 +537,7 @@ class KrebsOnSecuritySource(NewsSource):
         story_articles = soup.find_all('article')
         cutoff_date = datetime.now() - timedelta(days=days)
 
-        print(f"[{self.get_name()}] {len(story_articles)} article bulundu")
+        log.info(f"[{self.get_name()}] {len(story_articles)} article bulundu")
 
         for article in story_articles:
             try:
@@ -558,7 +561,7 @@ class KrebsOnSecuritySource(NewsSource):
                     # Habere gidip tam icerik cek
                     content = ''
                     if link:
-                        print(f"  [Krebs] Tam icerik cekiliyor: {title[:50]}...")
+                        log.info(f"  [Krebs] Tam icerik cekiliyor: {title[:50]}...")
                         article_data = self.fetch_full_article(link)
                         if article_data['title'] and len(article_data['title']) > len(title):
                             title = article_data['title']
@@ -581,10 +584,10 @@ class KrebsOnSecuritySource(NewsSource):
                         'source': self.get_name()
                     })
             except Exception as e:
-                print(f"[{self.get_name()}] Haber islenirken hata: {e}")
+                log.warning(f"[{self.get_name()}] Haber islenirken hata: {e}")
                 continue
 
-        print(f"[{self.get_name()}] {len(articles)} haber bulundu.")
+        log.info(f"[{self.get_name()}] {len(articles)} haber bulundu.")
         return articles
 
     def _parse_date(self, date_str):
@@ -633,9 +636,9 @@ class MultiSourceScraper(BaseRSSScraper):
         # tarihe gore siralamada seyrek yazan kaynaklari (Krebs, SANS) tamamen dusuruyordu.
         max_total = max(max_total, 3 * len(sources_to_fetch))
 
-        print(f"\n{'='*80}")
-        print(f"TUM KAYNAKLARDAN HABER CEKILIYOR ({days} gun, maks {max_total})")
-        print(f"{'='*80}\n")
+        log.debug(f"\n{'='*80}")
+        log.info(f"TUM KAYNAKLARDAN HABER CEKILIYOR ({days} gun, maks {max_total})")
+        log.debug(f"{'='*80}\n")
 
         # Her kaynaga esit pay ver
         per_source_limit = max(5, max_total // max(len(sources_to_fetch), 1))
@@ -646,12 +649,12 @@ class MultiSourceScraper(BaseRSSScraper):
                 # Kaynak basina limit uygula
                 if len(articles) > per_source_limit:
                     articles = articles[:per_source_limit]
-                    print(f"  -> {source.get_name()}: {per_source_limit} haber (sinirlandirildi)\n")
+                    log.info(f"  -> {source.get_name()}: {per_source_limit} haber (sinirlandirildi)\n")
                 else:
-                    print(f"  -> {source.get_name()}: {len(articles)} haber\n")
+                    log.info(f"  -> {source.get_name()}: {len(articles)} haber\n")
                 all_articles.extend(articles)
             except Exception as e:
-                print(f"[{source.get_name()}] Kaynak hatasi: {e}")
+                log.warning(f"[{source.get_name()}] Kaynak hatasi: {e}")
                 continue
 
         # Tarihe gore sirala (en yeni en ustte)
@@ -661,9 +664,9 @@ class MultiSourceScraper(BaseRSSScraper):
         if len(all_articles) > max_total:
             all_articles = all_articles[:max_total]
 
-        print(f"{'='*80}")
-        print(f"TOPLAM {len(all_articles)} HABER CEKILDI")
-        print(f"{'='*80}\n")
+        log.debug(f"{'='*80}")
+        log.info(f"TOPLAM {len(all_articles)} HABER CEKILDI")
+        log.debug(f"{'='*80}\n")
 
         return all_articles
 
@@ -671,12 +674,12 @@ class MultiSourceScraper(BaseRSSScraper):
         """Haberleri tam olarak Turkceye cevirir"""
 
         total = len(articles)
-        print(f"\n{'='*60}")
-        print(f"CEVIRI BASLADI: {total} haber cevriliyor...")
-        print(f"{'='*60}\n")
+        log.debug(f"\n{'='*60}")
+        log.info(f"CEVIRI BASLADI: {total} haber cevriliyor...")
+        log.debug(f"{'='*60}\n")
 
         for i, article in enumerate(articles):
-            print(f"Cevriliyor: {i+1}/{total} - {article['title'][:50]}...")
+            log.info(f"Cevriliyor: {i+1}/{total} - {article['title'][:50]}...")
 
             try:
                 # Baslik cevirisi
@@ -703,7 +706,7 @@ class MultiSourceScraper(BaseRSSScraper):
                     'source': article['source']
                 }
             except Exception as e:
-                print(f"Haber islenirken hata: {e}")
+                log.warning(f"Haber islenirken hata: {e}")
                 yield {
                     'original_title': article['title'],
                     'turkish_title': article['title'],
@@ -715,8 +718,8 @@ class MultiSourceScraper(BaseRSSScraper):
                     'original_date': article['original_date'],
                     'source': article['source']
                 }
-        print(f"\n{'='*60}")
-        print(f"{'='*60}\n")
+        log.debug(f"\n{'='*60}")
+        log.debug(f"{'='*60}\n")
 
         
 
@@ -728,7 +731,7 @@ class MultiSourceScraper(BaseRSSScraper):
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(articles, f, ensure_ascii=False, indent=2)
 
-        print(f"Haberler {filename} dosyasina kaydedildi.")
+        log.info(f"Haberler {filename} dosyasina kaydedildi.")
         return filename
 
 

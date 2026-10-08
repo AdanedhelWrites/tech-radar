@@ -11,6 +11,7 @@ from pathlib import Path
 from csp.constants import NONCE, NONE, SELF, UNSAFE_INLINE
 
 from cybernews.ayar_dogrulama import dogrulanmis_secret_key, veritabani_ayari
+from cybernews.loglama import loglama_ayari
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -204,6 +205,10 @@ STORAGES = {
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Loglama (2026-10-08): scraper ve ceviri katmani print yerine logging kullanir.
+# LOG_LEVEL (INFO) ve LOG_FORMAT (text | json) ortamdan; bkz. cybernews/loglama.py.
+LOGGING = loglama_ayari(os.environ)
+
 # Yerel LibreTranslate servisi: cekim aninda tek ceviri saglayicisi.
 # Bos ise hic denenmez (bkz. news/translation_providers.py).
 LIBRETRANSLATE_URL = os.environ.get('LIBRETRANSLATE_URL', '')
@@ -226,6 +231,10 @@ CELERY_TIMEZONE = 'Europe/Istanbul'
 # Worker isi aldiginda durum STARTED olur; aksi halde is bitene kadar PENDING gorunur.
 # /api/v1/jobs/<id>/ uc noktasinin 'started' durumunu gosterebilmesi icin gerekli.
 CELERY_TASK_TRACK_STARTED = True
+
+# Celery varsayilan olarak root logger'i ele gecirip kendi handler'ini kurar; o zaman
+# worker'da LOGGING (bicim, seviye, JSON) gecersiz kalirdi. Worker da Django ayarini kullanir.
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 
 # Gorev sure sinirlari (2026-10-08). Onceden yoktu: takilan tek bir kaynak istegi
 # bolum kilidini REFRESH_LOCK_TTL (3600 sn) boyunca tutar, worker tek concurrency ile

@@ -739,6 +739,8 @@ Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabani
 
 Her cekim bir `FetchRun` satiri birakir (bolum, baslangic/bitis, `fetched_count`, `saved_count`, durum, hata ozeti, kaynak basina `by_source`). Son durumlar `GET /api/v1/status/` ile okunur; Beat'in gercekten calistigini kontrol etmenin en kisa yolu budur ([ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md)).
 
+**Loglar (2026-10-08):** Scraper ve ceviri katmani `print` yerine `logging` kullanir; kaynak hatalari `WARNING` seviyesinde, modul adiyla (`news.devtools_scraper`, `scraper_multi`) gelir. `docker compose logs teknoloji-worker | grep WARNING` bir turda hangi kaynaklarin hata verdigini gosterir; `LOG_FORMAT=json` ile satirlar Loki/ELK'ye dogrudan gider. Worker Django `LOGGING` ayarini kullanir (`CELERY_WORKER_HIJACK_ROOT_LOGGER=False`).
+
 **Kaynak sagligi (2026-10-08):** 8 kaynak aylarca sessizce olmustu (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone donmus akislar); bolum toplami "success" gorundugu icin fark edilmedi. Artik her tur secili her kaynak icin kaynaktan gelen sayiyi (`_drop_existing`'den onceki) `FetchRun.by_source`'a yazar. `/api/v1/status/` her kaynak icin `zero_runs` (ardisik 0 donen tamamlanmis tur) ve `silent` verir; `SOURCE_SILENT_RUNS` (varsayilan 4 = Beat'te 24 saat) esigi asan kaynaklar `silent_sources` listesindedir. Admin'deki FetchRun listesinde "0 donen kaynaklar" sutunu ayni bilgiyi tur basina gosterir. Seyrek yazan kaynaklar (Krebs, PagerDuty) kendi `days` penceresinde yine kayit dondurdugu icin yanlis pozitif vermez; yeni kayit olmamasi degil, kaynaktan hic kayit gelmemesi sessizliktir. Haftalik kontrol: `curl .../api/v1/status/ | jq '.sections[].silent_sources'`.
 
 ---
@@ -974,6 +976,8 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `CELERY_TASK_SOFT_TIME_LIMIT` | `1500` | Cekim gorevi bu sureyi asinca task icinde `SoftTimeLimitExceeded` yukselir; gorev `failure` ile kapanir, kilit serbest kalir |
 | `CELERY_TASK_TIME_LIMIT` | `1800` | Sert sinir: worker alt sureci oldurulur, `FetchRun` `running` kalir, bolum kilidi `REFRESH_LOCK_TTL` sonunda duser. Soft'tan en az 60 sn buyuk tutulur |
 | `CELERY_WORKER_MAX_TASKS_PER_CHILD` | `50` | Bu kadar gorevden sonra worker alt sureci yenilenir (bellek/baglanti birikimi) |
+| `LOG_LEVEL` | `INFO` | Uygulama loglarinin seviyesi (`DEBUG` cekim ayraclarini da gosterir); Django/Celery kendi gurultusu `WARNING`'de kalir |
+| `LOG_FORMAT` | `text` | `text`: `2026-10-08 17:05:32 WARNING news.devtools_scraper: [GitLab] Atom hatasi: ...`; `json`: satir basina bir JSON nesnesi (`ts`, `level`, `logger`, `msg`, `exc`) — Loki/ELK icin ([`cybernews/loglama.py`](cybernews/loglama.py)) |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model |
 | `GEMINI_DAILY_BUDGET` | `400` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD) |
 | `GEMINI_MIN_INTERVAL` | `5` | Istekler arasi saniye (15 RPM'in altinda) |
