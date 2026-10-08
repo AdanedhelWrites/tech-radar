@@ -103,7 +103,8 @@ class AINewsEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
 class FetchRunAdmin(admin.ModelAdmin):
     """Salt okunur teshis ekrani; satirlari sinyaller yazar (spec 3.3)."""
     list_display = ('section', 'status', 'trigger', 'started_at', 'sure',
-                    'fetched_count', 'saved_count', 'total_after', 'stopped_reason')
+                    'fetched_count', 'saved_count', 'total_after', 'sifir_kaynaklar',
+                    'stopped_reason')
     list_filter = ('section', 'status', 'trigger', 'started_at')
     search_fields = ('error',)
     date_hierarchy = 'started_at'
@@ -113,6 +114,13 @@ class FetchRunAdmin(admin.ModelAdmin):
         if not kayit.finished_at:
             return 'devam ediyor'
         return f'{(kayit.finished_at - kayit.started_at).total_seconds():.0f} sn'
+
+    @admin.display(description='0 donen kaynaklar')
+    def sifir_kaynaklar(self, kayit):
+        """Turda secili olup hic kayit dondurmeyen kaynaklar (kaynak sagligi, 2026-10-08)."""
+        sifir = [ad for ad, sayac in (kayit.by_source or {}).items()
+                 if not int((sayac or {}).get('fetched', 0) or 0)]
+        return ', '.join(sifir) if sifir else '-'
 
     def has_add_permission(self, request, obj=None):
         return False

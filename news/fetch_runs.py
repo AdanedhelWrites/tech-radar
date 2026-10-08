@@ -103,6 +103,7 @@ def tur_bitti(sender=None, task_id=None, retval=None, **kwargs):
                 'fetched_count': retval.get('fetched_count', 0),
                 'translation_failures': retval.get('translation_failures', 0),
                 'total_after': model.objects.count(),
+                'by_source': retval.get('by_source') or {},
             }
         _kapat(task_id, status='failure' if hata_var else 'success', error=hata, **sayaclar)
     except Exception as hata:

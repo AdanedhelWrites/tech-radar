@@ -421,7 +421,7 @@ Her istekte `Authorization: Token <key>` basligi gonderilir. Admin arayuzunde **
 | GET | `/api/v1/schema/` | OpenAPI 3 semasi (token gerekir) |
 | GET | `/api/v1/docs/` | Swagger UI — tarayicida admin oturumuyla acilir |
 | GET | `/api/v1/health/` | Servis ayakta mi — **tokensiz** (Kubernetes probe'lari icin) |
-| GET | `/api/v1/status/` | Bolum basina veri tazeligi: `last_success_at`, `last_status`, `last_fetched_count`, `last_saved_count`, `pending_translation`, `total` |
+| GET | `/api/v1/status/` | Bolum basina veri tazeligi: `last_success_at`, `last_status`, `last_fetched_count`, `last_saved_count`, `pending_translation`, `total`; kaynak sagligi: `sources{ad: last_record_at, last_fetched_count, zero_runs, silent}` ve `silent_sources[]` (`SOURCE_SILENT_RUNS` ardisik turda 0 kayit donen kaynak) |
 | GET | `/api/v1/{bolum}/` | Imlecli delta okuma |
 | POST | `/api/v1/{bolum}/refresh/` | Tek bolum icin manuel cekim tetikler |
 | POST | `/api/v1/refresh/` | Alti bolumu birden tetikler |
@@ -737,7 +737,9 @@ Ceviri sonrasi otomatik duzeltmeler:
 
 Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabaninda zaten cevrilmis kayitlar tekrar cevrilmez; yalnizca yeni haberler ve ceviri bekleyen (`needs_translation`) kayitlar LibreTranslate'e gonderilir. Gun araligi task varsayilanidir; her cekim (manuel "Getir" dahil) bu araligin disinda kalan eski kayitlari siler. Bekleyen ve LibreTranslate kayitlarinin Gemini ile yukseltilmesi ayri bir Beat gorevidir (bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)): `retranslate_pending_task`, tek saatlerde dakika 05.
 
-Her cekim bir `FetchRun` satiri birakir (bolum, baslangic/bitis, `fetched_count`, `saved_count`, durum, hata ozeti). Son durumlar `GET /api/v1/status/` ile okunur; Beat'in gercekten calistigini kontrol etmenin en kisa yolu budur ([ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md)).
+Her cekim bir `FetchRun` satiri birakir (bolum, baslangic/bitis, `fetched_count`, `saved_count`, durum, hata ozeti, kaynak basina `by_source`). Son durumlar `GET /api/v1/status/` ile okunur; Beat'in gercekten calistigini kontrol etmenin en kisa yolu budur ([ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md)).
+
+**Kaynak sagligi (2026-10-08):** 8 kaynak aylarca sessizce olmustu (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone donmus akislar); bolum toplami "success" gorundugu icin fark edilmedi. Artik her tur secili her kaynak icin kaynaktan gelen sayiyi (`_drop_existing`'den onceki) `FetchRun.by_source`'a yazar. `/api/v1/status/` her kaynak icin `zero_runs` (ardisik 0 donen tamamlanmis tur) ve `silent` verir; `SOURCE_SILENT_RUNS` (varsayilan 4 = Beat'te 24 saat) esigi asan kaynaklar `silent_sources` listesindedir. Admin'deki FetchRun listesinde "0 donen kaynaklar" sutunu ayni bilgiyi tur basina gosterir. Seyrek yazan kaynaklar (Krebs, PagerDuty) kendi `days` penceresinde yine kayit dondurdugu icin yanlis pozitif vermez; yeni kayit olmamasi degil, kaynaktan hic kayit gelmemesi sessizliktir. Haftalik kontrol: `curl .../api/v1/status/ | jq '.sections[].silent_sources'`.
 
 ---
 
@@ -968,6 +970,10 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `CSRF_TRUSTED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Admin oturumuyla POST yapabilecek frontend origin'leri (Vite proxy `changeOrigin` kullandigi icin gerekli) |
 | `GEMINI_API_KEY` | (bos) | Google AI Studio anahtari; bos ise Gemini hic denenmez |
 | `GITHUB_TOKEN` | (bos) | Istege bagli. GitHub Releases/Tags/Advisory isteklerinde Bearer baslik (anonim limit 60/saat/IP, token ile 5000). Yalniz `api.github.com` isteklerine eklenir; "Public repositories (read-only)" fine-grained token yeterlidir |
+| `NVD_API_KEY` | (bos) | Istege bagli. NVD isteklerinde `apiKey` basligi (anonim 5 istek/30 sn, anahtarla 50). CVE turu 3 NVD istegi yapar (KEV, yayinlanan, guncel); 429'da kaynak bos doner. Ucretsiz, nvd.nist.gov/developers'tan e-posta ile; yalniz `services.nvd.nist.gov`'a gider |
+| `CELERY_TASK_SOFT_TIME_LIMIT` | `1500` | Cekim gorevi bu sureyi asinca task icinde `SoftTimeLimitExceeded` yukselir; gorev `failure` ile kapanir, kilit serbest kalir |
+| `CELERY_TASK_TIME_LIMIT` | `1800` | Sert sinir: worker alt sureci oldurulur, `FetchRun` `running` kalir, bolum kilidi `REFRESH_LOCK_TTL` sonunda duser. Soft'tan en az 60 sn buyuk tutulur |
+| `CELERY_WORKER_MAX_TASKS_PER_CHILD` | `50` | Bu kadar gorevden sonra worker alt sureci yenilenir (bellek/baglanti birikimi) |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model |
 | `GEMINI_DAILY_BUDGET` | `400` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD) |
 | `GEMINI_MIN_INTERVAL` | `5` | Istekler arasi saniye (15 RPM'in altinda) |
@@ -980,6 +986,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `TRANSLATE_MIN_RATIO` | `0.4` | Ceviri kirpilma esigi: 80+ karakterlik metinde cikti/girdi orani bunun altindaysa ceviri reddedilir, kayit `needs_translation` kalir |
 | `RETENTION_DAYS` | `90` | Saklama penceresi; `updated_at` bundan eski kayitlar cekim basinda silinir (cekim penceresinden ayridir) |
 | `REFRESH_COOLDOWN` | `900` | `/api/v1/*/refresh/` sonrasi bolum sogumasi (sn) — **tum token'lar arasinda paylasilir** |
+| `SOURCE_SILENT_RUNS` | `4` | Bir kaynak bu kadar ardisik tamamlanmis turda 0 kayit dondurunce `/api/v1/status/` onu `silent` isaretler (4 tur = Beat'te 24 saat) |
 | `REFRESH_LOCK_TTL` | `3600` | Bolum cekim kilidinin omru (sn); worker olurse kilit bu surede kendiliginden duser |
 | `DB_HOST` | _(bos)_ | Doluysa PostgreSQL kullanilir. Bossa yalniz `DEBUG=True` iken SQLite (`db.sqlite3`); `DEBUG=False` iken uygulama acilmaz. Compose `yerel-postgres` verir |
 | `DB_PORT` | `5432` | PostgreSQL port |

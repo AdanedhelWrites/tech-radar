@@ -362,12 +362,16 @@ class StatusView(V1APIView):
         from django.utils import timezone
 
         from news.fetch_runs import BOLUM_MODELLERI
+        from news.kaynaklar import kaynak_durumlari
         from news.models import FetchRun
 
         bolumler = {}
         for ad, model in BOLUM_MODELLERI.items():
             son = FetchRun.objects.filter(section=ad).first()
             son_basarili = FetchRun.objects.filter(section=ad, status='success').first()
+            # Kaynak sagligi (2026-10-08): bolum "success" olsa da tek bir kaynagin
+            # ardisik turlarda 0 donmesi "veri bayat mi" sorusunun parcasidir.
+            kaynaklar = kaynak_durumlari(ad, model)
             bolumler[ad] = {
                 'last_success_at': son_basarili.finished_at if son_basarili else None,
                 'last_status': son.status if son else None,
@@ -375,5 +379,7 @@ class StatusView(V1APIView):
                 'last_saved_count': son.saved_count if son else None,
                 'pending_translation': model.objects.filter(needs_translation=True).count(),
                 'total': model.objects.count(),
+                'sources': kaynaklar,
+                'silent_sources': [k for k, v in kaynaklar.items() if v['silent']],
             }
         return Response({'generated_at': timezone.now(), 'sections': bolumler})

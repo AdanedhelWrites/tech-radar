@@ -673,6 +673,12 @@ class MultiK8sScraper(K8sScraper):
         self.blog_scraper = K8sBlogScraper()
         self.github_scraper = K8sGitHubScraper()
         self.cncf_scraper = CNCFBlogScraper()
+        # Kayit defteri news/kaynaklar.py tarafindan da okunur (kaynak sagligi)
+        self.sources = {
+            'K8s Blog': self.blog_scraper,
+            'GitHub Releases': self.github_scraper,
+            'CNCF Blog': self.cncf_scraper,
+        }
 
     def fetch_all(self, days: int = 30, selected_sources: list = None) -> List[Dict]:
         all_entries = []
@@ -681,11 +687,7 @@ class MultiK8sScraper(K8sScraper):
         print(f"TUM KUBERNETES KAYNAKLARINDAN VERI CEKILIYOR ({days} gun)")
         print("=" * 80)
 
-        sources = {
-            'K8s Blog': self.blog_scraper,
-            'GitHub Releases': self.github_scraper,
-            'CNCF Blog': self.cncf_scraper,
-        }
+        sources = dict(self.sources)
 
         if selected_sources:
             sources = {k: v for k, v in sources.items() if k in selected_sources}

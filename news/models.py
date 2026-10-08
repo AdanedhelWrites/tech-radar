@@ -215,6 +215,9 @@ class FetchRun(models.Model):
     translation_failures = models.IntegerField(default=0, verbose_name='Ceviri Hatasi')
     total_after = models.IntegerField(default=0, verbose_name='Tur Sonu Toplam')
     by_provider = models.JSONField(default=dict, blank=True, verbose_name='Saglayici Dagilimi')
+    # {kaynak: {'fetched': n, 'saved': m}}; secili her kaynak 0 ile acilir (news/kaynaklar.py).
+    # 2026-10-08: 8 kaynagin aylarca sessizce olmesi bolum toplamlarinda gorunmuyordu.
+    by_source = models.JSONField(default=dict, blank=True, verbose_name='Kaynak Dagilimi')
     stopped_reason = models.CharField(max_length=30, blank=True, default='', verbose_name='Durma Sebebi')
     error = models.TextField(blank=True, default='', verbose_name='Hata')
 

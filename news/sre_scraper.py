@@ -394,6 +394,14 @@ class MultiSREScraper(SREScraper):
         self.pagerduty_eng = PagerDutyEngScraper()
         self.google_cloud_sre = GoogleCloudSREScraper()
         self.dzone_devops = DZoneDevOpsScraper()
+        # Kayit defteri news/kaynaklar.py tarafindan da okunur (kaynak sagligi)
+        self.sources = {
+            'SRE Weekly': self.sre_weekly,
+            'InfoQ SRE': self.infoq_sre,
+            'PagerDuty Eng': self.pagerduty_eng,
+            'Google Cloud SRE': self.google_cloud_sre,
+            'DZone DevOps': self.dzone_devops,
+        }
 
     def fetch_all(self, days: int = 30, selected_sources: list = None, max_total: int = 30) -> List[Dict]:
         """Tum kaynaklardan SRE haberi ceker"""
@@ -403,13 +411,7 @@ class MultiSREScraper(SREScraper):
         print(f"TUM SRE KAYNAKLARINDAN HABER CEKILIYOR ({days} gun, maks {max_total})")
         print("=" * 80)
 
-        sources = {
-            'SRE Weekly': self.sre_weekly,
-            'InfoQ SRE': self.infoq_sre,
-            'PagerDuty Eng': self.pagerduty_eng,
-            'Google Cloud SRE': self.google_cloud_sre,
-            'DZone DevOps': self.dzone_devops,
-        }
+        sources = dict(self.sources)
 
         if selected_sources:
             sources = {k: v for k, v in sources.items() if k in selected_sources}

@@ -3,6 +3,7 @@ CVE Scraper Module
 NVD, CVEDetails, Rapid7, Tenable, VulDB gibi kaynaklardan CVE verilerini çeker.
 """
 
+import os
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
@@ -17,12 +18,27 @@ from news.base_scraper import BaseRSSScraper
 
 class CVEScraper(BaseRSSScraper):
     """CVE Scraper temel sınıfı"""
-    
+
+    NVD_API = "https://services.nvd.nist.gov/"
+
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
+
+    def _nvd_get(self, url: str, **kwargs):
+        """NVD istegi: NVD_API_KEY tanimliysa `apiKey` basligi ekler (2026-10-08).
+
+        Anonim limit 5 istek / 30 sn; CVE turu artik 3 NVD istegi yapiyor (KEV,
+        yayinlanan, guncel) ve 429'da scraper bos doner. Anahtarla 50 / 30 sn.
+        Baslik tek istege konur ve yalniz services.nvd.nist.gov'a gider.
+        """
+        headers = dict(kwargs.pop('headers', None) or {})
+        anahtar = os.environ.get('NVD_API_KEY', '').strip()
+        if anahtar and url.startswith(self.NVD_API):
+            headers['apiKey'] = anahtar
+        return self.session.get(url, headers=headers, **kwargs)
     def parse_cvss_score(self, severity_text: str) -> Optional[float]:
         """CVSS skorunu metinden çıkarır"""
         if not severity_text:
@@ -136,7 +152,7 @@ class NVDScraper(CVEScraper):
                 'resultsPerPage': 100
             }
             
-            response = self.session.get(self.BASE_URL, params=params, timeout=30)
+            response = self._nvd_get(self.BASE_URL, params=params, timeout=30)
             response.raise_for_status()
             
             data = response.json()
@@ -724,7 +740,7 @@ class NVDRecentScraper(CVEScraper):
             # NVD rate limit - ilk scraper'dan sonra biraz bekle
             time.sleep(2)
             
-            response = self.session.get(self.BASE_URL, params=params, timeout=30)
+            response = self._nvd_get(self.BASE_URL, params=params, timeout=30)
             response.raise_for_status()
             
             data = response.json()
@@ -861,7 +877,7 @@ class CISAKEVScraper(CVEScraper):
                 'resultsPerPage': 200,
             }
             # hasKev degersiz bir bayrak; requests params ile `hasKev=` uretir, API onu kabul etmez
-            response = self.session.get(f"{self.BASE_URL}?hasKev", params=params, timeout=30)
+            response = self._nvd_get(f"{self.BASE_URL}?hasKev", params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
 
@@ -911,6 +927,17 @@ class MultiCVEScraper(CVEScraper):
         self.tenable_scraper = TenableScraper()
         self.circl_scraper = CIRCLScraper()
         self.nvd_recent_scraper = NVDRecentScraper()
+        # KEV once: ayni CVE birden fazla kaynaktan gelirse ilk goruleni kalir ve
+        # KEV kaydi somuru bilgisini (baslik/aciklama oneki) tasir.
+        # Kayit defteri news/kaynaklar.py tarafindan da okunur (kaynak sagligi).
+        self.sources = {
+            'CISA KEV': self.kev_scraper,
+            'NVD': self.nvd_scraper,
+            'GitHub Advisory': self.github_scraper,
+            'Tenable': self.tenable_scraper,
+            'CIRCL': self.circl_scraper,
+            'NVD Güncel': self.nvd_recent_scraper,
+        }
     
     def fetch_all_cves(self, days: int = 30, selected_sources: list = None) -> List[Dict]:
         """Tum kaynaklardan CVE ceker"""
@@ -920,17 +947,8 @@ class MultiCVEScraper(CVEScraper):
         print(f"TÜM CVE KAYNAKLARINDAN VERİ ÇEKİLİYOR ({days} gün)")
         print("=" * 80)
         
-        # KEV once: ayni CVE birden fazla kaynaktan gelirse ilk goruleni kalir ve
-        # KEV kaydi somuru bilgisini (baslik/aciklama oneki) tasir.
-        sources = {
-            'CISA KEV': self.kev_scraper,
-            'NVD': self.nvd_scraper,
-            'GitHub Advisory': self.github_scraper,
-            'Tenable': self.tenable_scraper,
-            'CIRCL': self.circl_scraper,
-            'NVD Güncel': self.nvd_recent_scraper,
-        }
-        
+        sources = dict(self.sources)
+
         if selected_sources:
             sources = {k: v for k, v in sources.items() if k in selected_sources}
         

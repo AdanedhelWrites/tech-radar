@@ -199,14 +199,28 @@ class HealthV1Serializer(serializers.Serializer):
     version = serializers.CharField()
 
 
+class KaynakDurumuV1Serializer(serializers.Serializer):
+    """Kaynak sagligi (2026-10-08): SOURCE_SILENT_RUNS ardisik turda 0 kayit donen kaynak sessizdir."""
+    last_record_at = serializers.DateTimeField(allow_null=True)
+    last_fetched_count = serializers.IntegerField(allow_null=True)
+    zero_runs = serializers.IntegerField()
+    silent = serializers.BooleanField()
+
+
 class BolumDurumuV1Serializer(serializers.Serializer):
-    """ADR-0006 karar 4: bilincli olarak DAR. Operator alanlari buraya girmez."""
+    """ADR-0006 karar 4: bilincli olarak DAR. Operator alanlari buraya girmez.
+
+    `sources`/`silent_sources` operator alani degildir: tuketicinin "bu kaynagin
+    verisi bayat mi" sorusunu yanitlar (news/kaynaklar.py).
+    """
     last_success_at = serializers.DateTimeField(allow_null=True)
     last_status = serializers.CharField(allow_null=True)
     last_fetched_count = serializers.IntegerField(allow_null=True)
     last_saved_count = serializers.IntegerField(allow_null=True)
     pending_translation = serializers.IntegerField()
     total = serializers.IntegerField()
+    sources = serializers.DictField(child=KaynakDurumuV1Serializer())
+    silent_sources = serializers.ListField(child=serializers.CharField())
 
 
 class StatusV1Serializer(serializers.Serializer):
