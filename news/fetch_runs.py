@@ -64,6 +64,17 @@ def tur_basladi(sender=None, task_id=None, **kwargs):
         bolum = _bolum(sender)
         if not bolum:
             return
+        # Takili 'running' satirlari kapat (2026-10-08): worker yeniden basladiginda ya da sert
+        # sure siniri (CELERY_TASK_TIME_LIMIT) alt sureci oldurdugunde postrun sinyali hic
+        # gelmez; satir suresiz 'running' kalir ve /api/v1/status/ onu "calisiyor" diye
+        # raporlardi (canlida 4 satir, biri 5 gunluk). Bolum kilidi ayni bolumde iki turu
+        # engeller; Beat + manuel cakismasi (refresh.py bilinen sinir) nadirdir ve o durumda
+        # da kapatilan satir yanlis degil, eksik raporlanmis olur.
+        kesilen = FetchRun.objects.filter(section=bolum, status='running').update(
+            status='failure', finished_at=timezone.now(), stopped_reason='interrupted',
+            error='Onceki tur kapanmadan kesildi (worker yeniden basladi ya da CELERY_TASK_TIME_LIMIT).')
+        if kesilen:
+            log.warning(f'  [FetchRun] {bolum}: {kesilen} takili running satiri interrupted olarak kapatildi')
         kayit = FetchRun.objects.create(section=bolum, trigger=_tetikleyici(sender), status='running')
         _acik_turlar[task_id] = kayit.id
     except Exception as hata:

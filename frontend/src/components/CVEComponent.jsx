@@ -5,6 +5,7 @@ import {
   Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
 import useAraliklaYenile from '../hooks/useAraliklaYenile'
+import { kacis, guvenliHref } from '../utils/html'
 import CeviriEtiketi, { ceviriEtiketiHtml } from './CeviriEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
@@ -163,14 +164,14 @@ function CVEComponent() {
 ${items.map(item => {
           const content = (item.turkish_description || item.original_description || '').replace(/\n/g, '<br>')
           return `<div class="article">
-  <span class="cveid">${item.cve_id || ''}</span>
-  <span class="badge" style="background:${severityColor(item.severity)}">${item.severity || 'Bilinmiyor'}</span>
+  <span class="cveid">${kacis(item.cve_id || '')}</span>
+  <span class="badge" style="background:${severityColor(item.severity)}">${kacis(item.severity || 'Bilinmiyor')}</span>
   ${ceviriEtiketiHtml(item)}
-  ${item.cvss_score ? `<span class="score">CVSS: ${item.cvss_score}</span>` : ''}
-  <span class="date">${item.published_date || ''}</span>
-  <h3>${item.turkish_title || item.original_title || ''}</h3>
+  ${item.cvss_score ? `<span class="score">CVSS: ${kacis(item.cvss_score)}</span>` : ''}
+  <span class="date">${kacis(item.published_date || '')}</span>
+  <h3>${kacis(item.turkish_title || item.original_title || '')}</h3>
   <div class="content">${content}</div>
-  <a href="${item.link || ''}" target="_blank">Kaynağa Git &rarr;</a>
+  <a href="${guvenliHref(item.link)}" target="_blank">Kaynağa Git &rarr;</a>
 </div>`
         }).join('\n')}
 </body></html>`

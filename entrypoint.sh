@@ -34,11 +34,14 @@ case "$1" in
         ;;
     *)
         if [ "${RUN_STARTUP_TASKS:-true}" = "true" ]; then
+            # 2026-10-08: '|| true' kaldirildi. Migration basarisizsa uygulama eski semayla
+            # acilip sonradan 500 vermek yerine konteyner hemen dusmeli (set -e); compose
+            # restart: unless-stopped ile yeniden dener, hata loglarda gorunur.
             echo "Migration calistiriliyor..."
-            python manage.py migrate --noinput || true
+            python manage.py migrate --noinput
 
             echo "Static dosyalar toplanıyor..."
-            python manage.py collectstatic --noinput || true
+            python manage.py collectstatic --noinput
         else
             echo "RUN_STARTUP_TASKS=false — migration ve collectstatic atlaniyor."
         fi

@@ -25,6 +25,7 @@ import os
 from typing import Dict, Optional
 
 from django.db import DatabaseError, OperationalError
+from django.db.models import F
 
 from . import gemini
 from . import translation_utils as tu
@@ -41,6 +42,16 @@ log = logging.getLogger(__name__)
 RETRANSLATE_BATCH = int(os.environ.get('RETRANSLATE_BATCH', '100'))
 # Yukseltme Gemini gunluk butcesini kullanir; asil sinir butcedir (gemini.GEMINI_DAILY_BUDGET).
 RETRANSLATE_UPGRADE_BATCH = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH', '40'))
+# Icerik hatasi (saglayici reddetti / dogrulama gecmedi) bu kadar kez tekrarlanan kayit
+# kuyruktan duser: needs_translation kalir ama sorgu onu elemez; status ucu
+# translation_given_up ile sayar. 2026-10-08: ayni ~23 kayit her 2 saatte Gemini
+# kotasi yiyerek yeniden reddediliyordu (turda 23-39 "hata", bekleyen toplam 23).
+RETRANSLATE_MAX_ATTEMPTS = int(os.environ.get('RETRANSLATE_MAX_ATTEMPTS', '5'))
+
+
+def _basarisiz_say(kayit) -> None:
+    """Icerik hatasi: deneme sayacini artirir (updated_at ilerlemez, delta akisina girmez)."""
+    type(kayit).objects.filter(pk=kayit.pk).update(translation_attempts=F('translation_attempts') + 1)
 
 
 def _baslik_ve_uzun_aciklama(kayit) -> Dict[str, str]:
@@ -165,8 +176,10 @@ def _yaz(kayit, alanlar, saglayici) -> bool:
         setattr(kayit, alan, deger)
     kayit.needs_translation = False
     kayit.translation_provider = saglayici
+    kayit.translation_attempts = 0
     try:
-        kayit.save(update_fields=[*alanlar, 'needs_translation', 'translation_provider', 'updated_at'])
+        kayit.save(update_fields=[*alanlar, 'needs_translation', 'translation_provider',
+                                  'translation_attempts', 'updated_at'])
     except OperationalError:
         raise
     except DatabaseError:
@@ -178,7 +191,8 @@ def _yaz(kayit, alanlar, saglayici) -> bool:
 def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
     """Asama 1. Donus: (cevrilen, basarisiz, durdu)."""
     anahtar = f'{prefix}:cursor:{ad}'
-    sorgu = model.objects.filter(needs_translation=True).order_by('updated_at', 'id')
+    sorgu = (model.objects.filter(needs_translation=True, translation_attempts__lt=RETRANSLATE_MAX_ATTEMPTS)
+             .order_by('updated_at', 'id'))
     kayitlar = _imlecten_sonraki(redis_client, anahtar, sorgu, sinir)
 
     cevrilen = basarisiz = 0
@@ -201,6 +215,7 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
             if gemini.hazir(ad) and _gemini_alanlari(ad, kayit):
                 # Gemini hazirdi ama icerigi reddetti; zincir kapali: icerik hatasi say, imlec gecsin
                 basarisiz += 1
+                _basarisiz_say(kayit)
                 redis_client.set(anahtar, deneme_oncesi)
                 continue
             durdu = True  # ne Gemini ne zincir: imleci ilerletme
@@ -212,7 +227,8 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
                 # Erisim sorunu: imleci ilerletme, bir sonraki tur once bu kaydi denesin
                 durdu = True
                 break
-            basarisiz += 1  # icerik hatasi: imlec gecer, kayit sirada kalir
+            basarisiz += 1  # icerik hatasi: imlec gecer, kayit sirada kalir (sayac esigine kadar)
+            _basarisiz_say(kayit)
         else:
             saglayici = tu.kayit_saglayicisi(kullanilan)
             if _yaz(kayit, alanlar, saglayici):

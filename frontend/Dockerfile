@@ -24,8 +24,9 @@ FROM nginx:1.31-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda
 
 RUN apk upgrade --no-cache
 
-# Custom nginx config
+# Custom nginx config + SPA guvenlik basliklari snippet'i (2026-10-08)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY guvenlik_basliklari.conf /etc/nginx/snippets/guvenlik_basliklari.conf
 
 # Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
