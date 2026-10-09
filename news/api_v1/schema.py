@@ -218,6 +218,7 @@ class BolumDurumuV1Serializer(serializers.Serializer):
     last_fetched_count = serializers.IntegerField(allow_null=True)
     last_saved_count = serializers.IntegerField(allow_null=True)
     pending_translation = serializers.IntegerField()
+    translation_given_up = serializers.IntegerField()
     total = serializers.IntegerField()
     sources = serializers.DictField(child=KaynakDurumuV1Serializer())
     silent_sources = serializers.ListField(child=serializers.CharField())

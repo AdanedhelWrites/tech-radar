@@ -364,6 +364,7 @@ class StatusView(V1APIView):
         from news.fetch_runs import BOLUM_MODELLERI
         from news.kaynaklar import kaynak_durumlari
         from news.models import FetchRun
+        from news.retranslate import RETRANSLATE_MAX_ATTEMPTS
 
         bolumler = {}
         for ad, model in BOLUM_MODELLERI.items():
@@ -378,6 +379,10 @@ class StatusView(V1APIView):
                 'last_fetched_count': son.fetched_count if son else None,
                 'last_saved_count': son.saved_count if son else None,
                 'pending_translation': model.objects.filter(needs_translation=True).count(),
+                # Esik kadar reddedilip kuyruktan dusen kayitlar (RETRANSLATE_MAX_ATTEMPTS); el ile
+                # bakilmali: admin'de sayac sifirlanirsa yeniden denenir
+                'translation_given_up': model.objects.filter(
+                    needs_translation=True, translation_attempts__gte=RETRANSLATE_MAX_ATTEMPTS).count(),
                 'total': model.objects.count(),
                 'sources': kaynaklar,
                 'silent_sources': [k for k, v in kaynaklar.items() if v['silent']],

@@ -14,6 +14,10 @@ class NewsArticle(models.Model):
     date = models.DateField(verbose_name='Tarih')
     original_date = models.CharField(max_length=100, verbose_name='Orijinal Tarih')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    # Retranslate'te icerik hatasi (saglayici reddetti / dogrulama gecmedi) sayaci.
+    # RETRANSLATE_MAX_ATTEMPTS'a ulasan kayit kuyruktan duser (2026-10-08: ayni 23 kayit
+    # her 2 saatte Gemini kotasi yiyerek yeniden reddediliyordu). Basarida sifirlanir.
+    translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
         choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
@@ -48,6 +52,10 @@ class CVEEntry(models.Model):
     references = models.JSONField(default=list, blank=True, verbose_name='Referanslar')
     affected_products = models.TextField(blank=True, verbose_name='Etkilenen Urunler')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    # Retranslate'te icerik hatasi (saglayici reddetti / dogrulama gecmedi) sayaci.
+    # RETRANSLATE_MAX_ATTEMPTS'a ulasan kayit kuyruktan duser (2026-10-08: ayni 23 kayit
+    # her 2 saatte Gemini kotasi yiyerek yeniden reddediliyordu). Basarida sifirlanir.
+    translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
         choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
@@ -85,6 +93,10 @@ class KubernetesEntry(models.Model):
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='blog', verbose_name='Kategori')
     version = models.CharField(max_length=30, blank=True, verbose_name='Surum')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    # Retranslate'te icerik hatasi (saglayici reddetti / dogrulama gecmedi) sayaci.
+    # RETRANSLATE_MAX_ATTEMPTS'a ulasan kayit kuyruktan duser (2026-10-08: ayni 23 kayit
+    # her 2 saatte Gemini kotasi yiyerek yeniden reddediliyordu). Basarida sifirlanir.
+    translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
         choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
@@ -112,6 +124,10 @@ class SREEntry(models.Model):
     link = models.URLField(verbose_name='Link', max_length=500, unique=True)
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    # Retranslate'te icerik hatasi (saglayici reddetti / dogrulama gecmedi) sayaci.
+    # RETRANSLATE_MAX_ATTEMPTS'a ulasan kayit kuyruktan duser (2026-10-08: ayni 23 kayit
+    # her 2 saatte Gemini kotasi yiyerek yeniden reddediliyordu). Basarida sifirlanir.
+    translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
         choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
@@ -147,6 +163,10 @@ class DevToolsEntry(models.Model):
     version = models.CharField(max_length=100, blank=True, verbose_name='Surum')
     entry_type = models.CharField(max_length=20, choices=ENTRY_TYPE_CHOICES, default='release', verbose_name='Tur')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    # Retranslate'te icerik hatasi (saglayici reddetti / dogrulama gecmedi) sayaci.
+    # RETRANSLATE_MAX_ATTEMPTS'a ulasan kayit kuyruktan duser (2026-10-08: ayni 23 kayit
+    # her 2 saatte Gemini kotasi yiyerek yeniden reddediliyordu). Basarida sifirlanir.
+    translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
         choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
@@ -174,6 +194,10 @@ class AINewsEntry(models.Model):
     link = models.URLField(verbose_name='Link', max_length=500, unique=True)
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     needs_translation = models.BooleanField(default=False, verbose_name='Ceviri Bekliyor')
+    # Retranslate'te icerik hatasi (saglayici reddetti / dogrulama gecmedi) sayaci.
+    # RETRANSLATE_MAX_ATTEMPTS'a ulasan kayit kuyruktan duser (2026-10-08: ayni 23 kayit
+    # her 2 saatte Gemini kotasi yiyerek yeniden reddediliyordu). Basarida sifirlanir.
+    translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
         choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
