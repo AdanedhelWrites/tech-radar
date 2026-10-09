@@ -9,7 +9,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Uygulama surumu** | `appVersion` 2026.10.1 (CalVer; imaj etiketi) |
 | **Helm chart** | 2.1.0 (SemVer; etiket `chart-2.1.0`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 462 Django testi (`news/tests/`), PostgreSQL uzerinde CI'da kosar |
+| **Testler** | 473 Django testi (`news/tests/`), PostgreSQL uzerinde CI'da kosar |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -298,7 +298,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-462 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+473 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -424,7 +424,7 @@ Her istekte `Authorization: Token <key>` basligi gonderilir. Admin arayuzunde **
 | GET | `/api/v1/schema/` | OpenAPI 3 semasi (token gerekir) |
 | GET | `/api/v1/docs/` | Swagger UI — tarayicida admin oturumuyla acilir |
 | GET | `/api/v1/health/` | Servis ayakta mi — **tokensiz** (Kubernetes probe'lari icin) |
-| GET | `/api/v1/status/` | Bolum basina veri tazeligi: `last_success_at`, `last_status`, `last_fetched_count`, `last_saved_count`, `pending_translation`, `total`; kaynak sagligi: `sources{ad: last_record_at, last_fetched_count, zero_runs, silent}` ve `silent_sources[]` (`SOURCE_SILENT_RUNS` ardisik turda 0 kayit donen kaynak) |
+| GET | `/api/v1/status/` | Bolum basina veri tazeligi: `last_success_at`, `last_status`, `last_fetched_count`, `last_saved_count`, `pending_translation`, `translation_given_up`, `total`; kaynak sagligi: `sources{ad: last_record_at, last_fetched_count, zero_runs, silent}` ve `silent_sources[]` (`SOURCE_SILENT_RUNS` ardisik turda 0 kayit donen kaynak) |
 | GET | `/api/v1/{bolum}/` | Imlecli delta okuma |
 | POST | `/api/v1/{bolum}/refresh/` | Tek bolum icin manuel cekim tetikler |
 | POST | `/api/v1/refresh/` | Alti bolumu birden tetikler |
@@ -744,6 +744,8 @@ Her cekim bir `FetchRun` satiri birakir (bolum, baslangic/bitis, `fetched_count`
 
 **Loglar (2026-10-08):** Scraper ve ceviri katmani `print` yerine `logging` kullanir; kaynak hatalari `WARNING` seviyesinde, modul adiyla (`news.devtools_scraper`, `scraper_multi`) gelir. `docker compose logs teknoloji-worker | grep WARNING` bir turda hangi kaynaklarin hata verdigini gosterir; `LOG_FORMAT=json` ile satirlar Loki/ELK'ye dogrudan gider. Worker Django `LOGGING` ayarini kullanir (`CELERY_WORKER_HIJACK_ROOT_LOGGER=False`).
 
+**Takili turlar (2026-10-09):** Worker yeniden basladiginda ya da sert sure siniri (`CELERY_TASK_TIME_LIMIT`) alt sureci oldurdugunde `task_postrun` hic gelmez ve satir suresiz `running` kalirdi (canlida 4 satir, biri 5 gunluk). Ayni bolumun yeni turu acilirken eski `running` satirlari `failure` + `stopped_reason=interrupted` ile kapatilir.
+
 **Kaynak sagligi (2026-10-08):** 8 kaynak aylarca sessizce olmustu (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone donmus akislar); bolum toplami "success" gorundugu icin fark edilmedi. Artik her tur secili her kaynak icin kaynaktan gelen sayiyi (`_drop_existing`'den onceki) `FetchRun.by_source`'a yazar. `/api/v1/status/` her kaynak icin `zero_runs` (ardisik 0 donen tamamlanmis tur) ve `silent` verir; `SOURCE_SILENT_RUNS` (varsayilan 4 = Beat'te 24 saat) esigi asan kaynaklar `silent_sources` listesindedir. Admin'deki FetchRun listesinde "0 donen kaynaklar" sutunu ayni bilgiyi tur basina gosterir. Seyrek yazan kaynaklar (Krebs, PagerDuty) kendi `days` penceresinde yine kayit dondurdugu icin yanlis pozitif vermez; yeni kayit olmamasi degil, kaynaktan hic kayit gelmemesi sessizliktir. Haftalik kontrol: `curl .../api/v1/status/ | jq '.sections[].silent_sources'`.
 
 ---
@@ -990,6 +992,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `GEMINI_CVE_RESERVE` | `0.5` | Gunluk Gemini butcesinin CVE'ye ayrilan payi; CVE tavani 400, diger bolumler 200 ([ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md)) |
 | `RETRANSLATE_BATCH` | `100` | Retranslate turunda bolum basina taranan bekleyen kayit sayisi |
 | `RETRANSLATE_UPGRADE_BATCH` | `40` | Tur ve bolum basina yukseltme siniri |
+| `RETRANSLATE_MAX_ATTEMPTS` | `5` | Bir kaydin icerik hatasiyla (saglayici reddetti / dogrulama gecmedi) kac kez denenecegi; esige ulasan kayit kuyruktan duser (`needs_translation` kalir) ve `/api/v1/status/` `translation_given_up` ile sayilir. Basarili cevirinin sayaci sifirlar. Sayaci elle sifirlamak (admin ya da shell) kaydi yeniden kuyruga alir |
 | `TRANSLATE_MIN_RATIO` | `0.4` | Ceviri kirpilma esigi: 80+ karakterlik metinde cikti/girdi orani bunun altindaysa ceviri reddedilir, kayit `needs_translation` kalir |
 | `RETENTION_DAYS` | `90` | Saklama penceresi; `updated_at` bundan eski kayitlar cekim basinda silinir (cekim penceresinden ayridir) |
 | `REFRESH_COOLDOWN` | `900` | `/api/v1/*/refresh/` sonrasi bolum sogumasi (sn) — **tum token'lar arasinda paylasilir** |

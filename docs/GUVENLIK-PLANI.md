@@ -65,6 +65,12 @@ gh api "repos/AdanedhelWrites/tech-radar/dependabot/alerts?state=open&per_page=1
 
 Kural: yeni inline `<script>` eklenmez; gerekiyorsa `nonce="{{ request.csp_nonce }}"`. Swagger UI `SpectacularSwaggerSplitView` ile çalışır.
 
+### Arayüz tarafı: HTML dışa aktarma ve nginx başlıkları (2026-10-09)
+
+- **Dışa aktarma XSS:** Altı bölüm sayfası raporu şablon dizesiyle üretip indiriyordu; başlık/gövde/kaynak üçüncü taraf feed'den geldiği için kaçışsızdı ve `<script>` indirilen raporda `file://` kaynağında çalışabilirdi. `frontend/src/utils/html.js`: `kacis()` (`& < > " '`) tüm değerlerde, `guvenliHref()` linklerde (yalnız `http(s)`, `javascript:`/`data:` boş). Kural: rapor şablonuna eklenen her `item.*` bu yardımcılardan geçer; `news/tests/test_analiz2.py` ham interpolasyonu yakalar.
+- **nginx başlıkları:** React'i sunan nginx hiçbir güvenlik başlığı vermiyordu (Django'nunkiler yalnız `/api/`, `/admin/`, `/static/` yanıtlarında). `frontend/guvenlik_basliklari.conf` yalnız SPA ve statik varlık location'larına include edilir (proxy yanıtlarında çift CSP olmasın): `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, COOP ve `script-src 'self'` CSP (Vite çıktısında inline script yok). `server_tokens off`. nginx'te bir location kendi `add_header`'ini tanımlarsa üsttekileri almaz; bu yüzden include iki location'da da açıkça durur.
+- **Compose migration:** `entrypoint.sh`'ta `migrate || true` kaldırıldı; şema uygulanamazsa konteyner düşer (restart politikası yeniden dener) ve hata loglarda görünür.
+
 ### Admin girişinde kaba kuvvet koruması (2026-10-08)
 
 `/admin/` nginx ve Vite proxy'si üzerinden dışarı açıktır; DRF throttle yalnız `/api/v1/`'i korur. django-axes (`AxesStandaloneBackend` ilk backend + `AxesMiddleware`): aynı (kullanıcı adı, IP) çiftinden `AXES_FAILURE_LIMIT` (5) başarısız denemeden sonra `AXES_COOLOFF_MINUTES` (30) boyunca `429`; başarılı giriş sayacı sıfırlar. Yalnız IP'ye kilitlemek proxy arkasında (REMOTE_ADDR = proxy) herkesi, yalnız kullanıcı adına kilitlemek yöneticiyi DoS'a açardı. Denemeler admin > Axes > Access attempts'ta; kilidi açmak için ilgili satır silinir ya da `python manage.py axes_reset`. Yeni tablolar migration'la gelir (Helm migration Job'u kapsar).
