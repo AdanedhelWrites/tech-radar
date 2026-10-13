@@ -6,7 +6,8 @@ hata yalnizca loglanir (news/api_v1/job_signals.py ile ayni kalip).
 """
 from datetime import timedelta
 
-from celery.signals import task_failure, task_postrun, task_prerun
+from celery.signals import task_failure, task_postrun, task_prerun, worker_init, worker_ready
+from django.db import connection
 from django.utils import timezone
 
 from .models import (
@@ -36,6 +37,10 @@ HATA_TAVANI = 2000
 # task_id -> FetchRun.id. Surec icidir: prerun ve postrun ayni worker alt
 # surecinde calisir. Surec arada olursa satir 'running' kalir; aranan sinyal budur.
 _acik_turlar = {}
+
+# Worker ana surecinin acilis ani (worker_init). worker_hazir yalniz bundan once acilmis
+# satirlari kapatir: acilista hemen baslayan telafi turlarinin satirlari etkilenmez.
+_acilis_ani = None
 
 
 def _bolum(sender):
@@ -79,6 +84,46 @@ def tur_basladi(sender=None, task_id=None, **kwargs):
         _acik_turlar[task_id] = kayit.id
     except Exception as hata:
         log.warning(f'  [FetchRun] Satir acilamadi ({task_id}): {hata}')
+
+
+@worker_init.connect
+def worker_baslatildi(sender=None, **kwargs):
+    global _acilis_ani
+    _acilis_ani = timezone.now()
+
+
+@worker_ready.connect
+def worker_hazir(sender=None, **kwargs):
+    """Onceki surecten kalan running satirlarini acilista kapatir (2026-10-13).
+
+    tur_basladi'daki tembel kapatma satiri ancak ayni bolumun sonraki turunda kapatir;
+    host uykusundan sonra bir news satiri acilistan sonra 3 sa 43 dk running kaldi.
+    Baska bir worker ping'e yanit verirse hicbir sey yapilmaz (Helm worker.replicas > 1):
+    onun calisan turlari kapatilamaz; o durumda tembel kapatma yedek olarak kalir.
+    """
+    try:
+        if _acilis_ani is None:
+            return
+        kendi = getattr(sender, 'hostname', None)
+        yanitlar = sender.app.control.ping(timeout=1.0) or []
+        digerleri = sorted({ad for yanit in yanitlar for ad in yanit if ad != kendi})
+        if digerleri:
+            log.info(f'  [FetchRun] Acilis: baska worker calisiyor ({", ".join(digerleri)}); '
+                     'running satirlari kapatilmadi')
+            return
+        kesilen = FetchRun.objects.filter(status='running', started_at__lt=_acilis_ani).update(
+            status='failure', finished_at=timezone.now(), stopped_reason='interrupted',
+            error='Worker yeniden basladi; tur kapanmadan kesildi.')
+        if kesilen:
+            log.warning(f'  [FetchRun] Acilis: {kesilen} takili running satiri interrupted olarak kapatildi')
+        else:
+            log.info('  [FetchRun] Acilis: takili running satiri yok')
+    except Exception as hata:
+        log.warning(f'  [FetchRun] Acilis temizligi yapilamadi: {hata}')
+    finally:
+        # Ana surecte bos bir baglanti tutulmasin; testlerde (atomic blok icinde) kapatilmaz.
+        if not connection.in_atomic_block:
+            connection.close()
 
 
 def _kapat(task_id, **alanlar):

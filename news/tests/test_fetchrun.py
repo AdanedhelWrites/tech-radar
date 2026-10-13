@@ -341,3 +341,80 @@ class TetikleyiciTests(TestCase):
         self.assertTrue(sahte_gorev.apply_async.called)
         self.assertEqual(sahte_gorev.apply_async.call_args.kwargs.get('headers'),
                          {'fetchrun_trigger': 'api'})
+
+
+class WorkerAcilisTests(TestCase):
+    """worker_ready: tek worker iken onceki surecten kalan running satirlarini kapatir
+    (2026-10-13). Host uykusundan sonra satir, ayni bolumun sonraki turuna kadar
+    running kaliyordu (canlida 748: acilistan sonra 3 sa 43 dk)."""
+
+    def setUp(self):
+        from news import fetch_runs
+        self.fr = fetch_runs
+        self.addCleanup(setattr, fetch_runs, '_acilis_ani', fetch_runs._acilis_ani)
+
+    def _sender(self, yanitlar=None, hata=None):
+        """Celery consumer nesnesinin sinyal icin gereken yuzu: hostname + app.control.ping."""
+        from types import SimpleNamespace
+        from unittest import mock
+        ping = mock.Mock(return_value=yanitlar if yanitlar is not None else [], side_effect=hata)
+        sender = SimpleNamespace(hostname='celery@bu',
+                                 app=SimpleNamespace(control=SimpleNamespace(ping=ping)))
+        return sender, ping
+
+    def _satir(self, dakika_once, status='running', section='news'):
+        from datetime import timedelta
+        kayit = FetchRun.objects.create(section=section, status=status)
+        FetchRun.objects.filter(pk=kayit.pk).update(
+            started_at=timezone.now() - timedelta(minutes=dakika_once))
+        return kayit.pk
+
+    def test_tek_worker_iken_onceki_running_satirlarini_kapatir(self):
+        eski = self._satir(60)
+        eski_cve = self._satir(30, section='cve')
+        basarili = self._satir(60, status='success')
+        self.fr.worker_baslatildi()
+        yeni = self._satir(0)
+        sender, ping = self._sender([{'celery@bu': {'ok': 'pong'}}])
+
+        self.fr.worker_hazir(sender=sender)
+
+        ping.assert_called_once_with(timeout=1.0)
+        for pk in (eski, eski_cve):
+            kayit = FetchRun.objects.get(pk=pk)
+            self.assertEqual(kayit.status, 'failure')
+            self.assertEqual(kayit.stopped_reason, 'interrupted')
+            self.assertIn('Worker yeniden basladi', kayit.error)
+            self.assertIsNotNone(kayit.finished_at)
+        self.assertEqual(FetchRun.objects.get(pk=yeni).status, 'running',
+                         'acilistan sonra baslayan telafi turu kapatilmamali')
+        self.assertEqual(FetchRun.objects.get(pk=basarili).status, 'success')
+
+    def test_baska_worker_yanit_verirse_hicbir_satiri_kapatmaz(self):
+        eski = self._satir(60)
+        self.fr.worker_baslatildi()
+        sender, _ = self._sender([{'celery@bu': {'ok': 'pong'}},
+                                  {'celery@diger': {'ok': 'pong'}}])
+
+        self.fr.worker_hazir(sender=sender)
+
+        self.assertEqual(FetchRun.objects.get(pk=eski).status, 'running')
+
+    def test_ping_hata_verirse_sessizce_gecer(self):
+        eski = self._satir(60)
+        self.fr.worker_baslatildi()
+        sender, _ = self._sender(hata=ConnectionError('broker yok'))
+
+        self.fr.worker_hazir(sender=sender)  # istisna yukselmemeli
+
+        self.assertEqual(FetchRun.objects.get(pk=eski).status, 'running')
+
+    def test_acilis_ani_yoksa_hicbir_satiri_kapatmaz(self):
+        eski = self._satir(60)
+        self.fr._acilis_ani = None
+        sender, ping = self._sender([{'celery@bu': {'ok': 'pong'}}])
+
+        self.fr.worker_hazir(sender=sender)
+
+        self.assertEqual(FetchRun.objects.get(pk=eski).status, 'running')
+        ping.assert_not_called()
