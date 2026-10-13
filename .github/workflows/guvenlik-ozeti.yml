@@ -1,0 +1,84 @@
+# Haftalik guvenlik ozeti (GUVENLIK-PLANI P5-b): Security + Actions verisinden her Cuma bir GitHub
+# Issue acar (etiket guvenlik-ozeti), oncekini "Yerine #N" yorumuyla kapatir.
+# Mod: RAPOR. Hat yalniz rapor uretilemezse kirmizidir: code scanning / kosular okunamadi, Issue
+# acilamadi ya da onceki kapatilamadi. Dependabot GITHUB_TOKEN ile okunamazsa Issue'ya not duser,
+# hat yesil kalir. Bicimleme scripts/guvenlik_ozeti.py'de (yalniz stdlib, birim testli).
+# Spec: docs/superpowers/specs/2026-10-13-p5b-haftalik-guvenlik-ozeti-design.md
+
+name: Haftalik guvenlik ozeti
+
+on:
+  schedule:
+    - cron: "0 6 * * 5"   # Cuma 06:00 UTC: haftalik taramalarin sonuncusu zizmor (Persembe)
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  ozet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read          # checkout (betik)
+      issues: write           # etiket, Issue ac, oncekini kapat
+      security-events: read   # code scanning uyarilari
+      actions: read           # basarisiz workflow kosulari
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Veriyi cek
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp "repos/${REPO}/code-scanning/alerts?state=open&per_page=100" > code_acik.json
+          gh api --paginate --slurp "repos/${REPO}/code-scanning/alerts?state=fixed&per_page=100" > code_fixed.json
+          gh api --paginate --slurp "repos/${REPO}/code-scanning/alerts?state=dismissed&per_page=100" > code_dismissed.json
+          jq -s 'add' code_fixed.json code_dismissed.json > code_kapanan.json
+          # API gun cozunurlugunde suzer; kesin 7 gunluk pencere betikte
+          tarih="$(date -u -d '8 days ago' +%Y-%m-%d)"
+          gh api --paginate --slurp "repos/${REPO}/actions/runs?status=failure&created=%3E%3D${tarih}&per_page=100" > kosular.json
+          if ! gh api --paginate --slurp "repos/${REPO}/dependabot/alerts?state=open&per_page=100" > dependabot.json 2> dependabot.err; then
+            echo "::warning::Dependabot uyarilari okunamadi: $(head -c 300 dependabot.err)"
+            echo '{"okunamadi": true}' > dependabot.json
+          fi
+
+      - name: Ozeti uret
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 scripts/guvenlik_ozeti.py --acik code_acik.json --kapanan code_kapanan.json \
+            --dependabot dependabot.json --kosular kosular.json --repo "${REPO}" --cikti ozet.md > baslik.txt
+          cat baslik.txt
+
+      - name: Issue ac, oncekini kapat
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh label create guvenlik-ozeti --repo "${REPO}" --color 5319E7 \
+            --description "Haftalik guvenlik ozeti (guvenlik-ozeti.yml)" --force
+          url="$(gh issue create --repo "${REPO}" --title "$(cat baslik.txt)" --body-file ozet.md --label guvenlik-ozeti)"
+          yeni="${url##*/}"
+          echo "Acildi: ${url}"
+          for no in $(gh issue list --repo "${REPO}" --label guvenlik-ozeti --state open --limit 50 --json number --jq '.[].number'); do
+            if [ "${no}" != "${yeni}" ]; then
+              gh issue close "${no}" --repo "${REPO}" --comment "Yerine #${yeni} açıldı."
+            fi
+          done
+          echo "### Haftalik guvenlik ozeti: ${url}" >> "${GITHUB_STEP_SUMMARY}"

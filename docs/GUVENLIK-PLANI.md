@@ -1,6 +1,6 @@
 # Güvenlik Hattı ve Bekleyen İşler Planı
 
-> Son güncelleme: 2026-10-08 (P3, P4 ve P5-a tamamlandı; kalan P5-b/c). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
+> Son güncelleme: 2026-10-13 (P3, P4, P5-a ve P5-b tamamlandı; kalan P5-c). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
 > Bir iş bitince kutusunu işaretle ve ilgili PR numarasını yanına yaz.
 
 ## 1. Hatlar ne zaman çalışır?
@@ -15,6 +15,7 @@
 | `CodeQL Advanced` | PR, `main` push, Pazar | Rapor | Analiz çalışmadı |
 | `zizmor` | `.github/` değişince, Perşembe | Rapor | Workflow denetimi çalışmadı |
 | `OpenSSF Scorecard` | `main` push, Salı | Rapor | Skor üretilemedi |
+| `Haftalik guvenlik ozeti` | Cuma 06:00 UTC, elle | Rapor (Issue, etiket `guvenlik-ozeti`) | Özet üretilemedi: code scanning / koşular okunamadı, Issue açılamadı ya da önceki kapatılamadı |
 | Dependabot | Pazartesi + yeni CVE çıktıkça | — | Güncelleme PR'ları açar |
 
 **Rapor modu:** Bulgu varsa hat yine yeşil kalır, bulgular aşağıdaki yerlere düşer.
@@ -31,6 +32,8 @@ Hat sadece taramanın kendisi yapılamadıysa kırmızı olur. Bulgu yok diye "b
 | SBOM (CycloneDX) | Actions → `trivy` koşusu → `sbom-*` artefaktları |
 
 ### Haftalık kontrol rutini (~10 dk)
+Her Cuma bu rutinin özeti `guvenlik-ozeti` etiketli bir Issue olarak açılır (önceki kapanır): kırmızı koşular, araç × severity tablosu, haftanın yeni/kapanan uyarıları, Dependabot. Önce ona bak; ayrıntı gerekirse aşağıdaki adımlara in.
+
 1. **Actions:** Son 7 günde kırmızı koşu var mı? Varsa önce onu çöz, çünkü rapor hattı bozuksa bulgu listesi eksiktir.
 2. **Security → Dependabot:** Açık security PR'larına bak (bkz. §3).
 3. **Security → Code scanning:** Severity'e göre sırala; `critical` ve `high` olanları §4'teki P4 listesine ekle.
@@ -146,7 +149,7 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıy
 
 ### P5: Görünürlük
 - [x] ZAP sonucunu SARIF'e çevirip Security sekmesine yükle; tek kontrol yeri Security olsun — `scripts/zap_sarif.py` (stdlib; alert tipi = kural, instance = sonuç, konum `dast/<url-yolu>` (Code Scanning `http` şemalı konum kabul etmiyor; tam URL mesajda), `security-severity` High 8.0 / Medium 5.0 / Low 3.0 / Info 1.0, kararlı `partialFingerprints`; kural anahtarı `alertRef`, alt kurallar ayrı), 10 birim testi `news/tests/test_zap_sarif.py`; `upload-sarif` kategori `zap-baseline` (2026-10-08). İlk yükleme 70 sonuç / 11 kural (10 medium: Cross-Domain Misconfiguration, CSP yok; 60 low). Gürültü `.zap/rules.tsv` ile IGNORE: 90005 Sec-Fetch-*, 10049 Non-Storable, 10111/10112 Auth/Session Identified, 10094 Base64 (csrf token). Dikkat: ZAP'ın kural dosyası yalnız konsol özetini ve çıkış kodunu etkiler, JSON rapora IGNORE'lar yine girer; bu yüzden `zap_sarif.py --kurallar .zap/rules.tsv` aynı dosyayı okuyup SARIF'e almaz. Gerçek bulgu listeye eklenmez, Security'de dismiss edilir
-- [ ] Haftalık güvenlik özeti: araç × severity tablosuyla GitHub Issue açan bir workflow
+- [x] Haftalık güvenlik özeti: araç × severity tablosuyla GitHub Issue açan bir workflow — `.github/workflows/guvenlik-ozeti.yml` (Cuma 06:00 UTC + elle; `GITHUB_TOKEN`, PAT yok) veriyi `gh api --paginate --slurp` ile çeker, `scripts/guvenlik_ozeti.py` (stdlib, 12 birim testi `news/tests/test_guvenlik_ozeti.py`) biçimler (repo herkese açık: Issue yalnız toplu sayı taşır, kural/yol/uyarı bağlantısı yazılmaz; güvenilmeyen metin Markdown kaçışlı); her hafta yeni Issue, önceki "Yerine #N açıldı." ile kapanır. Haftalık değişim durum saklamadan `created_at`/`fixed_at`/`dismissed_at` ile hesaplanır. Dependabot okunamazsa Issue'ya not düşer, hat yeşil kalır (2026-10-13; spec `superpowers/specs/2026-10-13-p5b-haftalik-guvenlik-ozeti-design.md`)
 - [ ] A5 (OpenAPI şeması) çıkınca `zaproxy/action-api-scan` ile `/api/v1/` tam taransın
 
 ## 5. Geçmiş
@@ -161,3 +164,4 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıy
 - **2026-10-08:** Dependabot PR #46/#47/#48 (nginx ve node digest, actions grubu) merge. P4 Scorecard triajı: 9 gerekçeli dismiss + `source-map-js` düzeltmesi (`c05ac5a`). P3: `main-koruma` ruleset'ine PR zorunluluğu ve 5 zorunlu check (strict, bypass yok) eklendi; `main`'e doğrudan push kapandı.
 - **2026-10-08:** P5-a: ZAP baseline raporu SARIF'e çevrilip Security → Code scanning'e yükleniyor (`scripts/zap_sarif.py`, kategori `zap-baseline`).
 - **2026-10-08:** Güvenlik başlıkları (ZAP 10038/10098/10063/90004): django-csp 4 ile CSP (`script-src 'self'` + nonce, inline script yok; `style-src` `'unsafe-inline'` Swagger/spectacular için), `cybernews/guvenlik_basliklari.py` ile Permissions-Policy / CORP / COEP, `WHITENOISE_ALLOW_ALL_ORIGINS=False` (statik dosyalarda `ACAO: *` kalktı), `/api/v1/docs/` `SpectacularSwaggerSplitView` (başlatma betiği `?script=` ile ayrı JS). Testler `news/tests/test_guvenlik_basliklari.py`.
+- **2026-10-13:** P5-b: haftalık güvenlik özeti Issue'su (Cuma 06:00 UTC; kırmızı koşular, araç × severity, haftalık yeni/kapanan, Dependabot).
