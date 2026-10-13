@@ -50,16 +50,30 @@ python3 scripts/guvenlik_ozeti.py \
 3. **Code scanning — açık uyarılar:** araç × severity tablosu. Sabit sütunlar
    `critical, high, medium, low, error, warning, note, Toplam`; araçlar ada göre sıralı; son satır `Toplam`.
    Severity: `rule.security_severity_level` varsa o, yoksa `rule.severity`; `none`/boş → `note`.
-4. **Bu hafta:** yeni açılan (hâlâ açık, `created_at` pencerede) uyarılar tablo halinde
-   (araç | severity | kural | konum | bağlantı), en fazla 20 satır, fazlası "… ve N uyarı daha";
-   kapananlar: düzeltilen (`state=fixed`, `fixed_at` pencerede) ve dismiss edilen
-   (`state=dismissed`, `dismissed_at` pencerede) sayıları.
+4. **Bu hafta:** yeni açılan (hâlâ açık, `created_at` pencerede), düzeltilen (`state=fixed`, `fixed_at`
+   pencerede) ve dismiss edilen (`state=dismissed`, `dismissed_at` pencerede) uyarıların toplamları ve
+   araç bazında `Araç | Yeni | Düzeltilen | Dismiss` tablosu; ayrıntı için Security → Code scanning bağlantısı.
+   **Uyarı ayrıntısı (kural, dosya yolu, uyarı numarası/bağlantısı) yazılmaz** — bkz. §4a.
 5. **Dependabot — açık uyarılar:** `critical/high/medium/low` sayıları (`security_advisory.severity`);
    okunamadıysa "okunamadı (token izni)".
 6. **Ne yapmalı:** kırmızı koşu varsa önce onu çöz; critical/high → GUVENLIK-PLANI P4 listesi; ZAP bulguları
    Security'de dismiss ya da düzeltme. Plan bağlantısı.
 
-Hücre kaçışı: `|` → `\|`, satır sonu → boşluk, `@` → `&#64;` (yanlışlıkla kullanıcı anma olmasın).
+Hücre kaçışı (güvenilmeyen metin: fork PR'ının dal adı ve workflow adı saldırgan seçimidir): satır sonu →
+boşluk; ``\ ` * _ { } [ ] ( ) < > # + ! ~ |`` ters bölüyle kaçırılır (HTML/bağlantı olarak işlenmez);
+`@` → `&#64;` (kullanıcı anma olmasın).
+
+### 4a. Güvenlik düzeltmesi (2026-10-13, uygulama sırasında)
+
+Otomatik güvenlik incelemesi iki bulgu verdi; repo **herkese açık** (`visibility=public`):
+
+1. **Bilgi ifşası:** İlk tasarımdaki "yeni uyarılar" tablosu kural, dosya yolu ve uyarı bağlantısını herkese
+   açık Issue'ya yazıyordu. Security → Code scanning'i yalnız yazma yetkisi olanlar görür; düzeltilmemiş bir
+   CodeQL bulgusunun yeri böylece yayınlanmış olurdu. Karar: Issue yalnız toplu sayı taşır. Adım özeti ve
+   artefakt da herkese açık repoda herkese görünür, bu yüzden ayrıntı başka bir yere de taşınmaz.
+2. **Markdown enjeksiyonu:** Yalnız `|` ve `@` kaçırılıyordu; yukarıdaki kaçış kümesine genişletildi.
+
+Kırmızı koşular tablosu kalır: Actions koşuları herkese açık repoda zaten herkese görünür.
 
 Haftalık değişim için durum saklanmaz: `created_at` / `fixed_at` / `dismissed_at` ile hesaplanır, önceki
 Issue gövdesi ayrıştırılmaz.
@@ -93,7 +107,7 @@ ve sonuç GUVENLIK-PLANI'ya yazılır.
 
 TDD, `news/tests/test_guvenlik_ozeti.py`:
 boş veri (✅, sıfır tablo); araç × severity sayımı ve `security_severity_level` önceliği, `none` → note;
-pencere sınırı (tam 7 gün dahil, 7 gün + 1 sn hariç); düzeltilen/dismiss sayımı; 20 satır kesimi;
+pencere sınırı (tam 7 gün dahil, 7 gün + 1 sn hariç); düzeltilen/dismiss sayımı ve araç bazında değişim tablosu; uyarı ayrıntısının yayınlanmaması;
 Dependabot okunamadı (durum etkilenmez) ve critical (⚠️); kırmızı koşu satırı ve ⚠️; hücre kaçışı;
 ISO hafta başlığı; sayfalı girdi düzleştirme; CLI (`main`) dosya yazar, başlığı basar.
 

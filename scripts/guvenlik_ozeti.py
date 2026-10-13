@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 PENCERE = timedelta(days=7)
 SUTUNLAR = ('critical', 'high', 'medium', 'low', 'error', 'warning', 'note')
 DEPENDABOT_SUTUNLAR = ('critical', 'high', 'medium', 'low')
-YENI_TAVAN = 20
+MARKDOWN_ISARETLERI = set('\\`*_{}[]()<>#+!~|')
 PLAN = 'docs/GUVENLIK-PLANI.md'
 
 
@@ -53,9 +53,12 @@ def duzlestir(veri, anahtar=None):
 
 
 def hucre(deger):
-    """Markdown tablo hucresi: | kacar, satir sonunu bosluga cevirir, @ anmayi etkisizlestirir."""
-    metin = str(deger if deger is not None else '')
-    return metin.replace('\r', ' ').replace('\n', ' ').replace('|', '\\|').replace('@', '&#64;')
+    """Markdown tablo hucresi, guvenilmeyen metin icin: satir sonu bosluga, Markdown/HTML isaretleri
+    ters boluyle kacirilir (fork PR'inin dal adi ya da workflow adi `<img ...>` veya `[..](..)` olarak
+    islenmesin), @ anmasi etkisizlestirilir."""
+    metin = str(deger if deger is not None else '').replace('\r', ' ').replace('\n', ' ')
+    metin = ''.join('\\' + harf if harf in MARKDOWN_ISARETLERI else harf for harf in metin)
+    return metin.replace('@', '&#64;')
 
 
 def severity(uyari):
@@ -91,12 +94,18 @@ def ozet(acik, kapanan, dependabot, kosular, repo, simdi):
     for uyari in acik:
         satir = tablo.setdefault(arac(uyari), dict.fromkeys(SUTUNLAR, 0))
         satir[severity(uyari)] += 1
-    yeni = sorted((u for u in acik if pencerede(u.get('created_at'), simdi)),
-                  key=lambda u: (SUTUNLAR.index(severity(u)), arac(u), u.get('number') or 0))
-    duzeltilen = sum(1 for u in kapanan
-                     if u.get('state') == 'fixed' and pencerede(u.get('fixed_at'), simdi))
-    dismiss = sum(1 for u in kapanan
-                  if u.get('state') == 'dismissed' and pencerede(u.get('dismissed_at'), simdi))
+    # Haftalik degisim arac bazinda yalniz sayi olarak: repo herkese acik, Security sekmesini yalniz
+    # yazma yetkisi olanlar gorur; kural / dosya yolu / uyari numarasi Issue'ya yazilmaz.
+    degisim = {}
+    for uyari in acik:
+        if pencerede(uyari.get('created_at'), simdi):
+            degisim.setdefault(arac(uyari), [0, 0, 0])[0] += 1
+    for uyari in kapanan:
+        if uyari.get('state') == 'fixed' and pencerede(uyari.get('fixed_at'), simdi):
+            degisim.setdefault(arac(uyari), [0, 0, 0])[1] += 1
+        elif uyari.get('state') == 'dismissed' and pencerede(uyari.get('dismissed_at'), simdi):
+            degisim.setdefault(arac(uyari), [0, 0, 0])[2] += 1
+    yeni, duzeltilen, dismiss = (sum(s[i] for s in degisim.values()) for i in range(3))
 
     dependabot_okunamadi = isinstance(dependabot, dict) and bool(dependabot.get('okunamadi'))
     dep = dict.fromkeys(DEPENDABOT_SUTUNLAR, 0)
@@ -113,7 +122,7 @@ def ozet(acik, kapanan, dependabot, kosular, repo, simdi):
     if kritik:
         nedenler.append(f'{kritik} açık critical/high code scanning uyarısı')
     if yeni:
-        nedenler.append(f'Bu hafta {len(yeni)} yeni code scanning uyarısı')
+        nedenler.append(f'Bu hafta {yeni} yeni code scanning uyarısı')
     if dep['critical'] + dep['high']:
         nedenler.append(f"{dep['critical'] + dep['high']} açık critical/high Dependabot uyarısı")
 
@@ -146,16 +155,14 @@ def ozet(acik, kapanan, dependabot, kosular, repo, simdi):
                     + f' | **{sum(toplam.values())}** |')
 
     satirlar += ['', '## Bu hafta', '',
-                 f'- Yeni açılan (hâlâ açık): **{len(yeni)}**',
+                 f'- Yeni açılan (hâlâ açık): **{yeni}**',
                  f'- Düzeltilen: **{duzeltilen}** · Dismiss edilen: **{dismiss}**']
-    if yeni:
-        satirlar += ['', '| Araç | Severity | Kural | Konum | Uyarı |', '|---|---|---|---|---|']
-        for u in yeni[:YENI_TAVAN]:
-            konum = ((u.get('most_recent_instance') or {}).get('location') or {}).get('path')
-            satirlar.append(f"| {hucre(arac(u))} | {severity(u)} | {hucre((u.get('rule') or {}).get('id'))} "
-                            f"| {hucre(konum)} | [#{u.get('number')}]({u.get('html_url')}) |")
-        if len(yeni) > YENI_TAVAN:
-            satirlar += ['', f'… ve {len(yeni) - YENI_TAVAN} uyarı daha (Security → Code scanning).']
+    if degisim:
+        satirlar += ['', '| Araç | Yeni | Düzeltilen | Dismiss |', '|---|---:|---:|---:|']
+        for ad in sorted(degisim):
+            satirlar.append(f'| {hucre(ad)} | ' + ' | '.join(str(n) for n in degisim[ad]) + ' |')
+    satirlar += ['', f'Ayrıntı (kural, konum): [Security → Code scanning](https://github.com/{repo}/security/code-scanning)'
+                 ' — repo herkese açık olduğu için uyarı ayrıntısı bu Issue\'ya yazılmaz; sekmeyi yazma yetkisi olanlar görür.']
 
     satirlar += ['', '## Dependabot — açık uyarılar', '']
     if dependabot_okunamadi:

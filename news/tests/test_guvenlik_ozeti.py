@@ -76,8 +76,7 @@ class GuvenlikOzetiTests(SimpleTestCase):
             _uyari(2, olusma='2026-10-09T05:59:59Z'),   # 7 gun + 1 sn: haric
         ])
         self.assertIn('Yeni açılan (hâlâ açık): **1**', govde)
-        self.assertIn('[#1](', govde)
-        self.assertNotIn('[#2](', govde)
+        self.assertIn('| CodeQL | 1 | 0 | 0 |', govde)
         self.assertIn('Bu hafta 1 yeni code scanning uyarısı', govde)
 
     def test_kapananlar(self):
@@ -89,12 +88,18 @@ class GuvenlikOzetiTests(SimpleTestCase):
             _uyari(5, durum='dismissed', dismissed_at='2026-08-01T00:00:00Z'),
         ])
         self.assertIn('Düzeltilen: **1** · Dismiss edilen: **2**', govde)
+        self.assertIn('| CodeQL | 0 | 1 | 2 |', govde)
         self.assertIn('**Durum: ✅ Temiz**', govde)
 
-    def test_yeni_liste_tavani(self):
-        govde = self._ozet(acik=[_uyari(n, olusma='2026-10-15T00:00:00Z') for n in range(1, 26)])
-        self.assertEqual(govde.count('/security/code-scanning/'), 20)
-        self.assertIn('… ve 5 uyarı daha', govde)
+    def test_uyari_ayrintisi_yayinlanmaz(self):
+        """Repo herkese acik: Security sekmesini yalniz yazma yetkisi olanlar gorur. Issue
+        duzeltilmemis bir uyarinin kuralini, dosya yolunu ya da numarasini yayinlamamali."""
+        govde = self._ozet(acik=[_uyari(7, olusma='2026-10-15T00:00:00Z', guv='high',
+                                        kural='py/sql-injection', yol='news/gizli_yol.py')])
+        self.assertNotIn('sql-injection', govde)
+        self.assertNotIn('gizli', govde)
+        self.assertNotIn('/security/code-scanning/7', govde)
+        self.assertIn('https://github.com/o/r/security/code-scanning', govde)
 
     def test_dependabot_okunamadi_durumu_degistirmez(self):
         govde = self._ozet(dependabot={'okunamadi': True})
@@ -124,8 +129,14 @@ class GuvenlikOzetiTests(SimpleTestCase):
 
     def test_hucre_kacisi(self):
         self.assertEqual(self.m.hucre('a|b\nc @ali'), 'a\\|b c &#64;ali')
-        govde = self._ozet(acik=[_uyari(1, olusma='2026-10-15T00:00:00Z', yol='x|y.py')])
-        self.assertIn('| x\\|y.py |', govde)
+        self.assertEqual(self.m.hucre('[x](y) <img> `k` *_~#!\\'),
+                         '\\[x\\]\\(y\\) \\<img\\> \\`k\\` \\*\\_\\~\\#\\!\\\\')
+        # Fork PR'inin dal adi saldirgan secimidir: Issue'da HTML/baglanti olarak islenmemeli
+        govde = self._ozet(kosular=[{'name': 'CI', 'event': 'pull_request', 'head_branch': '<img src=x>',
+                                     'created_at': '2026-10-15T10:00:00Z', 'run_number': 1,
+                                     'html_url': 'https://github.com/o/r/actions/runs/1'}])
+        self.assertNotRegex(govde, r'(?<!\\)<img')   # kacirilmamis etiket yok
+        self.assertIn('\\<img src=x\\>', govde)
 
     def test_baslik(self):
         self.assertEqual(self.m.baslik(SIMDI), 'Haftalık güvenlik özeti — 2026-W42 (2026-10-16)')
