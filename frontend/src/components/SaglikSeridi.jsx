@@ -11,6 +11,8 @@ const BOLUM_ETIKETLERI = {
   sre: 'SRE', devtools: 'DevTools', ai: 'Yapay Zeka',
 }
 const YENILEME_MS = 5 * 60 * 1000
+// Beat 6 saatte bir cekim yapar; son basari bunun 2 kati kadar eskiyse cekim durmus demektir.
+const BAYAT_SAAT = 12
 
 export default function SaglikSeridi() {
   const [veri, setVeri] = useState(null)
@@ -38,6 +40,8 @@ export default function SaglikSeridi() {
         const b = veri[ad] || {}
         const sessiz = b.silent_sources || []
         const sorun = sessiz.length > 0 || b.last_status === 'failure'
+        const veriYok = !b.last_success_at
+        const bayat = !veriYok && Date.now() - Date.parse(b.last_success_at) > BAYAT_SAAT * 3600 * 1000
         const baslik = sessiz.length ? `Sessiz: ${sessiz.join(', ')}` : 'Tüm kaynaklar veri döndürüyor'
         return (
           <span key={ad} className="border rounded px-2 py-1 small" title={baslik}>
@@ -45,7 +49,9 @@ export default function SaglikSeridi() {
             <span className="text-muted">{goreliZaman(b.last_success_at)}</span>{' '}
             {sorun
               ? <Badge bg="danger">{sessiz.length ? `${sessiz.length} sessiz` : 'son tur hatalı'}</Badge>
-              : <Badge bg="success">ok</Badge>}
+              : veriYok || bayat
+                ? <Badge bg="warning" text="dark">{veriYok ? 'veri yok' : 'bayat'}</Badge>
+                : <Badge bg="success">ok</Badge>}
           </span>
         )
       })}
