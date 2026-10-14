@@ -5,17 +5,15 @@ kubernetes.io/blog, GitHub Releases, CNCF Blog kaynaklarindan
 Kubernetes haberlerini, surum guncellemelerini ve guvenlik bilgilerini ceker.
 """
 
-import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import re
-import json
-from typing import List, Dict, Optional
+from typing import List, Dict
 import time
 
 from news.translation_utils import (
     translate_text, translate_long_text,
-    _protect_terms, _restore_terms, turkish_post_process,
+    _protect_terms, _restore_terms,
 )
 import logging
 
@@ -240,7 +238,6 @@ class K8sGitHubScraper(K8sScraper):
         """
         lines = changes_md.split('\n')
         result_parts = []
-        current_section = None
         current_item_lines = []
 
         def flush_item():
@@ -278,7 +275,7 @@ class K8sGitHubScraper(K8sScraper):
                 desc = re.sub(r'\*\*([^*]+)\*\*', r'\1', desc)
                 desc = re.sub(r'\*([^*]+)\*', r'\1', desc)
 
-                result_parts.append(f"---ITEM---")
+                result_parts.append("---ITEM---")
                 result_parts.append(desc.strip())
                 result_parts.append(f"<<<PR#{pr_num}|@{author}|SIG {sigs}>>>")
             else:
@@ -287,7 +284,7 @@ class K8sGitHubScraper(K8sScraper):
                 desc = re.sub(r'`([^`]+)`', r'«\1»', desc)
                 desc = re.sub(r'\*\*([^*]+)\*\*', r'\1', desc)
                 desc = re.sub(r'\*([^*]+)\*', r'\1', desc)
-                result_parts.append(f"---ITEM---")
+                result_parts.append("---ITEM---")
                 result_parts.append(desc.strip())
 
             current_item_lines = []
@@ -302,7 +299,6 @@ class K8sGitHubScraper(K8sScraper):
                 section_name = section_match.group(1).strip()
                 # "Changes by Kind" ana basligini atla, alt basliklari tut
                 if section_name.lower() not in ('changes by kind', 'changelog since'):
-                    current_section = section_name
                     result_parts.append(f"===SECTION: {section_name}===")
                 continue
 

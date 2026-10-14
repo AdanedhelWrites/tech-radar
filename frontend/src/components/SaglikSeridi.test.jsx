@@ -16,7 +16,7 @@ describe('SaglikSeridi', () => {
   it('alti bolumu, goreli zamani ve sorun rozetlerini gosterir', async () => {
     saglikApi.getSaglik.mockResolvedValue({ data: { sections: {
       news: bolum(), cve: bolum(), kubernetes: bolum(), sre: bolum(),
-      devtools: bolum({ silent_sources: ['MinIO', 'RabbitMQ'] }), ai: bolum({ last_status: 'failure' }),
+      devtools: bolum({ silent_sources: ['Redis', 'RabbitMQ'] }), ai: bolum({ last_status: 'failure' }),
     } } })
 
     render(<SaglikSeridi />)
@@ -26,7 +26,33 @@ describe('SaglikSeridi', () => {
     expect(screen.getByText('son tur hatalı')).toBeInTheDocument()
     expect(screen.getAllByText('ok')).toHaveLength(4)
     expect(screen.getAllByText('1 sa önce')).toHaveLength(6)
-    expect(screen.getByTitle('Sessiz: MinIO, RabbitMQ')).toBeInTheDocument()
+    expect(screen.getByTitle('Sessiz: Redis, RabbitMQ')).toBeInTheDocument()
+  })
+
+  it('13 saatten eski son basari "bayat", hic basari yoksa "veri yok" rozeti alir', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: {
+      news: bolum(), cve: bolum(), kubernetes: bolum(), sre: bolum(),
+      devtools: bolum({ last_success_at: new Date(Date.now() - 13 * 3600 * 1000).toISOString() }),
+      ai: bolum({ last_success_at: null }),
+    } } })
+
+    render(<SaglikSeridi />)
+
+    expect(await screen.findByText('bayat')).toBeInTheDocument()
+    expect(screen.getByText('veri yok')).toBeInTheDocument()
+    expect(screen.getAllByText('ok')).toHaveLength(4)
+  })
+
+  it('sessiz kaynak, bayatlik rozetinden once gelir', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: {
+      news: bolum({ silent_sources: ['Seq'], last_success_at: new Date(Date.now() - 20 * 3600 * 1000).toISOString() }),
+      cve: bolum(), kubernetes: bolum(), sre: bolum(), devtools: bolum(), ai: bolum(),
+    } } })
+
+    render(<SaglikSeridi />)
+
+    expect(await screen.findByText('1 sessiz')).toBeInTheDocument()
+    expect(screen.queryByText('bayat')).not.toBeInTheDocument()
   })
 
   it('istek basarisizsa sessiz bir uyari gosterir', async () => {

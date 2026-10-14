@@ -1,8 +1,7 @@
 # Bakım Dalgası 2026-10: Düzeltmeler ve Geliştirmeler — Tasarım
 
 > Tarih: 2026-10-14. Kaynak: 2026-10-13 geliştirme tavsiyesi turu (durum doğrulaması + öncelik listesi;
-> hafıza `gelistirme-oncelikleri-2026-10-13`, Obsidian Daily 2026-10-13 17:14). Durum: plan yazıldı,
-> uygulama kullanıcı onayı bekliyor. Uygulama planı: `docs/superpowers/plans/2026-10-14-bakim-dalgasi.md`.
+> hafıza `gelistirme-oncelikleri-2026-10-13`, Obsidian Daily 2026-10-13 17:14). Durum: uygulandı (2026-10-14). Uygulama planı: `docs/superpowers/plans/2026-10-14-bakim-dalgasi.md`.
 
 ## 1. Amaç
 

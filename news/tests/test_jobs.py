@@ -5,7 +5,6 @@ sonuclari okumasin ve durumlar deterministik olsun.
 """
 from unittest import mock
 
-from django.test import SimpleTestCase
 
 from news.api_v1 import refresh
 from news.tests.base import RefreshTestMixin, V1TestCase

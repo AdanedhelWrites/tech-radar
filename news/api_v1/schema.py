@@ -200,7 +200,12 @@ class HealthV1Serializer(serializers.Serializer):
 
 
 class KaynakDurumuV1Serializer(serializers.Serializer):
-    """Kaynak sagligi (2026-10-08): SOURCE_SILENT_RUNS ardisik turda 0 kayit donen kaynak sessizdir."""
+    """Kaynak sagligi. `silent` iki kosulun birlikte saglanmasidir: `zero_runs >= SOURCE_SILENT_RUNS`
+    (ardisik tamamlanmis turda kaynaktan 0 kayit) VE (hic kayit yok VEYA `days_since_record >
+    expected_gap_days`). `expected_gap_days` kaynagin beklenen yayin araligidir (seyrek yayinlayan
+    kaynaklar icin kaynak basina, digerleri icin bolum cekim penceresi); `days_since_record` son
+    kaydin tam gun yasidir (kayit yoksa null).
+    """
     last_record_at = serializers.DateTimeField(allow_null=True)
     last_fetched_count = serializers.IntegerField(allow_null=True)
     zero_runs = serializers.IntegerField()

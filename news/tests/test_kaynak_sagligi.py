@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from news import fetch_runs, kaynaklar
 from news.models import DevToolsEntry, FetchRun, NewsArticle
+from news.tasks import RETENTION_DAYS
 from news.tests.base import V1TestCase
 
 
@@ -32,6 +33,13 @@ class BolumKaynaklariTests(SimpleTestCase):
     def test_bilinmeyen_bolum_keyerror(self):
         with self.assertRaises(KeyError):
             kaynaklar.bolum_kaynaklari('yok')
+
+
+class BeklenenAralikTests(SimpleTestCase):
+
+    def test_beklenen_aralik_saklama_suresini_asmaz(self):
+        # Saklama updated_at'e gore siler; daha uzun aralik kaydin sessizlik hesabindan once silinmesi demektir.
+        self.assertLessEqual(max(kaynaklar.BEKLENEN_ARALIK_GUN.values()), RETENTION_DAYS)
 
 
 class KaynakSayaclariTests(SimpleTestCase):

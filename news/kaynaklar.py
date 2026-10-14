@@ -10,8 +10,10 @@ Iki parca:
     bununla secili her kaynagi 0'dan baslatir; boylece "secilmedi" ile "secildi
     ama hic kayit donmedi" ayrilir (FetchRun.by_source).
   - kaynak_durumlari(bolum, model): /api/v1/status/ icin kaynak basina son kayit
-    zamani, son turda gelen sayi ve ardisik sifir tur sayisi. SOURCE_SILENT_RUNS
-    (varsayilan 4 = Beat'te 24 saat) ardisik sifir tur "sessiz" sayilir.
+    zamani, son turda gelen sayi ve ardisik sifir tur sayisi. Sessizlik iki kosulun
+    birlikte saglanmasidir (2026-10-14): zero_runs >= SOURCE_SILENT_RUNS (varsayilan 4 =
+    Beat'te 24 saat) VE (hic kayit yok VEYA days_since_record > expected_gap_days).
+    expected_gap_days: BEKLENEN_ARALIK_GUN'deki kaynak degeri, yoksa bolum penceresi.
 
 "Gelen" sayisi _drop_existing'den ONCEKI sayidir: saglikli ama seyrek yazan bir
 kaynak (PagerDuty, Krebs) kendi `days` penceresinde yine kayit dondurur; yeni
@@ -34,6 +36,8 @@ BOLUM_PENCERESI_GUN = {'news': 7, 'cve': 7, 'kubernetes': 30, 'sre': 30, 'devtoo
 # Seyrek yayinlayan kaynaklar (2026-10-14 olcumu): RabbitMQ aylik yama, Moodle/Ceph iki-uc ayda bir
 # surum, Krebs/PagerDuty seyrek yazi. Pencerede 0 donmeleri olagan; sessizlik ancak son kayit bu
 # kadar gunden eskiyse (RabbitMQ/MongoDB yanlis pozitifleri bu yuzden).
+# En buyuk deger RETENTION_DAYS'i (90) asmamali: saklama updated_at'e gore siler, daha uzun aralik
+# kaydin sessizlik hesabindan once silinmesine yol acar.
 BEKLENEN_ARALIK_GUN = {
     'RabbitMQ': 60, 'MongoDB': 45, 'Moodle': 90, 'Ceph': 90, 'Seq': 60, 'Elastic': 60,
     'Redis': 60, 'PostgreSQL': 60, 'Keycloak': 60, 'GitLab': 45,
@@ -131,7 +135,7 @@ def kaynak_durumlari(bolum: str, model) -> Dict[str, dict]:
                 break
             sifir += 1
         son = son_kayit.get(ad)
-        yas = (simdi - son).days if son else None
+        yas = max(0, (simdi - son).days) if son else None
         aralik = beklenen_aralik(bolum, ad)
         durum[ad] = {
             'last_record_at': son,

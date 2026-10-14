@@ -1,6 +1,5 @@
 """v1 kimlik dogrulama testleri."""
 from django.contrib.auth.models import User
-from django.test import TestCase
 from rest_framework.authtoken.models import Token
 
 from news.tests.base import V1TestCase

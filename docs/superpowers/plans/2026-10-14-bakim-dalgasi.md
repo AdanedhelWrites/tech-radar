@@ -18,7 +18,7 @@
 - Sır değeri hiçbir dosyaya, loga, ekrana, commit'e girmez. Token/parola yalnız `.env`, `.zap/api-token.txt` (git dışı, iş sonunda silinir) ve `yedekler/` (git dışı).
 - Küme komutları yalnız `kubectl --context docker-desktop` / `k()`; `aks-gokbulut`'a asla komut gitmez. Registry push, GitHub Release yok; yalnız `chart-*` etiketi.
 - **Kullanıcı onayı gereken adımlar** (dur ve sor): `git push`, `git tag` + push, `gh pr merge`, GitHub uyarı dismiss, Görev Zamanlayıcı kaydı, her silme (Task 10), ZAP imajı çekimi (~1,5 GB), `.env`'e token yazma (kullanıcı kendisi yazar).
-- Action SHA'ları mevcut dosyalardan kopyalanır: `step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1`, `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`, `github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2`; yeni: `zaproxy/action-api-scan@bd24b11e76da11ab60302c8ae87f091cbb11f034 # v0.10.0`.
+- Action SHA'ları mevcut dosyalardan kopyalanır: `step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1`, `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`, `github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2`; yeni: `zaproxy/action-api-scan@5158fe4d9d8fcc75ea204db81317cce7f9e5453d # v0.10.0`.
 - Helm: `helm/tech-radar/` altındaki her değişiklik `Chart.yaml version` artırır ve `CHANGELOG.md` `## [surum]` ister (`scripts/chart_surum_kontrol.sh`).
 - Testler: backend `scripts/pg_test.sh test news --noinput` (CI ile aynı yol) ya da `docker compose exec teknoloji-api python manage.py test news.tests.<modul> --noinput`; frontend `cd frontend && npm test`; yerel-platform `bash tests/<ad>_test.sh`.
 - Bash aracında `\` sadeleşir: ters bölülü içerik (Windows yolu, regex) Write/Edit ile yazılır.
@@ -1350,7 +1350,7 @@ rm -f .zap/api-token.txt schema.yml report_json.json report_html.html report_md.
           printf '%s' "${token}" > .zap/api-token.txt
 
       - name: ZAP API taramasi (/api/v1/)
-        uses: zaproxy/action-api-scan@bd24b11e76da11ab60302c8ae87f091cbb11f034 # v0.10.0
+        uses: zaproxy/action-api-scan@5158fe4d9d8fcc75ea204db81317cce7f9e5453d # v0.10.0
         with:
           target: schema.yml
           format: openapi
