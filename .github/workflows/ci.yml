@@ -133,6 +133,9 @@ jobs:
       - name: Lint (ESLint)
         run: npm run lint
 
+      - name: Testler (Vitest)
+        run: npm test
+
       - name: Build
         run: |
           npm run build

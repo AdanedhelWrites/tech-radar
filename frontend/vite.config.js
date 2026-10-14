@@ -16,4 +16,10 @@ export default defineConfig({
       '/static': { target: 'http://teknoloji-api:8000', changeOrigin: true },
     },
   },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.js'],
+    include: ['src/**/*.test.{js,jsx}'],
+  },
 })
