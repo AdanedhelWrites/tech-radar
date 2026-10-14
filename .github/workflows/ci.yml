@@ -109,7 +109,8 @@ jobs:
             echo "::error::Yalnizca ${ran} test calisti (beklenen >= ${MIN_TESTS}); test kesfi bozuk olabilir."
             exit 1
           fi
-          coverage report --fail-under="${MIN_COVERAGE}" | tail -1 | tee -a "${GITHUB_STEP_SUMMARY}"
+          coverage report --fail-under="${MIN_COVERAGE}" | tee coverage.txt
+          grep -E '^TOTAL' coverage.txt | tee -a "${GITHUB_STEP_SUMMARY}"
 
   frontend:
     name: Frontend (Vite build)
