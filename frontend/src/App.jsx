@@ -8,6 +8,7 @@ import KubernetesComponent from './components/KubernetesComponent'
 import SREComponent from './components/SREComponent'
 import DevToolsComponent from './components/DevToolsComponent'
 import AINewsComponent from './components/AINewsComponent'
+import SaglikSeridi from './components/SaglikSeridi'
 import { Toaster } from 'react-hot-toast'
 import './App.css'
 
@@ -91,6 +92,7 @@ function HomePage() {
         Güncel siber güvenlik haberleri, CVE (Common Vulnerabilities and Exposures),
         Kubernetes, SRE (Site Reliability Engineering) ve DevTools altyapı araçları güncellemelerini tek bir yerden takip edin.
       </p>
+      <SaglikSeridi />
 
       <div className="row justify-content-center">
         <div className="col-md-3 mb-4">
@@ -115,7 +117,7 @@ function HomePage() {
               <FaShieldAlt size={48} className="text-danger mb-3" />
               <h5 className="card-title">CVE Zafiyetleri</h5>
               <p className="card-text">
-                6 kaynaktan (CISA KEV dahil) güncel CVE zafiyetlerini çekin, CVSS şiddet seviyesine
+                5 kaynaktan (CISA KEV dahil) güncel CVE zafiyetlerini çekin, CVSS şiddet seviyesine
                 göre filtreleyin ve Türkçe açıklamalarını okuyun.
               </p>
               <NavLink to="/cve" className="btn btn-danger">
@@ -165,8 +167,8 @@ function HomePage() {
               <FaToolbox size={48} className="mb-3" style={{ color: '#e67e22' }} />
               <h5 className="card-title">DevTools</h5>
               <p className="card-text">
-                14 kaynaktan altyapı araçları güncellemelerini çekin — PostgreSQL, MongoDB,
-                Redis, Elasticsearch, RabbitMQ, Ceph, Seq, Moodle, MinIO, LiteLLM, LangGraph,
+                13 kaynaktan altyapı araçları güncellemelerini çekin — PostgreSQL, MongoDB,
+                Redis, Elasticsearch, RabbitMQ, Ceph, Seq, Moodle, LiteLLM, LangGraph,
                 Langfuse, GitLab ve Keycloak.
               </p>
               <NavLink to="/devtools" className="btn" style={{ backgroundColor: '#e67e22', color: '#fff' }}>

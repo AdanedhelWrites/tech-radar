@@ -1,15 +1,15 @@
 # Teknoloji Radar
 
-Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri, DevTools altyapi araclari guncellemeleri ve yapay zeka (AI) gelismelerini **48 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
+Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri, DevTools altyapi araclari guncellemeleri ve yapay zeka (AI) gelismelerini **47 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
 
 > Bu proje **Vibe Coding** yaklasimiyla, Claude Code (claude-opus-4-6) ile birlikte gelistirilmistir.
 
 | | |
 |---|---|
-| **Uygulama surumu** | `appVersion` 2026.10.1 (CalVer; imaj etiketi) |
-| **Helm chart** | 2.1.0 (SemVer; etiket `chart-2.1.0`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
+| **Uygulama surumu** | `appVersion` 2026.10.3 (CalVer; imaj etiketi) |
+| **Helm chart** | 2.2.1 (SemVer; etiket `chart-2.2.1`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 473 Django testi (`news/tests/`), PostgreSQL uzerinde CI'da kosar |
+| **Testler** | 506 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 22 Vitest testi (`frontend/src/`) |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -71,7 +71,7 @@ Ayni kod uc bicimde calisir:
 
 ## Ozellikler
 
-- **48 farkli kaynak** — 12 siber guvenlik, 6 CVE, 3 Kubernetes, 5 SRE, 14 DevTools, 8 Yapay Zeka; hepsi anahtarsiz ve ucretsiz (GitHub API icin istege bagli `GITHUB_TOKEN`)
+- **47 farkli kaynak** — 12 siber guvenlik, 5 CVE, 3 Kubernetes, 5 SRE, 13 DevTools, 9 Yapay Zeka; hepsi anahtarsiz ve ucretsiz (GitHub API icin istege bagli `GITHUB_TOKEN`)
 - **Asenkron cekim** — "Getir" istegi Celery worker'a devredilir; arayuz 5 saniyede bir yeni kayitlari otomatik yansitir
 - **Periyodik cekim** — Celery Beat tum bolumleri 6 saatte bir otomatik gunceller (sadece yeni kayitlar cevrilir)
 - **Yonetici korumali sifirlama** — Veritabanini silen `clear` endpoint'leri yalnizca Django admin oturumuyla calisir
@@ -80,7 +80,7 @@ Ayni kod uc bicimde calisir:
 - **Turkce imla post-processing** — Cumle basi buyuk harf, noktalama duzeltme, URL/surum koruma
 - **Parca tabanli ceviri** — Uzun makaleler cumle sinirlarindan 4500 karakterlik parcalara bolunerek cevrilir
 - **Karanlik mod** — Koyu tonlarda arayuz (steel blue `#5b86a7` vurgu rengi)
-- **DevTools takibi** — MinIO, Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle, LiteLLM, LangGraph, Langfuse, GitLab, Keycloak release guncellemeleri
+- **DevTools takibi** — Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle, LiteLLM, LangGraph, Langfuse, GitLab, Keycloak release guncellemeleri
 - **CISA KEV** — Aktif somurulen zafiyetler (Known Exploited Vulnerabilities) CVE bolumunde ayri kaynak; NVD API'sinin `hasKev` filtresiyle, eklenme tarihi ve federal son tarih bilgisiyle
 - **Tarih filtresi** — 1-30 gun (haberler) / 1-90 gun (CVE, Kubernetes, SRE, Yapay Zeka) / 1-120 gun (DevTools) slider ile filtreleme (`news/serializers.py` sinirlari)
 - **Yeniden denemeli cekim** — Gecici 429/5xx ve baglanti hatalarinda 2 ek deneme, ussel bekleme, `Retry-After`'a uyum (`news/base_scraper.oturum_kur`); onceden tek bir 503 kaynagi o tur bos birakiyordu
@@ -117,7 +117,7 @@ Ayni kod uc bicimde calisir:
 
 > Yeni RSS kaynaklari `scraper_multi.RSSNewsSource` ile okunur: tur basina en fazla 15 haber, `days` penceresi, 200 karakterden kisa ozetler makale sayfasindan tamamlanir. Feed'den gelen linkler yalniz kaynagin kendi kok alaninda ve `https` ise acilir (`news/base_scraper.link_guvenli`; SSRF korumasi, bkz. [GUVENLIK-PLANI 3a](docs/GUVENLIK-PLANI.md)). `fetch_all_news` tavani kaynak sayisiyla buyur (`max(30, 3 x kaynak)`), boylece seyrek yazan kaynaklar (Krebs, SANS) tarih siralamasinda dusmez.
 
-### CVE Zafiyetleri (6 kaynak)
+### CVE Zafiyetleri (5 kaynak)
 
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
@@ -126,7 +126,6 @@ Ayni kod uc bicimde calisir:
 | NVD (Guncel) | REST API | Son guncellenen CVE'ler |
 | GitHub Advisory | REST API | CVSS, CWE, etkilenen paketler dahil |
 | Tenable | HTML Scraping | Severity bilgisi dahil |
-| CIRCL | REST API | Luksemburg CERT |
 
 ### Kubernetes (3 kaynak)
 
@@ -146,11 +145,10 @@ Ayni kod uc bicimde calisir:
 | Google Cloud SRE | RSS Feed | SRE anahtar kelime filtresiyle |
 | DZone DevOps | RSS Feed | `feeds.dzone.com/devops-and-cicd` (eski `/devops` adresi olu bir porta yonlendiriyordu) |
 
-### DevTools — Altyapi Araclari (14 kaynak)
+### DevTools — Altyapi Araclari (13 kaynak)
 
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
-| MinIO | GitHub Releases API | S3 uyumlu object storage, detayli changelog. **Ust kaynak Ekim 2025'ten beri GitHub'da surum yayinlamiyor**; kaynak bilincli olarak tutuluyor, yeni kayit beklenmez |
 | Seq | Datalust Blog RSS | Yapilandirilmis log arama motoru, release filtreli |
 | Ceph | GitHub Releases Atom | Dagitik storage, version tag tabanli |
 | MongoDB | GitHub Tags Atom + mongodb.com release notes | Stabil `rX.Y.Z` tag'leri; aciklama resmi surum notlari sayfasindaki surum basligindan (blog RSS'i Haziran 2026'da donmustu) |
@@ -167,7 +165,7 @@ Ayni kod uc bicimde calisir:
 
 > LiteLLM, LangGraph, Langfuse ve Keycloak `devtools_scraper.GitHubReleasesScraper` ortak sinifiyla okunur (tag deseni + prerelease elemesi). GitHub API anonim limiti 60 istek/saat/IP'dir; `GITHUB_TOKEN` verilirse yalniz `api.github.com` isteklerine eklenir (bkz. [Ortam Degiskenleri](#ortam-degiskenleri)). `fetch_all` tavani kaynak sayisiyla buyur (`max(30, 3 x kaynak)`).
 
-### Yapay Zeka (8 kaynak)
+### Yapay Zeka (9 kaynak)
 
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
@@ -177,8 +175,9 @@ Ayni kod uc bicimde calisir:
 | AWS ML Blog | RSS Feed | AWS makine ogrenmesi blogu |
 | TechCrunch AI | RSS Feed | AI sektor haberleri |
 | Google DeepMind | RSS Feed | DeepMind arastirma blogu |
-| KDnuggets | RSS Feed | Veri bilimi ve ML yazilari |
 | OpenAI Blog | RSS Feed | OpenAI duyurulari |
+| Ars Technica AI | RSS Feed | Ars Technica yapay zeka bolumu (https://arstechnica.com/ai/feed/; 2026-10-14: KDnuggets yerine) |
+| Import AI | RSS Feed | Jack Clark'in haftalik yapay zeka bulteni (https://importai.substack.com/feed) |
 
 > Tum AI kaynaklari `news/base_scraper.py` icindeki ortak `BaseRSSScraper` ile okunur; RSS aciklamasi 200 karakterden kisaysa makale sayfasindan paragraf cekilir. Benchmark/leaderboard skorlari kapsam disidir (bkz. [ADR-0002](docs/ADR-0002-AI-Benchmark.md)).
 
@@ -298,7 +297,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-473 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+506 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -313,6 +312,8 @@ scripts/pg_test.sh --sqlite test news.tests.test_cursor
 
 Frontend'de ESLint (flat config, `frontend/eslint.config.js`; `npm run lint`) CI'da build'den once kosar: `@eslint/js` onerilenleri, `react-hooks/rules-of-hooks` (hata) ve `exhaustive-deps` (uyari). Bolum sayfalarindaki 5 sn'lik liste yenileme `hooks/useAraliklaYenile` ile sekme arka plandayken durur.
 
+Frontend birim testleri Vitest + Testing Library ile `frontend/src/**/*.test.{js,jsx}` altindadir (`npm test`); CI'da lint ile build arasinda kosar. 22 test; ilk kapsam: HTML kacisi (`utils/html.js`), goreli zaman (`utils/zaman`), aralikli yenileme hook'u, ceviri rozeti, saglik seridi (`SaglikSeridi`).
+
 CI (`Backend (Django testleri)`) testleri PostgreSQL 16 servisiyle, `DEBUG=False` ve gercek bir `SECRET_KEY` ile kosar; migration'larin eksiksiz oldugu (`makemigrations --check`) ayni iste dogrulanir. Yeni bir test yazarken kodu gecici olarak bozup testin kirmiziya dondugunu gorun; mock'lanmis saglayici testlerinde "yesil ama hicbir seyi sinamiyor" tuzagi kolaydir.
 
 | Test dosyasi grubu | Kapsam |
@@ -322,6 +323,7 @@ CI (`Backend (Django testleri)`) testleri PostgreSQL 16 servisiyle, `DEBUG=False
 | `test_saklama`, `test_fetchrun`, `test_eski_fetch_kapisi` | `RETENTION_DAYS` sil/yeniden yaz dongusu, FetchRun kaydi, eski `/api/*/fetch/` uclarinin v1 kapisindan gecmesi |
 | `test_ayar_dogrulama`, `test_admin`, `test_cache`, `test_altyapi`, `test_modeller` | `SECRET_KEY`/`DB_HOST` korumalari, admin yetkisi, cache, model kisitlari |
 | `test_migrations_*`, `test_veri_tasima` | Veri migration'lari ve SQLite -> PostgreSQL tasima araclari |
+| `test_kaynak_sagligi`, `test_saglik` | Kaynak sagligi (kadans farkindalikli sessizlik), anonim /api/saglik/ |
 
 ### Hostta calistirma
 
@@ -350,7 +352,7 @@ Frontend icin `frontend/` altinda `npm install && npm run dev` yeterlidir; `vite
 | `scripts/chart_surum_kontrol.sh <taban-ref>` | Chart dizini degistiyse `Chart.yaml version` artmis ve CHANGELOG girdisi var mi (CI kapisi) |
 | `scripts/imaj_etiket_kontrol.sh <render.yaml>` | Render'daki imajlar etiketli mi, `latest` yok mu, ucuncu taraf imajlar digest ile sabit mi (CI kapisi) |
 | `scripts/chart_etiket_kontrol.sh chart-<surum>` | `chart-*` etiketi `Chart.yaml` ile ayni mi (etiket push'unda CI kapisi) |
-| `scripts/zap_sarif.py <report_json.json> <cikti.sarif>` | ZAP baseline JSON raporunu SARIF 2.1.0'a cevirir (DAST is akisi Security sekmesine yukler) |
+| `scripts/zap_sarif.py <report_json.json> <cikti.sarif>` | ZAP JSON raporunu SARIF 2.1.0'a cevirir (DAST is akisi `zap-baseline` ve `zap-api` kategorileriyle Security sekmesine yukler) |
 
 ### Kod kurallari
 
@@ -358,6 +360,7 @@ Frontend icin `frontend/` altinda `npm install && npm run dev` yeterlidir; `vite
 - Her onemli karar bir ADR'dir (`docs/ADR-*.md`); tasarim ve uygulama planlari `docs/superpowers/` altindadir.
 - Sir degerleri (anahtar, parola, token) hicbir dosyaya, log'a veya ekrana yazilmaz; `.env` ve `.fazb/` gitignore'dadir, gitleaks her PR'da tarar.
 - `helm/tech-radar/` altindaki her degisiklik chart surumunu artirir ve CHANGELOG girdisi ister (bkz. [Surumleme](#surumleme)).
+- Python: `ruff check .` (yalniz F ve E9; `pyproject.toml`) ve coverage esigi (`MIN_COVERAGE`, CI) kapidir; yerelde `py -3 -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt`.
 
 ---
 
@@ -388,6 +391,7 @@ Her bolum (news, cve, k8s, sre, devtools, ai) ayni endpoint yapisini kullanir:
 | POST | `/api/{bolum}/clear/` | Tum verileri sil (**yonetici oturumu gerekir**, aksi halde 403) |
 | GET | `/api/{bolum}/stats/` | Istatistikleri getir |
 | GET | `/api/{bolum}/export/` | HTML rapor olarak disa aktar |
+| GET | `/api/saglik/` | Bolum basina son basarili cekim, son durum, ceviri bekleyen/vazgecilen, sessiz kaynaklar (anonim, 60 sn cache) |
 
 **Bolum isimleri:** `news` (Siber Guvenlik, fetch endpoint: `/api/fetch/`), `cve`, `k8s`, `sre`, `devtools`, `ai`
 
@@ -424,7 +428,7 @@ Her istekte `Authorization: Token <key>` basligi gonderilir. Admin arayuzunde **
 | GET | `/api/v1/schema/` | OpenAPI 3 semasi (token gerekir) |
 | GET | `/api/v1/docs/` | Swagger UI — tarayicida admin oturumuyla acilir |
 | GET | `/api/v1/health/` | Servis ayakta mi — **tokensiz** (Kubernetes probe'lari icin) |
-| GET | `/api/v1/status/` | Bolum basina veri tazeligi: `last_success_at`, `last_status`, `last_fetched_count`, `last_saved_count`, `pending_translation`, `translation_given_up`, `total`; kaynak sagligi: `sources{ad: last_record_at, last_fetched_count, zero_runs, silent}` ve `silent_sources[]` (`SOURCE_SILENT_RUNS` ardisik turda 0 kayit donen kaynak) |
+| GET | `/api/v1/status/` | Bolum basina veri tazeligi: `last_success_at`, `last_status`, `last_fetched_count`, `last_saved_count`, `pending_translation`, `translation_given_up`, `total`; kaynak sagligi: `sources{ad: last_record_at, last_fetched_count, zero_runs, expected_gap_days, days_since_record, silent}` ve `silent_sources[]`; `silent` = `zero_runs >= SOURCE_SILENT_RUNS` VE (hic kayit yok VEYA `days_since_record > expected_gap_days`) |
 | GET | `/api/v1/{bolum}/` | Imlecli delta okuma |
 | POST | `/api/v1/{bolum}/refresh/` | Tek bolum icin manuel cekim tetikler |
 | POST | `/api/v1/refresh/` | Alti bolumu birden tetikler |
@@ -582,13 +586,13 @@ cybersecurity_news/
 │   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
 │   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
-│   ├── tests/                  # 369 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
+│   ├── tests/                  # 506 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
-│   ├── ai_scraper.py           # 8 Yapay Zeka kaynagi scraper'i
+│   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
 │   ├── cve_scraper.py          # 5 CVE kaynagi scraper'i
 │   ├── k8s_scraper.py          # 3 Kubernetes kaynagi scraper'i
 │   ├── sre_scraper.py          # 5 SRE kaynagi scraper'i
-│   ├── devtools_scraper.py     # 9 DevTools kaynagi scraper'i
+│   ├── devtools_scraper.py     # 13 DevTools kaynagi scraper'i
 │   ├── fetch_runs.py           # FetchRun satirlarini yazan Celery sinyalleri
 │   ├── api_v1/                 # Dis tuketici entegrasyon katmani (ADR-0003)
 │   │   ├── views.py            # Delta, refresh, jobs, status, health uc noktalari
@@ -607,7 +611,7 @@ cybersecurity_news/
 │   ├── chart_etiket_kontrol.sh # CI kapisi: chart-<surum> etiketi Chart.yaml ile ayni
 │   └── zap_sarif.py            # ZAP JSON raporu -> SARIF (DAST bulgulari Security sekmesine)
 │
-├── scraper_multi.py            # 5 siber guvenlik kaynagi scraper'i
+├── scraper_multi.py            # 12 siber guvenlik kaynagi scraper'i
 │
 ├── frontend/                   # React SPA
 │   ├── src/
@@ -723,6 +727,8 @@ Ceviri sonrasi otomatik duzeltmeler:
 
 **Rozetler:** Her kayit `translation_provider` tasir; arayuzde `Makine çevirisi: LibreTranslate` (sari), `Çeviri: Gemini`, `Çeviri: Google` (eski kayitlar).
 
+Kuyruktan dusen kayitlar (`translation_attempts >= RETRANSLATE_MAX_ATTEMPTS`) arayuzde "Cevrilmedi: orijinal metin" rozetiyle gosterilir (rozet kosulu: `needs_translation` ve saglayici bos ve `translation_attempts >= 1`; hic denenmemis taze kayit rozet almaz); admin'de "Ceviri denemelerini sifirla" eylemi secili kayitlari yeniden kuyruga alir. `GEMINI_MAX_CHARS` (12.000) ustu kayitlar bilerek Ingilizce kalir (2026-10-14 karari).
+
 ---
 
 ## Periyodik Cekim (Celery Beat)
@@ -746,7 +752,7 @@ Her cekim bir `FetchRun` satiri birakir (bolum, baslangic/bitis, `fetched_count`
 
 **Takili turlar (2026-10-09):** Worker yeniden basladiginda ya da sert sure siniri (`CELERY_TASK_TIME_LIMIT`) alt sureci oldurdugunde `task_postrun` hic gelmez ve satir suresiz `running` kalirdi (canlida 4 satir, biri 5 gunluk). Ayni bolumun yeni turu acilirken eski `running` satirlari `failure` + `stopped_reason=interrupted` ile kapatilir.
 
-**Kaynak sagligi (2026-10-08):** 8 kaynak aylarca sessizce olmustu (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone donmus akislar); bolum toplami "success" gorundugu icin fark edilmedi. Artik her tur secili her kaynak icin kaynaktan gelen sayiyi (`_drop_existing`'den onceki) `FetchRun.by_source`'a yazar. `/api/v1/status/` her kaynak icin `zero_runs` (ardisik 0 donen tamamlanmis tur) ve `silent` verir; `SOURCE_SILENT_RUNS` (varsayilan 4 = Beat'te 24 saat) esigi asan kaynaklar `silent_sources` listesindedir. Admin'deki FetchRun listesinde "0 donen kaynaklar" sutunu ayni bilgiyi tur basina gosterir. Seyrek yazan kaynaklar (Krebs, PagerDuty) kendi `days` penceresinde yine kayit dondurdugu icin yanlis pozitif vermez; yeni kayit olmamasi degil, kaynaktan hic kayit gelmemesi sessizliktir. Haftalik kontrol: `curl .../api/v1/status/ | jq '.sections[].silent_sources'`.
+**Kaynak sagligi (2026-10-08):** 8 kaynak aylarca sessizce olmustu (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone donmus akislar); bolum toplami "success" gorundugu icin fark edilmedi. Artik her tur secili her kaynak icin kaynaktan gelen sayiyi (`_drop_existing`'den onceki) `FetchRun.by_source`'a yazar. `/api/v1/status/` her kaynak icin `zero_runs` (ardisik 0 donen tamamlanmis tur) ve `silent` verir; `SOURCE_SILENT_RUNS` (varsayilan 4 = Beat'te 24 saat) esigi asan kaynaklar `silent_sources` listesindedir. Admin'deki FetchRun listesinde "0 donen kaynaklar" sutunu ayni bilgiyi tur basina gosterir. Seyrek yazan kaynaklar (Krebs, PagerDuty) kendi `days` penceresinde yine kayit dondurdugu icin yanlis pozitif vermez; yeni kayit olmamasi degil, kaynaktan hic kayit gelmemesi sessizliktir. Haftalik kontrol: `curl .../api/v1/status/ | jq '.sections[].silent_sources'`. 2026-10-14: sessizlik kadans farkindalikli — seyrek yayinlayan kaynak (RabbitMQ, Moodle, Ceph...) icin kaynak basina beklenen aralik (`news/kaynaklar.py` `BEKLENEN_ARALIK_GUN`), digerleri icin bolum penceresi; status ucu `expected_gap_days` ve `days_since_record` verir.
 
 ---
 
@@ -866,7 +872,7 @@ Kisisel deneme ortami Argo CD ile git'ten kurulur ([ADR-0008](docs/ADR-0008-Yere
 
 Nasil calisir:
 
-- Argo CD chart'i bu reponun `chart-2.1.0` etiketinden, degerleri ve VSO nesnelerini `yerel-gitops`'tan okur; hedef namespace `tech-radar`, `automated: {prune, selfHeal}`.
+- Argo CD chart'i bu reponun `chart-<surum>` etiketinden (su an `chart-2.2.1`), degerleri ve VSO nesnelerini `yerel-gitops`'tan okur; hedef namespace `tech-radar`, `automated: {prune, selfHeal}`.
 - `migration.mode=argocd` (Job sabit adli Sync hook) ve `secrets.existingSecret=teknoloji-secret` kullanilir; Secret'i Vault Secrets Operator `kv/tech-radar/uygulama`'dan yazar ve deger degisince api/worker/scheduler Deployment'larini yeniden baslatir.
 - K8s ortami **paralel denemedir**: ayri veritabani `cybernews_k8s`, Gemini ve Beat kapali, imajlar yerel (`pullPolicy: Never`); compose canli ortam olarak kalir.
 - Kumede calisan surum `yerel-gitops`'taki `targetRevision`'dir; yukseltme orada etiketi degistirmek, geri alma `git revert`. Argo CD arayuzundeki Rollback auto-sync altinda kapalidir.
@@ -902,12 +908,12 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 
 | Is akisi | Tetik | Mod | Ne yapar |
 |---|---|---|---|
-| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: PostgreSQL 16 ile 369 test + `makemigrations --check`; `Frontend (Vite build)`; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
+| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 506 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (22 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
 | `Dependency Review` | PR | **Kapi** | HIGH/CRITICAL zafiyetli bagimlilik getiren PR'i durdurur |
 | `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
 | `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |
 | `CodeQL Advanced` | PR, push, Pazar | Rapor | Python ve JavaScript statik analiz |
-| `DAST (ZAP baseline)` | PR, push, Pazartesi | Rapor | Uygulamayi PostgreSQL ile ayaga kaldirip OWASP ZAP baseline taramasi; JSON rapor `scripts/zap_sarif.py` ile SARIF'e cevrilip Code scanning'e yuklenir (kategori `zap-baseline`); gurultu kurallari `.zap/rules.tsv` ile IGNORE; HTML rapor artefakti |
+| `DAST (ZAP baseline)` | PR, push, Pazartesi | Rapor | Uygulamayi PostgreSQL ile ayaga kaldirip OWASP ZAP baseline taramasi; JSON rapor `scripts/zap_sarif.py` ile SARIF'e cevrilip Code scanning'e yuklenir (kategori `zap-baseline`); gurultu kurallari `.zap/rules.tsv` ile IGNORE; HTML rapor artefakti; ayni iste `/api/v1/` OpenAPI semasiyla token'li API taramasi (kategori `zap-api`) |
 | `zizmor` | `.github/` degisince, Persembe | Rapor | Workflow dosyalarinin guvenlik denetimi |
 | `OpenSSF Scorecard` | push, Sali | Rapor | Depo guvenlik puani |
 | `chart etiketi` | `chart-*` etiketi push'u | Kapi | Etiket `Chart.yaml version` ile ayni mi, CHANGELOG girdisi var mi |
@@ -930,6 +936,9 @@ curl -s http://localhost:8000/api/v1/health/
 
 # Bolum basina tazelik: son basarili cekim, son durum, bekleyen ceviri sayisi
 curl -s -H "Authorization: Token $CYBERNEWS_TOKEN" http://localhost:8000/api/v1/status/
+
+# Ana sayfa saglik seridinin kaynagi: bolum basina sessiz kaynaklar (tokensiz, 60 sn cache)
+curl -s localhost:8000/api/saglik/ | jq '.sections[] | .silent_sources'
 
 # Loglar
 docker compose logs -f --tail=100 teknoloji-worker      # cekim ve ceviri
@@ -997,7 +1006,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `RETENTION_DAYS` | `90` | Saklama penceresi; `updated_at` bundan eski kayitlar cekim basinda silinir (cekim penceresinden ayridir) |
 | `REFRESH_COOLDOWN` | `900` | `/api/v1/*/refresh/` sonrasi bolum sogumasi (sn) — **tum token'lar arasinda paylasilir** |
 | `AXES_FAILURE_LIMIT` | `5` | Admin girisinde ayni (kullanici adi, IP) ciftinden bu kadar basarisiz denemeden sonra kilit (django-axes); kilit `AXES_COOLOFF_MINUTES` (`30`) sonra acilir, basarili giris sayaci sifirlar. Acmak icin admin > Axes > Access attempts ya da `manage.py axes_reset` |
-| `SOURCE_SILENT_RUNS` | `4` | Bir kaynak bu kadar ardisik tamamlanmis turda 0 kayit dondurunce `/api/v1/status/` onu `silent` isaretler (4 tur = Beat'te 24 saat) |
+| `SOURCE_SILENT_RUNS` | `4` | Bir kaynak bu kadar ardisik tamamlanmis turda 0 kayit dondurur VE son kaydi beklenen araliktan eskiyse (ya da hic kaydi yoksa) `/api/v1/status/` onu `silent` isaretler (4 tur = Beat'te 24 saat). Beklenen aralik: `news/kaynaklar.py` `BEKLENEN_ARALIK_GUN` (seyrek kaynaklar) ya da bolum cekim penceresi |
 | `REFRESH_LOCK_TTL` | `3600` | Bolum cekim kilidinin omru (sn); worker olurse kilit bu surede kendiliginden duser |
 | `DB_HOST` | _(bos)_ | Doluysa PostgreSQL kullanilir. Bossa yalniz `DEBUG=True` iken SQLite (`db.sqlite3`); `DEBUG=False` iken uygulama acilmaz. Compose `yerel-postgres` verir |
 | `DB_PORT` | `5432` | PostgreSQL port |
@@ -1055,12 +1064,12 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | 2026-10-03 | Faz B2: Helm chart 2.0.0 docker-desktop'ta S1-S7 ile dogrulandi; CI chart kapilari | ADR-0007 |
 | 2026-10-04 | B3: Terraform + Argo CD + Vault/VSO ile yerel GitOps; chart 2.1.0; T1-T12 gecti | ADR-0008 |
 | 2026-10-08 | Kaynak turu: 35 → 48 kaynak (7 haber, CISA KEV, LiteLLM/LangGraph/Langfuse/GitLab/Keycloak); olu kaynak onarimi (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone akislari); `GITHUB_TOKEN` | `news/tests/test_kaynaklar.py` |
+| 2026-10-14 | Kaynak turu 2: 48 → 47 (KDnuggets/MinIO/CIRCL cikti, Ars Technica AI/Import AI girdi); kadans farkindalikli sessizlik | `news/tests/test_kaynak_sagligi.py` |
+| 2026-10-13 → 10-14 | Guvenlik plani P5-b (haftalik ozet Issue) ve P5-c (/api/v1/ ZAP API taramasi); bakim dalgasi (yedek dongusu, saglik seridi, Vitest, ruff/coverage) | GUVENLIK-PLANI, `docs/superpowers/specs/2026-10-14-bakim-dalgasi-design.md` |
 
 ### Acik isler ve adaylar
 
-Siraya konmus (GUVENLIK-PLANI; P3 ve P4 2026-10-08'de tamamlandi):
-
-- **P5** (kalan) haftalik guvenlik ozeti is akisi; `/api/v1/` icin ZAP API taramasi. ZAP SARIF yuklemesi 2026-10-08'de tamamlandi.
+Guvenlik plani (GUVENLIK-PLANI) P0-P5 tamamlandi (2026-10-14); siraya konmus guvenlik isi yok.
 
 Aday (henuz tasarlanmadi; kapsam notlari ADR-0002 ve B3 spec bolum 13):
 

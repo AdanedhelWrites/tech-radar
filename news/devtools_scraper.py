@@ -1,7 +1,6 @@
 """
 DevTools Scraper Module — Altyapi Araclari Guncelleme Takibi
-14 kaynak:
-  - MinIO (GitHub Releases API) — ust kaynak Ekim 2025'ten beri surum yayinlamiyor
+13 kaynak:
   - Seq (Datalust Blog RSS)
   - Ceph (GitHub Releases Atom)
   - MongoDB (GitHub Tags Atom + resmi surum notlari sayfasi)
@@ -15,16 +14,15 @@ DevTools Scraper Module — Altyapi Araclari Guncelleme Takibi
 
 GitHub API anonim limiti 60 istek/saat/IP'dir; GITHUB_TOKEN verilirse yalniz
 api.github.com isteklerine Bearer baslik eklenir (bkz. DevToolsScraper._github_get).
+
+2026-10-14: MinIO cikarildi (ust kaynak Ekim 2025'ten beri surum yayinlamiyor).
 """
 
 import os
-import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import re
-from typing import List, Dict, Optional
-import time
-from email.utils import parsedate_to_datetime
+from typing import List, Dict
 
 from news.translation_utils import translate_text, translate_long_text
 from news.base_scraper import BaseRSSScraper, link_guvenli, oturum_kur
@@ -79,46 +77,6 @@ class DevToolsScraper(BaseRSSScraper):
         # Fazla bosluklar
         text = re.sub(r'\n{3,}', '\n\n', text)
         return text.strip()
-
-
-# ============================================================
-# 1. MinIO — GitHub Releases API
-# ============================================================
-class MinIOScraper(DevToolsScraper):
-    """MinIO GitHub Releases scraper"""
-
-    API_URL = "https://api.github.com/repos/minio/minio/releases"
-
-    def fetch_entries(self, days: int = 60) -> List[Dict]:
-        log.info(f"[MinIO] Son {days} gunun guncellemeleri cekiliyor...")
-        entries = []
-        cutoff = datetime.now() - timedelta(days=days)
-        try:
-            resp = self.session.get(self.API_URL, params={'per_page': 15}, timeout=20)
-            resp.raise_for_status()
-            releases = resp.json()
-            log.info(f"  [MinIO] {len(releases)} release bulundu")
-            for rel in releases:
-                pub_date = self._parse_rss_date(rel.get('published_at', ''))
-                if pub_date and pub_date.replace(tzinfo=None) < cutoff:
-                    continue
-                title = rel.get('name', '') or rel.get('tag_name', '')
-                body = self._markdown_to_text(rel.get('body', ''))
-                link = rel.get('html_url', '')
-                date_str = pub_date.strftime('%Y-%m-%d') if pub_date else datetime.now().strftime('%Y-%m-%d')
-                entries.append({
-                    'title': f"MinIO {title}",
-                    'description': body[:4000] if body else title,
-                    'link': link,
-                    'date': date_str,
-                    'source': 'MinIO',
-                    'version': rel.get('tag_name', ''),
-                    'entry_type': 'release',
-                })
-        except Exception as e:
-            log.warning(f"[MinIO] Hata: {e}")
-        log.info(f"[MinIO] {len(entries)} guncelleme bulundu")
-        return entries
 
 
 # ============================================================
@@ -962,7 +920,6 @@ class MultiDevToolsScraper(DevToolsScraper):
     def __init__(self):
         super().__init__()
         self.scrapers = {
-            'MinIO': MinIOScraper(),
             'Seq': SeqScraper(),
             'Ceph': CephScraper(),
             'MongoDB': MongoDBScraper(),

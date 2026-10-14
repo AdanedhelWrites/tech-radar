@@ -2,30 +2,44 @@
 
 Neden: 8 kaynak aylarca sessizce olmustu; bolum toplamlari "success" gosteriyordu.
 """
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from news import fetch_runs, kaynaklar
-from news.models import FetchRun, NewsArticle
+from news.models import DevToolsEntry, FetchRun, NewsArticle
+from news.tasks import RETENTION_DAYS
 from news.tests.base import V1TestCase
 
 
 class BolumKaynaklariTests(SimpleTestCase):
 
-    def test_kayit_defterleri_toplam_48_kaynak(self):
-        beklenen = {'news': 12, 'cve': 6, 'kubernetes': 3, 'sre': 5, 'devtools': 14, 'ai': 8}
+    def test_kayit_defterleri_toplam_47_kaynak(self):
+        # 2026-10-14: KDnuggets (403), MinIO (ust kaynak olu), CIRCL (/api/last artik CVE donmuyor) cikti;
+        # Ars Technica AI ve Import AI girdi.
+        beklenen = {'news': 12, 'cve': 5, 'kubernetes': 3, 'sre': 5, 'devtools': 13, 'ai': 9}
         for bolum, adet in beklenen.items():
             with self.subTest(bolum=bolum):
                 self.assertEqual(len(kaynaklar.bolum_kaynaklari(bolum)), adet)
         self.assertIn('CISA KEV', kaynaklar.bolum_kaynaklari('cve'))
         self.assertIn('Bleeping Computer', kaynaklar.bolum_kaynaklari('news'))
+        self.assertIn('Ars Technica AI', kaynaklar.bolum_kaynaklari('ai'))
+        self.assertIn('Import AI', kaynaklar.bolum_kaynaklari('ai'))
+        for bolum, ad in (('ai', 'KDnuggets'), ('devtools', 'MinIO'), ('cve', 'CIRCL')):
+            self.assertNotIn(ad, kaynaklar.bolum_kaynaklari(bolum))
 
     def test_bilinmeyen_bolum_keyerror(self):
         with self.assertRaises(KeyError):
             kaynaklar.bolum_kaynaklari('yok')
+
+
+class BeklenenAralikTests(SimpleTestCase):
+
+    def test_beklenen_aralik_saklama_suresini_asmaz(self):
+        # Saklama updated_at'e gore siler; daha uzun aralik kaydin sessizlik hesabindan once silinmesi demektir.
+        self.assertLessEqual(max(kaynaklar.BEKLENEN_ARALIK_GUN.values()), RETENTION_DAYS)
 
 
 class KaynakSayaclariTests(SimpleTestCase):
@@ -151,6 +165,47 @@ class KaynakDurumlariTests(TestCase):
         with mock.patch.object(kaynaklar, 'SESSIZ_TUR_ESIGI', 2):
             self.assertTrue(kaynaklar.kaynak_durumlari('news', NewsArticle)['SANS ISC']['silent'])
 
+    def _devtools_kaydi(self, gun_once):
+        kayit = DevToolsEntry.objects.create(source='RabbitMQ', original_title='RabbitMQ v4.3.6',
+                                             original_description='D', link='https://ornek.test/r',
+                                             published_date=date(2026, 9, 14))
+        DevToolsEntry.objects.filter(pk=kayit.pk).update(created_at=timezone.now() - timedelta(days=gun_once))
+
+    def test_seyrek_kaynak_pencere_disinda_sessiz_degil(self):
+        # RabbitMQ 30 gunluk pencerede 0 doner ama son surum 29 gun once; beklenen aralik 60 gun
+        self._devtools_kaydi(29)
+        for i in range(4):
+            _tur('devtools', {'RabbitMQ': {'fetched': 0, 'saved': 0}}, i)
+
+        durum = kaynaklar.kaynak_durumlari('devtools', DevToolsEntry)['RabbitMQ']
+
+        self.assertEqual(durum['zero_runs'], 4)
+        self.assertEqual(durum['expected_gap_days'], 60)
+        self.assertEqual(durum['days_since_record'], 29)
+        self.assertFalse(durum['silent'])
+
+    def test_seyrek_kaynak_beklenen_araligi_asinca_sessiz(self):
+        self._devtools_kaydi(61)
+        for i in range(4):
+            _tur('devtools', {'RabbitMQ': {'fetched': 0, 'saved': 0}}, i)
+
+        self.assertTrue(kaynaklar.kaynak_durumlari('devtools', DevToolsEntry)['RabbitMQ']['silent'])
+
+    def test_akis_kaynagi_bolum_penceresini_kullanir(self):
+        # Haber penceresi 7 gun: 10 gun once kayit + 4 sifir tur = sessiz
+        kayit = NewsArticle.objects.create(source='Dark Reading', original_title='T', turkish_title='T',
+                                           link='https://ornek.test/d', date=date(2026, 10, 1),
+                                           original_date='2026-10-01')
+        NewsArticle.objects.filter(pk=kayit.pk).update(created_at=timezone.now() - timedelta(days=10))
+        for i in range(4):
+            _tur('news', {'Dark Reading': {'fetched': 0, 'saved': 0}}, i)
+
+        durum = kaynaklar.kaynak_durumlari('news', NewsArticle)['Dark Reading']
+
+        self.assertEqual(durum['expected_gap_days'], 7)
+        self.assertEqual(durum['days_since_record'], 10)
+        self.assertTrue(durum['silent'])
+
 
 class StatusKaynakAlanlariTests(V1TestCase):
 
@@ -176,3 +231,6 @@ class StatusKaynakAlanlariTests(V1TestCase):
         self.assertIn('sources', alanlar)
         self.assertIn('silent_sources', alanlar)
         self.assertIn('KaynakDurumuV1', sema['components']['schemas'])
+        kaynak = sema['components']['schemas']['KaynakDurumuV1']['properties']
+        self.assertIn('expected_gap_days', kaynak)
+        self.assertIn('days_since_record', kaynak)

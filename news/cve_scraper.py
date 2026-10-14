@@ -4,7 +4,6 @@ NVD, CVEDetails, Rapid7, Tenable, VulDB gibi kaynaklardan CVE verilerini çeker.
 """
 
 import os
-import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import re
@@ -12,7 +11,7 @@ import json
 from typing import List, Dict, Optional
 import time
 
-from news.translation_utils import translate_text, translate_long_text
+from news.translation_utils import translate_text
 from news.base_scraper import BaseRSSScraper, oturum_kur
 import logging
 
@@ -582,134 +581,6 @@ class TenableScraper(CVEScraper):
         return cves
 
 
-class CIRCLScraper(CVEScraper):
-    """CIRCL (Computer Incident Response Center Luxembourg) CVE API scraper"""
-    
-    API_URL = "https://cve.circl.lu/api/last"
-    
-    def _parse_cvss_from_vector(self, vector: str) -> Optional[float]:
-        """CVSS vektör dizesinden skor hesaplar (basit yaklaşım)"""
-        if not vector:
-            return None
-        
-        # Vektörden basit skor çıkarma
-        score_match = re.search(r'baseScore[:\s]+(\d+\.?\d*)', vector)
-        if score_match:
-            return float(score_match.group(1))
-        
-        # V3/V4 vektöründen severity tahmin et
-        if 'AV:N' in vector and 'AC:L' in vector:
-            if 'PR:N' in vector and 'UI:N' in vector:
-                return 9.0  # Network, Low complexity, No privileges, No interaction
-            elif 'PR:N' in vector:
-                return 7.5
-            elif 'PR:L' in vector:
-                return 6.5
-        elif 'AV:N' in vector:
-            return 5.5
-        elif 'AV:L' in vector:
-            return 4.0
-        
-        return None
-    
-    def fetch_cves(self, days: int = 30) -> List[Dict]:
-        """CIRCL API'den son CVE'leri çeker"""
-        log.info(f"[CIRCL] Son CVE'ler çekiliyor...")
-        
-        cves = []
-        
-        try:
-            # Son 50 CVE'yi çek
-            response = self.session.get(f"{self.API_URL}/50", timeout=30)
-            response.raise_for_status()
-            
-            items = response.json()
-            
-            cutoff_date = (datetime.now() - timedelta(days=days)).date()
-            
-            for item in items:
-                try:
-                    cve_id = item.get('id', '')
-                    
-                    # GHSA ID'lerini atla, sadece CVE'leri al
-                    if not cve_id.startswith('CVE-'):
-                        # aliases'da CVE olabilir
-                        aliases = item.get('aliases', [])
-                        cve_found = None
-                        for alias in aliases:
-                            if alias.startswith('CVE-'):
-                                cve_found = alias
-                                break
-                        if not cve_found:
-                            continue
-                        cve_id = cve_found
-                    
-                    # Açıklama
-                    description = item.get('details', '') or item.get('summary', '')
-                    if not description or len(description.strip()) < 20:
-                        continue
-                    
-                    # Tarih
-                    published = item.get('published', '')
-                    try:
-                        pub_date = datetime.strptime(published[:10], '%Y-%m-%d').date()
-                        if pub_date < cutoff_date:
-                            continue
-                    except:
-                        pub_date = datetime.now().date()
-                    
-                    # CVSS skoru
-                    cvss_score = None
-                    severity_list = item.get('severity', [])
-                    for sev in severity_list:
-                        score_str = sev.get('score', '')
-                        parsed = self._parse_cvss_from_vector(score_str)
-                        if parsed:
-                            cvss_score = parsed
-                            break
-                    
-                    # CVSS yoksa atla
-                    if cvss_score is None:
-                        continue
-                    
-                    severity = self.get_severity_from_score(cvss_score)
-                    
-                    # Referanslar
-                    references = []
-                    for ref in item.get('references', []):
-                        url = ref.get('url', '')
-                        if url:
-                            references.append(url)
-                    
-                    cve = {
-                        'cve_id': cve_id,
-                        'source': 'CIRCL',
-                        'original_title': f"{cve_id} - Güvenlik Açığı",
-                        'original_description': description[:4000],
-                        'severity': severity,
-                        'cvss_score': cvss_score,
-                        'published_date': pub_date,
-                        'modified_date': None,
-                        'link': f"https://cve.circl.lu/cve/{cve_id}",
-                        'cwe_ids': [],
-                        'references': references[:5],
-                        'affected_products': ''
-                    }
-                    
-                    cves.append(cve)
-                    
-                except Exception as e:
-                    log.warning(f"[CIRCL] CVE işleme hatası: {e}")
-                    continue
-            
-            log.info(f"[CIRCL] {len(cves)} CVE bulundu")
-            
-        except Exception as e:
-            log.warning(f"[CIRCL] Hata: {e}")
-        
-        return cves
-
-
 class NVDRecentScraper(CVEScraper):
     """NVD'den ek CVE'leri farklı parametrelerle çeker (Modified tarihine göre)"""
     
@@ -927,17 +798,16 @@ class MultiCVEScraper(CVEScraper):
         self.nvd_scraper = NVDScraper()
         self.github_scraper = GitHubAdvisoryScraper()
         self.tenable_scraper = TenableScraper()
-        self.circl_scraper = CIRCLScraper()
         self.nvd_recent_scraper = NVDRecentScraper()
         # KEV once: ayni CVE birden fazla kaynaktan gelirse ilk goruleni kalir ve
         # KEV kaydi somuru bilgisini (baslik/aciklama oneki) tasir.
         # Kayit defteri news/kaynaklar.py tarafindan da okunur (kaynak sagligi).
+        # 2026-10-14: CIRCL cikarildi (/api/last yalniz PYSEC/GHSA ve eski published donuyor; NVD + GitHub Advisory kapsiyor)
         self.sources = {
             'CISA KEV': self.kev_scraper,
             'NVD': self.nvd_scraper,
             'GitHub Advisory': self.github_scraper,
             'Tenable': self.tenable_scraper,
-            'CIRCL': self.circl_scraper,
             'NVD Güncel': self.nvd_recent_scraper,
         }
     

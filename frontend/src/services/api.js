@@ -71,4 +71,9 @@ export const aiApi = {
 export const istekHataMesaji = (err, varsayilan) =>
   err.response?.data?.message || `${varsayilan}: ${err.message}`
 
+// Saglik seridi (anonim, 60 sn cache'li; 2026-10-14)
+export const saglikApi = {
+  getSaglik: () => api.get('/saglik/'),
+}
+
 export default api
