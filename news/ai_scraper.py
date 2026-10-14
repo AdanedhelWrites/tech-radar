@@ -23,8 +23,10 @@ class MultiAINewsScraper:
             'AWS ML Blog': AINewsScraper('https://aws.amazon.com/blogs/machine-learning/feed/', 'AWS ML Blog'),
             'TechCrunch AI': AINewsScraper('https://techcrunch.com/category/artificial-intelligence/feed/', 'TechCrunch AI'),
             'Google DeepMind': AINewsScraper('https://deepmind.google/blog/rss.xml', 'Google DeepMind'),
-            'KDnuggets': AINewsScraper('https://www.kdnuggets.com/feed', 'KDnuggets'),
             'OpenAI Blog': AINewsScraper('https://openai.com/blog/rss.xml', 'OpenAI Blog'),
+            # 2026-10-14: KDnuggets (tum UA'larla 403, 43 gun 0) yerine iki canli RSS
+            'Ars Technica AI': AINewsScraper('https://arstechnica.com/ai/feed/', 'Ars Technica AI'),
+            'Import AI': AINewsScraper('https://importai.substack.com/feed', 'Import AI'),
         }
 
     def fetch_all(self, days=30, selected_sources=None):

@@ -11,7 +11,7 @@ import {
   FaDownload, FaSync, FaTrash, FaFileExport,
   FaShieldAlt, FaChartBar, FaCogs, FaExclamationTriangle,
   FaCalendar, FaExternalLinkAlt,
-  FaDatabase, FaGithub, FaShieldVirus, FaGlobe, FaClock
+  FaDatabase, FaGithub, FaShieldVirus, FaClock
 } from 'react-icons/fa'
 import { cveApi, istekHataMesaji } from '../services/api'
 
@@ -19,7 +19,7 @@ const sources = [
   { id: 'source1', name: 'NVD', value: 'NVD', icon: FaDatabase, color: '#3498db' },
   { id: 'source2', name: 'GitHub Advisory', value: 'GitHub Advisory', icon: FaGithub, color: '#e74c3c' },
   { id: 'source3', name: 'Tenable', value: 'Tenable', icon: FaShieldVirus, color: '#00b894' },
-  { id: 'source4', name: 'CIRCL', value: 'CIRCL', icon: FaGlobe, color: '#f39c12' },
+  // 2026-10-14: CIRCL (source4) cikarildi; /api/last artik CVE donmuyor, NVD + GitHub Advisory kapsiyor
   { id: 'source5', name: 'NVD Güncel', value: 'NVD Güncel', icon: FaClock, color: '#6c5ce7' },
   { id: 'source6', name: 'CISA KEV', value: 'CISA KEV', icon: FaExclamationTriangle, color: '#d63031' },
 ]

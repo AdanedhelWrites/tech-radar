@@ -1,6 +1,6 @@
 # Teknoloji Radar
 
-Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri, DevTools altyapi araclari guncellemeleri ve yapay zeka (AI) gelismelerini **48 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
+Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri, DevTools altyapi araclari guncellemeleri ve yapay zeka (AI) gelismelerini **47 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
 
 > Bu proje **Vibe Coding** yaklasimiyla, Claude Code (claude-opus-4-6) ile birlikte gelistirilmistir.
 
@@ -71,7 +71,7 @@ Ayni kod uc bicimde calisir:
 
 ## Ozellikler
 
-- **48 farkli kaynak** — 12 siber guvenlik, 6 CVE, 3 Kubernetes, 5 SRE, 14 DevTools, 8 Yapay Zeka; hepsi anahtarsiz ve ucretsiz (GitHub API icin istege bagli `GITHUB_TOKEN`)
+- **47 farkli kaynak** — 12 siber guvenlik, 5 CVE, 3 Kubernetes, 5 SRE, 13 DevTools, 9 Yapay Zeka; hepsi anahtarsiz ve ucretsiz (GitHub API icin istege bagli `GITHUB_TOKEN`)
 - **Asenkron cekim** — "Getir" istegi Celery worker'a devredilir; arayuz 5 saniyede bir yeni kayitlari otomatik yansitir
 - **Periyodik cekim** — Celery Beat tum bolumleri 6 saatte bir otomatik gunceller (sadece yeni kayitlar cevrilir)
 - **Yonetici korumali sifirlama** — Veritabanini silen `clear` endpoint'leri yalnizca Django admin oturumuyla calisir
@@ -80,7 +80,7 @@ Ayni kod uc bicimde calisir:
 - **Turkce imla post-processing** — Cumle basi buyuk harf, noktalama duzeltme, URL/surum koruma
 - **Parca tabanli ceviri** — Uzun makaleler cumle sinirlarindan 4500 karakterlik parcalara bolunerek cevrilir
 - **Karanlik mod** — Koyu tonlarda arayuz (steel blue `#5b86a7` vurgu rengi)
-- **DevTools takibi** — MinIO, Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle, LiteLLM, LangGraph, Langfuse, GitLab, Keycloak release guncellemeleri
+- **DevTools takibi** — Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle, LiteLLM, LangGraph, Langfuse, GitLab, Keycloak release guncellemeleri
 - **CISA KEV** — Aktif somurulen zafiyetler (Known Exploited Vulnerabilities) CVE bolumunde ayri kaynak; NVD API'sinin `hasKev` filtresiyle, eklenme tarihi ve federal son tarih bilgisiyle
 - **Tarih filtresi** — 1-30 gun (haberler) / 1-90 gun (CVE, Kubernetes, SRE, Yapay Zeka) / 1-120 gun (DevTools) slider ile filtreleme (`news/serializers.py` sinirlari)
 - **Yeniden denemeli cekim** — Gecici 429/5xx ve baglanti hatalarinda 2 ek deneme, ussel bekleme, `Retry-After`'a uyum (`news/base_scraper.oturum_kur`); onceden tek bir 503 kaynagi o tur bos birakiyordu
@@ -117,7 +117,7 @@ Ayni kod uc bicimde calisir:
 
 > Yeni RSS kaynaklari `scraper_multi.RSSNewsSource` ile okunur: tur basina en fazla 15 haber, `days` penceresi, 200 karakterden kisa ozetler makale sayfasindan tamamlanir. Feed'den gelen linkler yalniz kaynagin kendi kok alaninda ve `https` ise acilir (`news/base_scraper.link_guvenli`; SSRF korumasi, bkz. [GUVENLIK-PLANI 3a](docs/GUVENLIK-PLANI.md)). `fetch_all_news` tavani kaynak sayisiyla buyur (`max(30, 3 x kaynak)`), boylece seyrek yazan kaynaklar (Krebs, SANS) tarih siralamasinda dusmez.
 
-### CVE Zafiyetleri (6 kaynak)
+### CVE Zafiyetleri (5 kaynak)
 
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
@@ -126,7 +126,6 @@ Ayni kod uc bicimde calisir:
 | NVD (Guncel) | REST API | Son guncellenen CVE'ler |
 | GitHub Advisory | REST API | CVSS, CWE, etkilenen paketler dahil |
 | Tenable | HTML Scraping | Severity bilgisi dahil |
-| CIRCL | REST API | Luksemburg CERT |
 
 ### Kubernetes (3 kaynak)
 
@@ -146,11 +145,10 @@ Ayni kod uc bicimde calisir:
 | Google Cloud SRE | RSS Feed | SRE anahtar kelime filtresiyle |
 | DZone DevOps | RSS Feed | `feeds.dzone.com/devops-and-cicd` (eski `/devops` adresi olu bir porta yonlendiriyordu) |
 
-### DevTools — Altyapi Araclari (14 kaynak)
+### DevTools — Altyapi Araclari (13 kaynak)
 
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
-| MinIO | GitHub Releases API | S3 uyumlu object storage, detayli changelog. **Ust kaynak Ekim 2025'ten beri GitHub'da surum yayinlamiyor**; kaynak bilincli olarak tutuluyor, yeni kayit beklenmez |
 | Seq | Datalust Blog RSS | Yapilandirilmis log arama motoru, release filtreli |
 | Ceph | GitHub Releases Atom | Dagitik storage, version tag tabanli |
 | MongoDB | GitHub Tags Atom + mongodb.com release notes | Stabil `rX.Y.Z` tag'leri; aciklama resmi surum notlari sayfasindaki surum basligindan (blog RSS'i Haziran 2026'da donmustu) |
@@ -167,7 +165,7 @@ Ayni kod uc bicimde calisir:
 
 > LiteLLM, LangGraph, Langfuse ve Keycloak `devtools_scraper.GitHubReleasesScraper` ortak sinifiyla okunur (tag deseni + prerelease elemesi). GitHub API anonim limiti 60 istek/saat/IP'dir; `GITHUB_TOKEN` verilirse yalniz `api.github.com` isteklerine eklenir (bkz. [Ortam Degiskenleri](#ortam-degiskenleri)). `fetch_all` tavani kaynak sayisiyla buyur (`max(30, 3 x kaynak)`).
 
-### Yapay Zeka (8 kaynak)
+### Yapay Zeka (9 kaynak)
 
 | Kaynak | Yontem | Aciklama |
 |--------|--------|----------|
@@ -177,8 +175,9 @@ Ayni kod uc bicimde calisir:
 | AWS ML Blog | RSS Feed | AWS makine ogrenmesi blogu |
 | TechCrunch AI | RSS Feed | AI sektor haberleri |
 | Google DeepMind | RSS Feed | DeepMind arastirma blogu |
-| KDnuggets | RSS Feed | Veri bilimi ve ML yazilari |
 | OpenAI Blog | RSS Feed | OpenAI duyurulari |
+| Ars Technica AI | RSS Feed | https://arstechnica.com/ai/feed/ (2026-10-14: KDnuggets yerine) |
+| Import AI | RSS Feed | https://importai.substack.com/feed (haftalik bulten) |
 
 > Tum AI kaynaklari `news/base_scraper.py` icindeki ortak `BaseRSSScraper` ile okunur; RSS aciklamasi 200 karakterden kisaysa makale sayfasindan paragraf cekilir. Benchmark/leaderboard skorlari kapsam disidir (bkz. [ADR-0002](docs/ADR-0002-AI-Benchmark.md)).
 
@@ -584,11 +583,11 @@ cybersecurity_news/
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
 │   ├── tests/                  # 369 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
-│   ├── ai_scraper.py           # 8 Yapay Zeka kaynagi scraper'i
+│   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
 │   ├── cve_scraper.py          # 5 CVE kaynagi scraper'i
 │   ├── k8s_scraper.py          # 3 Kubernetes kaynagi scraper'i
 │   ├── sre_scraper.py          # 5 SRE kaynagi scraper'i
-│   ├── devtools_scraper.py     # 9 DevTools kaynagi scraper'i
+│   ├── devtools_scraper.py     # 13 DevTools kaynagi scraper'i
 │   ├── fetch_runs.py           # FetchRun satirlarini yazan Celery sinyalleri
 │   ├── api_v1/                 # Dis tuketici entegrasyon katmani (ADR-0003)
 │   │   ├── views.py            # Delta, refresh, jobs, status, health uc noktalari
@@ -607,7 +606,7 @@ cybersecurity_news/
 │   ├── chart_etiket_kontrol.sh # CI kapisi: chart-<surum> etiketi Chart.yaml ile ayni
 │   └── zap_sarif.py            # ZAP JSON raporu -> SARIF (DAST bulgulari Security sekmesine)
 │
-├── scraper_multi.py            # 5 siber guvenlik kaynagi scraper'i
+├── scraper_multi.py            # 12 siber guvenlik kaynagi scraper'i
 │
 ├── frontend/                   # React SPA
 │   ├── src/
@@ -746,7 +745,7 @@ Her cekim bir `FetchRun` satiri birakir (bolum, baslangic/bitis, `fetched_count`
 
 **Takili turlar (2026-10-09):** Worker yeniden basladiginda ya da sert sure siniri (`CELERY_TASK_TIME_LIMIT`) alt sureci oldurdugunde `task_postrun` hic gelmez ve satir suresiz `running` kalirdi (canlida 4 satir, biri 5 gunluk). Ayni bolumun yeni turu acilirken eski `running` satirlari `failure` + `stopped_reason=interrupted` ile kapatilir.
 
-**Kaynak sagligi (2026-10-08):** 8 kaynak aylarca sessizce olmustu (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone donmus akislar); bolum toplami "success" gorundugu icin fark edilmedi. Artik her tur secili her kaynak icin kaynaktan gelen sayiyi (`_drop_existing`'den onceki) `FetchRun.by_source`'a yazar. `/api/v1/status/` her kaynak icin `zero_runs` (ardisik 0 donen tamamlanmis tur) ve `silent` verir; `SOURCE_SILENT_RUNS` (varsayilan 4 = Beat'te 24 saat) esigi asan kaynaklar `silent_sources` listesindedir. Admin'deki FetchRun listesinde "0 donen kaynaklar" sutunu ayni bilgiyi tur basina gosterir. Seyrek yazan kaynaklar (Krebs, PagerDuty) kendi `days` penceresinde yine kayit dondurdugu icin yanlis pozitif vermez; yeni kayit olmamasi degil, kaynaktan hic kayit gelmemesi sessizliktir. Haftalik kontrol: `curl .../api/v1/status/ | jq '.sections[].silent_sources'`.
+**Kaynak sagligi (2026-10-08):** 8 kaynak aylarca sessizce olmustu (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone donmus akislar); bolum toplami "success" gorundugu icin fark edilmedi. Artik her tur secili her kaynak icin kaynaktan gelen sayiyi (`_drop_existing`'den onceki) `FetchRun.by_source`'a yazar. `/api/v1/status/` her kaynak icin `zero_runs` (ardisik 0 donen tamamlanmis tur) ve `silent` verir; `SOURCE_SILENT_RUNS` (varsayilan 4 = Beat'te 24 saat) esigi asan kaynaklar `silent_sources` listesindedir. Admin'deki FetchRun listesinde "0 donen kaynaklar" sutunu ayni bilgiyi tur basina gosterir. Seyrek yazan kaynaklar (Krebs, PagerDuty) kendi `days` penceresinde yine kayit dondurdugu icin yanlis pozitif vermez; yeni kayit olmamasi degil, kaynaktan hic kayit gelmemesi sessizliktir. Haftalik kontrol: `curl .../api/v1/status/ | jq '.sections[].silent_sources'`. 2026-10-14: sessizlik kadans farkindalikli — seyrek yayinlayan kaynak (RabbitMQ, Moodle, Ceph...) icin kaynak basina beklenen aralik (`news/kaynaklar.py` `BEKLENEN_ARALIK_GUN`), digerleri icin bolum penceresi; status ucu `expected_gap_days` ve `days_since_record` verir.
 
 ---
 
@@ -1055,6 +1054,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | 2026-10-03 | Faz B2: Helm chart 2.0.0 docker-desktop'ta S1-S7 ile dogrulandi; CI chart kapilari | ADR-0007 |
 | 2026-10-04 | B3: Terraform + Argo CD + Vault/VSO ile yerel GitOps; chart 2.1.0; T1-T12 gecti | ADR-0008 |
 | 2026-10-08 | Kaynak turu: 35 → 48 kaynak (7 haber, CISA KEV, LiteLLM/LangGraph/Langfuse/GitLab/Keycloak); olu kaynak onarimi (Bleeping Computer 403, SecurityWeek bos link, MongoDB/InfoQ/DZone akislari); `GITHUB_TOKEN` | `news/tests/test_kaynaklar.py` |
+| 2026-10-14 | Kaynak turu 2: 48 → 47 (KDnuggets/MinIO/CIRCL cikti, Ars Technica AI/Import AI girdi); kadans farkindalikli sessizlik | `news/tests/test_kaynak_sagligi.py` |
 
 ### Acik isler ve adaylar
 
