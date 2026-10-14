@@ -606,7 +606,7 @@ cybersecurity_news/
 │   ├── chart_etiket_kontrol.sh # CI kapisi: chart-<surum> etiketi Chart.yaml ile ayni
 │   └── zap_sarif.py            # ZAP JSON raporu -> SARIF (DAST bulgulari Security sekmesine)
 │
-├── scraper_multi.py            # 5 siber guvenlik kaynagi scraper'i
+├── scraper_multi.py            # 12 siber guvenlik kaynagi scraper'i
 │
 ├── frontend/                   # React SPA
 │   ├── src/
