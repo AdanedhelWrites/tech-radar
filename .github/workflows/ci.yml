@@ -59,8 +59,9 @@ jobs:
       # Test suite'i bu sayinin altina duserse test kesfi bozulmus demektir
       # (ornegin import hatasi yuzunden modul atlanmasi). Test silindiginde guncelle.
       MIN_TESTS: "100"
-      # Coverage tabani (yuzde); kapi: coverage report --fail-under. Olcumden sonra sabitlenir.
-      MIN_COVERAGE: "0"
+      # Coverage tabani (yuzde); kapi: coverage report --fail-under. 2026-10-14 ilk olcum
+      # TOTAL %59 (5242 satir, 2149 kapsanmayan) -> taban 2 puan alti. Yalniz yukari tasinir.
+      MIN_COVERAGE: "57"
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
