@@ -389,6 +389,7 @@ Her bolum (news, cve, k8s, sre, devtools, ai) ayni endpoint yapisini kullanir:
 | POST | `/api/{bolum}/clear/` | Tum verileri sil (**yonetici oturumu gerekir**, aksi halde 403) |
 | GET | `/api/{bolum}/stats/` | Istatistikleri getir |
 | GET | `/api/{bolum}/export/` | HTML rapor olarak disa aktar |
+| GET | `/api/saglik/` | Bolum basina son basarili cekim, son durum, ceviri bekleyen/vazgecilen, sessiz kaynaklar (anonim, 60 sn cache) |
 
 **Bolum isimleri:** `news` (Siber Guvenlik, fetch endpoint: `/api/fetch/`), `cve`, `k8s`, `sre`, `devtools`, `ai`
 
@@ -931,6 +932,9 @@ curl -s http://localhost:8000/api/v1/health/
 
 # Bolum basina tazelik: son basarili cekim, son durum, bekleyen ceviri sayisi
 curl -s -H "Authorization: Token $CYBERNEWS_TOKEN" http://localhost:8000/api/v1/status/
+
+# Ana sayfa saglik seridinin kaynagi: bolum basina sessiz kaynaklar (tokensiz, 60 sn cache)
+curl -s localhost:8000/api/saglik/ | jq '.sections[] | .silent_sources'
 
 # Loglar
 docker compose logs -f --tail=100 teknoloji-worker      # cekim ve ceviri

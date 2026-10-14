@@ -2,6 +2,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # Ana sayfa saglik seridi (anonim, dar, 60 sn cache; 2026-10-14)
+    path('api/saglik/', views.get_saglik, name='get_saglik'),
+
     # Haber API endpoints
     path('api/news/', views.get_news, name='get_news'),
     path('api/fetch/', views.fetch_news, name='fetch_news'),
