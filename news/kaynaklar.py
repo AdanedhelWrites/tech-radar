@@ -27,6 +27,24 @@ TUR_PENCERESI = 20
 
 BOLUMLER = ('news', 'cve', 'kubernetes', 'sre', 'devtools', 'ai')
 
+# Bolum basina cekim penceresi (news/tasks.py fetch_* varsayilan `days`): kaynaktan bu
+# pencerede en az bir kayit gelmesi beklenir.
+BOLUM_PENCERESI_GUN = {'news': 7, 'cve': 7, 'kubernetes': 30, 'sre': 30, 'devtools': 30, 'ai': 30}
+
+# Seyrek yayinlayan kaynaklar (2026-10-14 olcumu): RabbitMQ aylik yama, Moodle/Ceph iki-uc ayda bir
+# surum, Krebs/PagerDuty seyrek yazi. Pencerede 0 donmeleri olagan; sessizlik ancak son kayit bu
+# kadar gunden eskiyse (RabbitMQ/MongoDB yanlis pozitifleri bu yuzden).
+BEKLENEN_ARALIK_GUN = {
+    'RabbitMQ': 60, 'MongoDB': 45, 'Moodle': 90, 'Ceph': 90, 'Seq': 60, 'Elastic': 60,
+    'Redis': 60, 'PostgreSQL': 60, 'Keycloak': 60, 'GitLab': 45,
+    'Krebs on Security': 21, 'PagerDuty Eng': 60, 'Import AI': 21,
+}
+
+
+def beklenen_aralik(bolum: str, ad: str) -> int:
+    """Kaynaktan iki kayit arasinda beklenen en uzun gun sayisi."""
+    return BEKLENEN_ARALIK_GUN.get(ad, BOLUM_PENCERESI_GUN.get(bolum, 30))
+
 
 @lru_cache(maxsize=None)
 def bolum_kaynaklari(bolum: str) -> List[str]:
@@ -79,12 +97,15 @@ def kaynak_durumlari(bolum: str, model) -> Dict[str, dict]:
 
     Yalniz by_source tasiyan tamamlanmis turlara bakilir (bu alan 2026-10-08'den
     once bos). Kaynagin yer almadigi tur (secili degildi) atlanir; ardisik sifir
-    sayimi ilk >0 turda durur.
+    sayimi ilk >0 turda durur. Sessizlik 2026-10-14'ten beri kadans farkindalikli:
+    bkz. BEKLENEN_ARALIK_GUN.
     """
     from django.db.models import Max
+    from django.utils import timezone
 
     from .models import FetchRun
 
+    simdi = timezone.now()
     turlar = list(
         FetchRun.objects.filter(section=bolum)
         .exclude(status='running')
@@ -109,10 +130,17 @@ def kaynak_durumlari(bolum: str, model) -> Dict[str, dict]:
             if gelen > 0:
                 break
             sifir += 1
+        son = son_kayit.get(ad)
+        yas = (simdi - son).days if son else None
+        aralik = beklenen_aralik(bolum, ad)
         durum[ad] = {
-            'last_record_at': son_kayit.get(ad),
+            'last_record_at': son,
             'last_fetched_count': son_gelen,
             'zero_runs': sifir,
-            'silent': sifir >= SESSIZ_TUR_ESIGI,
+            'expected_gap_days': aralik,
+            'days_since_record': yas,
+            # Iki kosul: ardisik sifir turlar VE son kayit beklenen araliktan eski (ya da hic
+            # kayit yok). Seyrek yayinlayan kaynak yalniz pencere disinda kaldigi icin sessiz sayilmaz.
+            'silent': sifir >= SESSIZ_TUR_ESIGI and (yas is None or yas > aralik),
         }
     return durum

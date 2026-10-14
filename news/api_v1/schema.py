@@ -204,6 +204,8 @@ class KaynakDurumuV1Serializer(serializers.Serializer):
     last_record_at = serializers.DateTimeField(allow_null=True)
     last_fetched_count = serializers.IntegerField(allow_null=True)
     zero_runs = serializers.IntegerField()
+    expected_gap_days = serializers.IntegerField()
+    days_since_record = serializers.IntegerField(allow_null=True)
     silent = serializers.BooleanField()
 
 

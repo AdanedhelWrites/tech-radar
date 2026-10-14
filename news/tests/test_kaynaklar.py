@@ -432,3 +432,26 @@ class SREKaynakTests(SimpleTestCase):
 
     def test_dzone_guncel_akis_adresi(self):
         self.assertEqual(DZoneDevOpsScraper.FEED_URL, 'https://feeds.dzone.com/devops-and-cicd')
+
+
+class YeniAIKaynaklariTests(SimpleTestCase):
+    """2026-10-14: KDnuggets yerine Ars Technica AI + Import AI (ikisi de RSS, canli dogrulandi)."""
+
+    def test_ars_technica_rss_okunur_eski_elenir(self):
+        from news.ai_scraper import AINewsScraper
+        s = AINewsScraper('https://feed.test/ai', 'Ars Technica AI')
+        rss = _rss([_item('Yeni model', 'https://ornek.test/yeni', 1, desc='Ozet metin'),
+                    _item('Eski', 'https://ornek.test/eski', 45)])
+        with mock.patch.object(s.session, 'get', side_effect=yonlendir({'https://feed.test/ai': SahteYanit(rss)})):
+            entries = s.fetch_entries(days=30)
+
+        self.assertEqual([e['source'] for e in entries], ['Ars Technica AI'])
+        self.assertEqual(entries[0]['link'], 'https://ornek.test/yeni')
+        self.assertEqual(entries[0]['title'], 'Yeni model')
+
+    def test_ai_kayit_defteri_adresleri(self):
+        from news.ai_scraper import MultiAINewsScraper
+        s = MultiAINewsScraper().scrapers
+        self.assertEqual(s['Ars Technica AI'].feed_url, 'https://arstechnica.com/ai/feed/')
+        self.assertEqual(s['Import AI'].feed_url, 'https://importai.substack.com/feed')
+        self.assertNotIn('KDnuggets', s)
