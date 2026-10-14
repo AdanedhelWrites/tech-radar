@@ -21,4 +21,11 @@ describe('CeviriEtiketi', () => {
     expect(ceviriEtiketiHtml({ translation_provider: 'x' })).toBe('')
     expect(ceviriEtiketiHtml(undefined)).toBe('')
   })
+  it('saglayicisiz ama ceviri bekleyen kayit "Çevrilmedi" rozeti alir', () => {
+    render(<CeviriEtiketi kayit={{ translation_provider: '', needs_translation: true }} />)
+    expect(screen.getByText('Çevrilmedi: orijinal metin')).toBeInTheDocument()
+  })
+  it('html cikti da "Çevrilmedi" rozetini uretir', () => {
+    expect(ceviriEtiketiHtml({ translation_provider: '', needs_translation: true })).toContain('Çevrilmedi: orijinal metin')
+  })
 })

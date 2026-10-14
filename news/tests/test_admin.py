@@ -2,7 +2,9 @@
 from datetime import date
 
 from django.contrib import admin
-from django.test import TestCase
+from django.contrib.auth.models import User
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import RequestFactory, TestCase
 
 from news.models import (
     AINewsEntry, CVEEntry, DevToolsEntry, FetchRun, KubernetesEntry, NewsArticle, SREEntry,
@@ -78,3 +80,35 @@ class AdminKayitTests(TestCase):
         self.assertIn('{ return y; }', html)
         self.assertIn('<tr>', html)
         self.assertIn('<td', html)
+
+
+class CeviriDenemeSifirlamaTests(TestCase):
+    """2026-10-14: RETRANSLATE_MAX_ATTEMPTS'a ulasip kuyruktan dusen kayitlar admin'den geri alinir."""
+
+    def setUp(self):
+        self.istek = RequestFactory().get('/admin/')
+        self.istek.user = User.objects.create_superuser('yonetici', 'y@ornek.test', 'gecici-parola-123')
+        self.istek.session = {}
+        self.istek._messages = FallbackStorage(self.istek)
+
+    def test_eylem_alti_modelde_kayitli(self):
+        for model in (NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry):
+            with self.subTest(model=model.__name__):
+                self.assertIn('ceviri_denemelerini_sifirla', admin.site._registry[model].get_actions(self.istek))
+
+    def test_sayac_sifirlanir_ve_kuyruga_doner_secilmeyen_degismez(self):
+        secili = SREEntry.objects.create(source='SRE Weekly', original_title='T', original_description='D',
+                                         link='https://ornek.test/1', published_date=date(2026, 10, 1),
+                                         needs_translation=True, translation_attempts=5)
+        digeri = SREEntry.objects.create(source='SRE Weekly', original_title='T2', original_description='D',
+                                         link='https://ornek.test/2', published_date=date(2026, 10, 1),
+                                         needs_translation=False, translation_attempts=5)
+
+        admin.site._registry[SREEntry].ceviri_denemelerini_sifirla(
+            self.istek, SREEntry.objects.filter(pk=secili.pk))
+
+        secili.refresh_from_db()
+        digeri.refresh_from_db()
+        self.assertEqual((secili.translation_attempts, secili.needs_translation), (0, True))
+        self.assertEqual((digeri.translation_attempts, digeri.needs_translation), (5, False))
+        self.assertEqual([str(m) for m in self.istek._messages], ['1 kayit yeniden ceviri kuyruguna alindi.'])

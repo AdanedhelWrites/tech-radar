@@ -40,11 +40,26 @@ class CeviriKarsilastirmaMixin:
         return metin[:80] + ('...' if len(metin) > 80 else '')
 
 
+class CeviriDenemeSifirlamaMixin:
+    """Kuyruktan dusmus (RETRANSLATE_MAX_ATTEMPTS) kayitlari yeniden siraya alir (2026-10-14).
+
+    Sayaci sifirlar ve needs_translation'i acar; bir sonraki retranslate turu kaydi yeniden dener.
+    GEMINI_MAX_CHARS ustu kayitlar yine Gemini'ye gitmez (LibreTranslate yolu); kok neden
+    giderilmeden toplu sifirlama Gemini butcesini bosa yakar.
+    """
+    actions = ['ceviri_denemelerini_sifirla']
+
+    @admin.action(description='Ceviri denemelerini sifirla (yeniden kuyruga al)')
+    def ceviri_denemelerini_sifirla(self, request, queryset):
+        sayi = queryset.update(translation_attempts=0, needs_translation=True)
+        self.message_user(request, f'{sayi} kayit yeniden ceviri kuyruguna alindi.')
+
+
 CEVIRI_FILTRELERI = ('needs_translation', 'translation_provider')
 
 
 @admin.register(NewsArticle)
-class NewsArticleAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
+class NewsArticleAdmin(CeviriDenemeSifirlamaMixin, CeviriKarsilastirmaMixin, admin.ModelAdmin):
     list_display = ('baslik_onizleme', 'source', 'translation_provider', 'date', 'created_at')
     list_filter = ('source', 'date', 'created_at') + CEVIRI_FILTRELERI
     search_fields = ('turkish_title', 'original_title', 'turkish_description')
@@ -53,7 +68,7 @@ class NewsArticleAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
 
 
 @admin.register(CVEEntry)
-class CVEEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
+class CVEEntryAdmin(CeviriDenemeSifirlamaMixin, CeviriKarsilastirmaMixin, admin.ModelAdmin):
     list_display = ('cve_id', 'source', 'severity', 'cvss_score', 'translation_provider', 'published_date', 'created_at')
     list_filter = ('source', 'severity', 'published_date', 'created_at') + CEVIRI_FILTRELERI
     search_fields = ('cve_id', 'turkish_title', 'original_title', 'turkish_description')
@@ -62,7 +77,7 @@ class CVEEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
 
 
 @admin.register(KubernetesEntry)
-class KubernetesEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
+class KubernetesEntryAdmin(CeviriDenemeSifirlamaMixin, CeviriKarsilastirmaMixin, admin.ModelAdmin):
     list_display = ('baslik_onizleme', 'source', 'category', 'version', 'translation_provider', 'published_date', 'created_at')
     list_filter = ('source', 'category', 'published_date', 'created_at') + CEVIRI_FILTRELERI
     search_fields = ('turkish_title', 'original_title', 'turkish_description', 'version')
@@ -71,7 +86,7 @@ class KubernetesEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
 
 
 @admin.register(SREEntry)
-class SREEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
+class SREEntryAdmin(CeviriDenemeSifirlamaMixin, CeviriKarsilastirmaMixin, admin.ModelAdmin):
     list_display = ('baslik_onizleme', 'source', 'translation_provider', 'published_date', 'created_at')
     list_filter = ('source', 'published_date', 'created_at') + CEVIRI_FILTRELERI
     search_fields = ('turkish_title', 'original_title', 'turkish_description')
@@ -80,7 +95,7 @@ class SREEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
 
 
 @admin.register(DevToolsEntry)
-class DevToolsEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
+class DevToolsEntryAdmin(CeviriDenemeSifirlamaMixin, CeviriKarsilastirmaMixin, admin.ModelAdmin):
     # DevToolsEntry ayrica version ve entry_type tasir (models.py:130-152)
     list_display = ('baslik_onizleme', 'source', 'entry_type', 'version',
                     'translation_provider', 'published_date')
@@ -91,7 +106,7 @@ class DevToolsEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
 
 
 @admin.register(AINewsEntry)
-class AINewsEntryAdmin(CeviriKarsilastirmaMixin, admin.ModelAdmin):
+class AINewsEntryAdmin(CeviriDenemeSifirlamaMixin, CeviriKarsilastirmaMixin, admin.ModelAdmin):
     list_display = ('baslik_onizleme', 'source', 'translation_provider', 'published_date', 'created_at')
     list_filter = ('source', 'published_date', 'created_at') + CEVIRI_FILTRELERI
     search_fields = ('turkish_title', 'original_title', 'turkish_description')
