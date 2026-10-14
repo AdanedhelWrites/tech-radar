@@ -177,3 +177,30 @@ def tur_coktu(sender=None, task_id=None, exception=None, **kwargs):
         _kapat(task_id, status='failure', error=f'{type(exception).__name__}: {exception}'[:HATA_TAVANI])
     except Exception as hata:
         log.warning(f'  [FetchRun] Cokme yazilamadi ({task_id}): {hata}')
+
+
+def bolum_ozetleri() -> dict:
+    """Anonim /api/saglik/ icin bolum basina tazelik ozeti (2026-10-14).
+
+    StatusView'daki (v1, token'li) raporun DAR alt kumesi: son basarili tur, son durum, ceviri
+    bekleyen/vazgecilen sayilari ve sessiz kaynaklar. Toplamlar, kaynak basina ayrinti,
+    by_provider ve error bilerek yok: uc anonimdir, operator verisi v1/status ve admin'de kalir.
+    """
+    from .kaynaklar import kaynak_durumlari
+    from .retranslate import RETRANSLATE_MAX_ATTEMPTS
+
+    ozet = {}
+    for ad, model in BOLUM_MODELLERI.items():
+        son = FetchRun.objects.filter(section=ad).first()
+        son_basarili = FetchRun.objects.filter(section=ad, status='success').first()
+        kaynaklar = kaynak_durumlari(ad, model)
+        ozet[ad] = {
+            'last_success_at': (son_basarili.finished_at.isoformat()
+                                if son_basarili and son_basarili.finished_at else None),
+            'last_status': son.status if son else None,
+            'pending_translation': model.objects.filter(needs_translation=True).count(),
+            'translation_given_up': model.objects.filter(
+                needs_translation=True, translation_attempts__gte=RETRANSLATE_MAX_ATTEMPTS).count(),
+            'silent_sources': [k for k, v in kaynaklar.items() if v['silent']],
+        }
+    return ozet
