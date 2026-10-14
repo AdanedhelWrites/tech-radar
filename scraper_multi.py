@@ -14,7 +14,7 @@ import json
 from datetime import datetime, timedelta
 import re
 import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 from urllib.parse import urlsplit
 

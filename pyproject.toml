@@ -1,0 +1,16 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["migrations", "staticfiles", "frontend", "docs", "_arsiv", ".superpowers", ".venv", ".claude", "C:", "helm;C"]
+
+[tool.ruff.lint]
+# Baslangic kapisi dar (2026-10-14): yalniz hata sinifi (pyflakes F, sozdizimi E9). Stil kurallari
+# (E, UP, SIM, RUF...) ayni gun 489 bulgu verdi; ayri bir PR'da kademeli acilir.
+select = ["F", "E9"]
+
+[tool.coverage.run]
+source = ["news", "cybernews", "scripts", "scraper_multi"]
+omit = ["*/migrations/*", "*/tests/*", "cybernews/asgi.py", "cybernews/wsgi.py"]
+
+[tool.coverage.report]
+skip_empty = true

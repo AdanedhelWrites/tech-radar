@@ -19,13 +19,10 @@ api.github.com isteklerine Bearer baslik eklenir (bkz. DevToolsScraper._github_g
 """
 
 import os
-import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import re
-from typing import List, Dict, Optional
-import time
-from email.utils import parsedate_to_datetime
+from typing import List, Dict
 
 from news.translation_utils import translate_text, translate_long_text
 from news.base_scraper import BaseRSSScraper, link_guvenli, oturum_kur

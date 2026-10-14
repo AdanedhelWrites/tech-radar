@@ -21,4 +21,16 @@ describe('CeviriEtiketi', () => {
     expect(ceviriEtiketiHtml({ translation_provider: 'x' })).toBe('')
     expect(ceviriEtiketiHtml(undefined)).toBe('')
   })
+  it('saglayicisiz ama ceviri bekleyen kayit "Çevrilmedi" rozeti alir', () => {
+    render(<CeviriEtiketi kayit={{ translation_provider: '', needs_translation: true, translation_attempts: 1 }} />)
+    expect(screen.getByText('Çevrilmedi: orijinal metin')).toBeInTheDocument()
+  })
+  it('hic deneme yapilmamis taze kayit "Çevrilmedi" rozeti almaz', () => {
+    const kayit = { translation_provider: '', needs_translation: true, translation_attempts: 0 }
+    expect(render(<CeviriEtiketi kayit={kayit} />).container).toBeEmptyDOMElement()
+    expect(ceviriEtiketiHtml(kayit)).toBe('')
+  })
+  it('html cikti da "Çevrilmedi" rozetini uretir', () => {
+    expect(ceviriEtiketiHtml({ translation_provider: '', needs_translation: true, translation_attempts: 1 })).toContain('Çevrilmedi: orijinal metin')
+  })
 })

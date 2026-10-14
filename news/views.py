@@ -16,15 +16,8 @@ from .serializers import (
     KubernetesEntrySerializer, FetchK8sRequestSerializer,
     SREEntrySerializer, FetchSRERequestSerializer,
     DevToolsEntrySerializer, FetchDevToolsRequestSerializer,
-    AINewsEntrySerializer, FetchAINewsRequestSerializer,
-    StatsSerializer
+    AINewsEntrySerializer, FetchAINewsRequestSerializer
 )
-from scraper_multi import MultiSourceScraper
-from .cve_scraper import MultiCVEScraper
-from .k8s_scraper import MultiK8sScraper
-from .sre_scraper import MultiSREScraper
-from .devtools_scraper import MultiDevToolsScraper
-from .ai_scraper import MultiAINewsScraper
 
 logger = logging.getLogger(__name__)
 
@@ -714,3 +707,25 @@ def export_ai_news(request):
         'exported_at': datetime.now().isoformat(),
         'count': len(serializer.data)
     })
+
+
+SAGLIK_CACHE_SURESI = 60
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_saglik(request):
+    """Ana sayfa saglik seridi: bolum basina son basarili cekim ve sessiz kaynaklar (2026-10-14).
+
+    Tokensizdir (arayuz anonim); bu yuzden v1 /status/'un dar alt kumesidir ve 60 sn cache'lenir
+    (kaynak_durumlari bolum basina FetchRun + Max(created_at) sorgusu yapar).
+    """
+    from django.utils.timezone import now
+
+    from .fetch_runs import bolum_ozetleri
+
+    govde = cache.get('saglik_ozeti')
+    if govde is None:
+        govde = {'generated_at': now().isoformat(), 'sections': bolum_ozetleri()}
+        cache.set('saglik_ozeti', govde, SAGLIK_CACHE_SURESI)
+    return Response(govde)

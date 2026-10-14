@@ -146,7 +146,7 @@ class RetranslatePendingTests(RetranslateTestBase):
 
     def test_hep_basarisiz_kayit_kuyrugu_tikamaz(self):
         """En-eski-once siralamada takilan kayit her turda ayni yeri isgal ederdi."""
-        cevirmen = self.use_translator(FakeTranslator({
+        self.use_translator(FakeTranslator({
             **CEVIRILER, TAKILAN_BASLIK: TAKILAN_BASLIK, TAKILAN_GOVDE: TAKILAN_GOVDE}))
         takilan = self._ai(TAKILAN_BASLIK, TAKILAN_GOVDE, 'takilan')
         birinci = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'birinci')
@@ -537,7 +537,7 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
         govde = 'A' * 13000
         kayit = self._ai('Farmers adopt new sensors', govde, 'uzun1')
 
-        sonuc = self._calistir()
+        self._calistir()
 
         kayit.refresh_from_db()
         self.assertEqual(self.gemini_cagrilar, [])
@@ -827,14 +827,14 @@ class ButcePayiRetranslateTests(TestCase):
                             'Non-CVE butcesi dolmali')
 
             # CVE: Asama 1'e bir kayit ver, Gemini'yi hazir ve cevirmelerde
-            cve_kayit = CVEEntry.objects.create(
+            CVEEntry.objects.create(
                 cve_id='CVE-2026-5555', source='NVD',
                 original_title='CVE-2026-5555', original_description='Thirty-one chars description here',
                 published_date=date(2026, 9, 17), link='https://test.local/cve/5555',
                 needs_translation=True)
 
             # Non-CVE kayit
-            news_kayit = NewsArticle.objects.create(
+            NewsArticle.objects.create(
                 source='Test', original_title='Test Article',
                 original_description='Test body', link='https://test.local/news/1',
                 date=date(2026, 9, 17), original_date='2026-09-17', needs_translation=True)

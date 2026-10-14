@@ -11,7 +11,7 @@ XTRM yer tutucu korumasi ve turkish_post_process uygulanmaz: terimler prompt'la 
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, Optional
 from zoneinfo import ZoneInfo
 

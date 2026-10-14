@@ -6,6 +6,16 @@ dizinindeki her degisiklik `Chart.yaml` `version`'ini artirir ve buraya `## [sur
 basligi ekler; CI (`scripts/chart_surum_kontrol.sh`) bunu zorlar. `appVersion`
 uygulama imajinin etiketidir (CalVer `YYYY.M.N`).
 
+## [2.2.1] - 2026-10-14 — appVersion 2026.10.3
+
+Yalniz `appVersion` yukseltmesi; sablon ve values degismedi (render farki yalniz imaj etiketi ve `helm.sh/chart`).
+Uygulama 2026.10.3 = main (bakim dalgasi 2026-10): 48 kaynak + kaynak sagligi + django-axes + logging (PR #57-#59),
+takili tur/XSS/nginx/zehirli kayit (PR #60), worker acilisinda takili FetchRun kapatma (PR #61), haftalik guvenlik
+ozeti (PR #62), kaynak turu 2 (47 kaynak, kadans farkindalikli sessizlik; PR #68), Vitest (PR #69), anonim
+`/api/saglik/` ucu ve saglik seridi (PR #70), cevrilmemis kayit rozeti + admin sifirlama eylemi (PR #71), v1
+throttle'in ortamdan gevsetilmesi (`V1_THROTTLE_*`, yalniz DAST; bozuk bicim acilista reddedilir), ruff duzeltmeleri
+(PR #72). K8s ortaminda `secrets.githubToken/nvdApiKey` hala bos (optional).
+
 ## [2.2.0] - 2026-10-08 — appVersion 2026.10.2
 
 Yeni istege bagli degerler; varsayilanlarla render farki yalniz ConfigMap'teki yeni anahtarlar (koddaki

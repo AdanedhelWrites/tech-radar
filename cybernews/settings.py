@@ -11,7 +11,7 @@ from pathlib import Path
 
 from csp.constants import NONCE, NONE, SELF, UNSAFE_INLINE
 
-from cybernews.ayar_dogrulama import dogrulanmis_secret_key, veritabani_ayari
+from cybernews.ayar_dogrulama import dogrulanmis_secret_key, v1_hiz_sinirlari, veritabani_ayari
 from cybernews.loglama import loglama_ayari
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -127,11 +127,8 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
     # v1 entegrasyon katmani throttle oranlari. Siniflar view uzerinde tanimli;
     # buradaki oranlar ScopedRateThrottle tarafindan okunur. Mevcut /api/* uc
-    # noktalari etkilenmez.
-    'DEFAULT_THROTTLE_RATES': {
-        'v1_read': '120/min',
-        'v1_refresh': '12/hour',
-    },
+    # noktalari etkilenmez. Ortam: V1_THROTTLE_READ / V1_THROTTLE_REFRESH (yalniz DAST icin).
+    'DEFAULT_THROTTLE_RATES': v1_hiz_sinirlari(os.environ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 

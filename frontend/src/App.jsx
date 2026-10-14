@@ -8,6 +8,7 @@ import KubernetesComponent from './components/KubernetesComponent'
 import SREComponent from './components/SREComponent'
 import DevToolsComponent from './components/DevToolsComponent'
 import AINewsComponent from './components/AINewsComponent'
+import SaglikSeridi from './components/SaglikSeridi'
 import { Toaster } from 'react-hot-toast'
 import './App.css'
 
@@ -91,6 +92,7 @@ function HomePage() {
         Güncel siber güvenlik haberleri, CVE (Common Vulnerabilities and Exposures),
         Kubernetes, SRE (Site Reliability Engineering) ve DevTools altyapı araçları güncellemelerini tek bir yerden takip edin.
       </p>
+      <SaglikSeridi />
 
       <div className="row justify-content-center">
         <div className="col-md-3 mb-4">

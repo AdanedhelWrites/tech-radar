@@ -21,8 +21,22 @@ const ROZETLER = {
   },
 }
 
+// Hic cevrilememis kayit (fetch aninda LibreTranslate basarisiz, retranslate 5 denemede vazgecti ya da
+// GEMINI_MAX_CHARS ustu): metin Ingilizce gosterilir; okuyucu bunu bilmeli (2026-10-14).
+// Yalniz en az bir retranslate denemesi basarisiz olmus kayit isaretlenir; taze kayit (0 deneme) degil.
+const CEVRILMEDI = {
+  metin: 'Çevrilmedi: orijinal metin',
+  bg: 'light', text: 'dark', arka: '#e9ecef', on: '#212529',
+  aciklama: 'Çeviri sağlayıcıları bu kaydı çeviremedi (çok uzun ya da çevrilemeyen içerik); metin İngilizce gösteriliyor.',
+}
+
+const rozetSec = (kayit) =>
+  ROZETLER[kayit?.translation_provider]
+  || (kayit?.needs_translation && !kayit?.translation_provider && (kayit?.translation_attempts ?? 0) >= 1
+    ? CEVRILMEDI : null)
+
 export default function CeviriEtiketi({ kayit, className = 'ms-2' }) {
-  const rozet = ROZETLER[kayit?.translation_provider]
+  const rozet = rozetSec(kayit)
   if (!rozet) return null
   return (
     <Badge bg={rozet.bg} text={rozet.text} className={className} title={rozet.aciklama}>
@@ -32,7 +46,7 @@ export default function CeviriEtiketi({ kayit, className = 'ms-2' }) {
 }
 
 export const ceviriEtiketiHtml = (kayit) => {
-  const rozet = ROZETLER[kayit?.translation_provider]
+  const rozet = rozetSec(kayit)
   return rozet
     ? `<span class="badge" style="background:${rozet.arka};color:${rozet.on}" title="${rozet.aciklama}">${rozet.metin}</span>`
     : ''
