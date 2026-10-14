@@ -16,15 +16,8 @@ from .serializers import (
     KubernetesEntrySerializer, FetchK8sRequestSerializer,
     SREEntrySerializer, FetchSRERequestSerializer,
     DevToolsEntrySerializer, FetchDevToolsRequestSerializer,
-    AINewsEntrySerializer, FetchAINewsRequestSerializer,
-    StatsSerializer
+    AINewsEntrySerializer, FetchAINewsRequestSerializer
 )
-from scraper_multi import MultiSourceScraper
-from .cve_scraper import MultiCVEScraper
-from .k8s_scraper import MultiK8sScraper
-from .sre_scraper import MultiSREScraper
-from .devtools_scraper import MultiDevToolsScraper
-from .ai_scraper import MultiAINewsScraper
 
 logger = logging.getLogger(__name__)
 

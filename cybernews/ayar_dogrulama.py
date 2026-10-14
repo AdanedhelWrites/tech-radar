@@ -3,6 +3,7 @@
 settings.py bu modulu import eder; Django henuz kurulmamisken calistigi icin
 yalniz django.core.exceptions kullanir.
 """
+import re
 from pathlib import Path
 from typing import Mapping, Optional
 
@@ -79,3 +80,27 @@ def veritabani_ayari(ortam: Mapping[str, str], debug: bool, base_dir: Path) -> d
             'NAME': base_dir / 'db.sqlite3',
         }
     }
+
+
+_ORAN_BICIMI = re.compile(r'\d+/(s|sec|m|min|h|hour|d|day)')
+
+
+def v1_hiz_sinirlari(env: Mapping[str, str]) -> dict:
+    """v1 throttle oranlari (DRF 'sayi/birim'). DAST bunlari ortamdan gevsetir: ZAP API
+    taramasi dakikada yuzlerce istek atar, 120/min ile her sey 429 olurdu (P5-c, 2026-10-14).
+    Bos deger varsayilana duser. Bicim burada dogrulanir: DRF birimin yalniz ilk harfine
+    bakar ('100/dakika' sessizce '100/gun' olurdu), bozuk deger acilista ImproperlyConfigured verir.
+    """
+    oranlar = {
+        'v1_read': ('V1_THROTTLE_READ', '120/min'),
+        'v1_refresh': ('V1_THROTTLE_REFRESH', '12/hour'),
+    }
+    sonuc = {}
+    for anahtar, (ad, varsayilan) in oranlar.items():
+        deger = env.get(ad, '') or varsayilan
+        if not _ORAN_BICIMI.fullmatch(deger):
+            raise ImproperlyConfigured(
+                f"{ad}={deger!r} gecersiz: 'sayi/birim' bekleniyor (birim: s, m, h, d ya da sec, min, hour, day)."
+            )
+        sonuc[anahtar] = deger
+    return sonuc

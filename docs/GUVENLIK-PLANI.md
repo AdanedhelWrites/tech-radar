@@ -1,6 +1,6 @@
 # Güvenlik Hattı ve Bekleyen İşler Planı
 
-> Son güncelleme: 2026-10-13 (P3, P4, P5-a ve P5-b tamamlandı; kalan P5-c). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
+> Son güncelleme: 2026-10-14 (P5-c tamamlandı; plan kapandı). Hat PR #3 ile kuruldu. Bu dosya, hattın nasıl okunacağını ve ertelenen işleri tutar.
 > Bir iş bitince kutusunu işaretle ve ilgili PR numarasını yanına yaz.
 
 ## 1. Hatlar ne zaman çalışır?
@@ -150,7 +150,7 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıy
 ### P5: Görünürlük
 - [x] ZAP sonucunu SARIF'e çevirip Security sekmesine yükle; tek kontrol yeri Security olsun — `scripts/zap_sarif.py` (stdlib; alert tipi = kural, instance = sonuç, konum `dast/<url-yolu>` (Code Scanning `http` şemalı konum kabul etmiyor; tam URL mesajda), `security-severity` High 8.0 / Medium 5.0 / Low 3.0 / Info 1.0, kararlı `partialFingerprints`; kural anahtarı `alertRef`, alt kurallar ayrı), 10 birim testi `news/tests/test_zap_sarif.py`; `upload-sarif` kategori `zap-baseline` (2026-10-08). İlk yükleme 70 sonuç / 11 kural (10 medium: Cross-Domain Misconfiguration, CSP yok; 60 low). Gürültü `.zap/rules.tsv` ile IGNORE: 90005 Sec-Fetch-*, 10049 Non-Storable, 10111/10112 Auth/Session Identified, 10094 Base64 (csrf token). Dikkat: ZAP'ın kural dosyası yalnız konsol özetini ve çıkış kodunu etkiler, JSON rapora IGNORE'lar yine girer; bu yüzden `zap_sarif.py --kurallar .zap/rules.tsv` aynı dosyayı okuyup SARIF'e almaz. Gerçek bulgu listeye eklenmez, Security'de dismiss edilir
 - [x] Haftalık güvenlik özeti: araç × severity tablosuyla GitHub Issue açan bir workflow — `.github/workflows/guvenlik-ozeti.yml` (Cuma 06:00 UTC + elle; `GITHUB_TOKEN`, PAT yok) veriyi `gh api --paginate --slurp` ile çeker, `scripts/guvenlik_ozeti.py` (stdlib, 12 birim testi `news/tests/test_guvenlik_ozeti.py`) biçimler (repo herkese açık: Issue yalnız toplu sayı taşır, kural/yol/uyarı bağlantısı yazılmaz; güvenilmeyen metin Markdown kaçışlı); her hafta yeni Issue, önceki "Yerine #N açıldı." ile kapanır. Haftalık değişim durum saklamadan `created_at`/`fixed_at`/`dismissed_at` ile hesaplanır. Dependabot okunamazsa Issue'ya not düşer, hat yeşil kalır (2026-10-13; spec `superpowers/specs/2026-10-13-p5b-haftalik-guvenlik-ozeti-design.md`)
-- [ ] A5 (OpenAPI şeması) çıkınca `zaproxy/action-api-scan` ile `/api/v1/` tam taransın
+- [x] `/api/v1/` ZAP API taraması — DAST işinde ek adımlar: `manage.py spectacular` şeması, geçici `zap-dast` token'ı (`.zap/api_hooks.py` replacer kancası), `V1_THROTTLE_*` ile gevşetilmiş throttle, SARIF kategori `zap-api`; raporda `/api/v1/` adresi yoksa iş kırmızı (2026-10-14)
 
 ## 5. Geçmiş
 - **2026-09-13:** PR #3 ile güvenlik hattı kuruldu. SOOS DAST (bozuk, ücretli) kaldırıldı. Saat dilimine bağlı kırmızı olan test düzeltildi (`timezone.localdate()`).
@@ -165,3 +165,5 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıy
 - **2026-10-08:** P5-a: ZAP baseline raporu SARIF'e çevrilip Security → Code scanning'e yükleniyor (`scripts/zap_sarif.py`, kategori `zap-baseline`).
 - **2026-10-08:** Güvenlik başlıkları (ZAP 10038/10098/10063/90004): django-csp 4 ile CSP (`script-src 'self'` + nonce, inline script yok; `style-src` `'unsafe-inline'` Swagger/spectacular için), `cybernews/guvenlik_basliklari.py` ile Permissions-Policy / CORP / COEP, `WHITENOISE_ALLOW_ALL_ORIGINS=False` (statik dosyalarda `ACAO: *` kalktı), `/api/v1/docs/` `SpectacularSwaggerSplitView` (başlatma betiği `?script=` ile ayrı JS). Testler `news/tests/test_guvenlik_basliklari.py`.
 - **2026-10-13:** P5-b: haftalık güvenlik özeti Issue'su (Cuma 06:00 UTC; kırmızı koşular, araç × severity, haftalık yeni/kapanan, Dependabot).
+- **2026-10-14:** ZAP triyajı: 16 açık uyarı için gerekçeli kapatma kararı (7 false positive 10031; 4+5 won't fix 10010/10055-6).
+- **2026-10-14:** P5-c: `/api/v1/` ZAP API taraması DAST işine eklendi (OpenAPI şeması + token kancası, kategori `zap-api`). Güvenlik planı P0–P5 tamam.

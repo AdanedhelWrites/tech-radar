@@ -4,7 +4,6 @@ NVD, CVEDetails, Rapid7, Tenable, VulDB gibi kaynaklardan CVE verilerini çeker.
 """
 
 import os
-import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import re
@@ -12,7 +11,7 @@ import json
 from typing import List, Dict, Optional
 import time
 
-from news.translation_utils import translate_text, translate_long_text
+from news.translation_utils import translate_text
 from news.base_scraper import BaseRSSScraper, oturum_kur
 import logging
 
