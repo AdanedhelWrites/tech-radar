@@ -359,6 +359,7 @@ Frontend icin `frontend/` altinda `npm install && npm run dev` yeterlidir; `vite
 - Her onemli karar bir ADR'dir (`docs/ADR-*.md`); tasarim ve uygulama planlari `docs/superpowers/` altindadir.
 - Sir degerleri (anahtar, parola, token) hicbir dosyaya, log'a veya ekrana yazilmaz; `.env` ve `.fazb/` gitignore'dadir, gitleaks her PR'da tarar.
 - `helm/tech-radar/` altindaki her degisiklik chart surumunu artirir ve CHANGELOG girdisi ister (bkz. [Surumleme](#surumleme)).
+- Python: `ruff check .` (yalniz F ve E9; `pyproject.toml`) ve coverage esigi (`MIN_COVERAGE`, CI) kapidir; yerelde `py -3 -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt`.
 
 ---
 

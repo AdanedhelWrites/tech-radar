@@ -47,6 +47,7 @@ Thumbs.db
 # Old scraper output files
 *.txt
 !requirements.txt
+!requirements-dev.txt
 !README.md
 # Helm kurulum sonrasi notlari (chart sablonu, eski cikti dosyasi degil)
 !helm/tech-radar/templates/NOTES.txt
