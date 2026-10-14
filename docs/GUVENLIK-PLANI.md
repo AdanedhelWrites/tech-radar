@@ -165,5 +165,5 @@ Alert'lerin çoğu yükseltmelerle kendiliğinden kapandı; 2026-10-08 itibarıy
 - **2026-10-08:** P5-a: ZAP baseline raporu SARIF'e çevrilip Security → Code scanning'e yükleniyor (`scripts/zap_sarif.py`, kategori `zap-baseline`).
 - **2026-10-08:** Güvenlik başlıkları (ZAP 10038/10098/10063/90004): django-csp 4 ile CSP (`script-src 'self'` + nonce, inline script yok; `style-src` `'unsafe-inline'` Swagger/spectacular için), `cybernews/guvenlik_basliklari.py` ile Permissions-Policy / CORP / COEP, `WHITENOISE_ALLOW_ALL_ORIGINS=False` (statik dosyalarda `ACAO: *` kalktı), `/api/v1/docs/` `SpectacularSwaggerSplitView` (başlatma betiği `?script=` ile ayrı JS). Testler `news/tests/test_guvenlik_basliklari.py`.
 - **2026-10-13:** P5-b: haftalık güvenlik özeti Issue'su (Cuma 06:00 UTC; kırmızı koşular, araç × severity, haftalık yeni/kapanan, Dependabot).
-- **2026-10-14:** ZAP triyajı: 16 açık uyarı gerekçeli kapatıldı (7 false positive 10031; 4+5 won't fix 10010/10055-6); Security 0 açık.
-- **2026-10-14:** P5-c: `/api/v1/` ZAP API taraması canlı (kategori `zap-api`). Güvenlik planı P0–P5 tamam.
+- **2026-10-14:** ZAP triyajı: 16 açık uyarı için gerekçeli kapatma kararı (7 false positive 10031; 4+5 won't fix 10010/10055-6).
+- **2026-10-14:** P5-c: `/api/v1/` ZAP API taraması DAST işine eklendi (OpenAPI şeması + token kancası, kategori `zap-api`). Güvenlik planı P0–P5 tamam.
