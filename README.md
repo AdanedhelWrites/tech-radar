@@ -6,8 +6,8 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 
 | | |
 |---|---|
-| **Uygulama surumu** | `appVersion` 2026.10.1 (CalVer; imaj etiketi) |
-| **Helm chart** | 2.1.0 (SemVer; etiket `chart-2.1.0`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
+| **Uygulama surumu** | `appVersion` 2026.10.3 (CalVer; imaj etiketi) |
+| **Helm chart** | 2.2.1 (SemVer; etiket `chart-2.2.1`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
 | **Testler** | 473 Django testi (`news/tests/`), PostgreSQL uzerinde CI'da kosar |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
@@ -870,7 +870,7 @@ Kisisel deneme ortami Argo CD ile git'ten kurulur ([ADR-0008](docs/ADR-0008-Yere
 
 Nasil calisir:
 
-- Argo CD chart'i bu reponun `chart-2.1.0` etiketinden, degerleri ve VSO nesnelerini `yerel-gitops`'tan okur; hedef namespace `tech-radar`, `automated: {prune, selfHeal}`.
+- Argo CD chart'i bu reponun `chart-<surum>` etiketinden (su an `chart-2.2.1`), degerleri ve VSO nesnelerini `yerel-gitops`'tan okur; hedef namespace `tech-radar`, `automated: {prune, selfHeal}`.
 - `migration.mode=argocd` (Job sabit adli Sync hook) ve `secrets.existingSecret=teknoloji-secret` kullanilir; Secret'i Vault Secrets Operator `kv/tech-radar/uygulama`'dan yazar ve deger degisince api/worker/scheduler Deployment'larini yeniden baslatir.
 - K8s ortami **paralel denemedir**: ayri veritabani `cybernews_k8s`, Gemini ve Beat kapali, imajlar yerel (`pullPolicy: Never`); compose canli ortam olarak kalir.
 - Kumede calisan surum `yerel-gitops`'taki `targetRevision`'dir; yukseltme orada etiketi degistirmek, geri alma `git revert`. Argo CD arayuzundeki Rollback auto-sync altinda kapalidir.
