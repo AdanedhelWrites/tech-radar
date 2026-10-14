@@ -147,6 +147,10 @@ jobs:
           [ "${#token}" -ge 20 ] || { echo "::error::token uretilemedi"; exit 1; }
           echo "::add-mask::${token}"
           printf '%s' "${token}" > .zap/api-token.txt
+          # Token gercekten calisiyor mu: kanca bozulsa bile 401'li tarama "yesil" gorunmesin
+          curl -fsS -o /dev/null -H "Authorization: Token ${token}" http://localhost:8000/api/v1/status/
+          # Baseline raporu API taramasinin raporu sanilmasin
+          rm -f report_json.json report_html.html report_md.md
 
       - name: ZAP API taramasi (/api/v1/)
         uses: zaproxy/action-api-scan@bd24b11e76da11ab60302c8ae87f091cbb11f034 # v0.10.0
@@ -165,6 +169,7 @@ jobs:
           set -euo pipefail
           rm -f .zap/api-token.txt
           test -s report_json.json || { echo "::error::ZAP API JSON raporu yok"; exit 1; }
+          # IGNORE'd pasif uyarilar da JSON'da yer alir; temiz bir API bile /api/v1/ adresleri uretir
           adres=$(jq '[.site[]? | select(."@name" | test("localhost")) | .alerts[]?.instances[]?.uri | select(test("/api/v1/"))] | length' report_json.json)
           [ "${adres}" -ge 1 ] || { echo "::error::ZAP API raporunda /api/v1/ adresi yok (token ya da sema sorunu); bos hedefe yesil yok"; exit 1; }
           {

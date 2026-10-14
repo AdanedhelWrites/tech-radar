@@ -125,3 +125,11 @@ class V1HizSinirlariTest(SimpleTestCase):
     def test_ortamdan_gevsetilir_bos_deger_varsayilana_duser(self):
         self.assertEqual(v1_hiz_sinirlari({'V1_THROTTLE_READ': '100000/min', 'V1_THROTTLE_REFRESH': ''}),
                          {'v1_read': '100000/min', 'v1_refresh': '12/hour'})
+
+    def test_bozuk_bicim_acilista_reddedilir(self):
+        # DRF yalniz birimin ilk harfine bakar: '100/dakika' sessizce '100/gun' olurdu.
+        for ad in ('V1_THROTTLE_READ', 'V1_THROTTLE_REFRESH'):
+            for deger in ('100/dakika', '100', 'sik/min', '100/min '):
+                with self.subTest(ad=ad, deger=deger):
+                    with self.assertRaisesMessage(ImproperlyConfigured, ad):
+                        v1_hiz_sinirlari({ad: deger})
