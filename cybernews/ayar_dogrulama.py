@@ -79,3 +79,14 @@ def veritabani_ayari(ortam: Mapping[str, str], debug: bool, base_dir: Path) -> d
             'NAME': base_dir / 'db.sqlite3',
         }
     }
+
+
+def v1_hiz_sinirlari(env: Mapping[str, str]) -> dict:
+    """v1 throttle oranlari (DRF 'sayi/birim'). DAST bunlari ortamdan gevsetir: ZAP API
+    taramasi dakikada yuzlerce istek atar, 120/min ile her sey 429 olurdu (P5-c, 2026-10-14).
+    Bos deger varsayilana duser; bozuk bicimi DRF acilista reddeder, burada dogrulanmaz.
+    """
+    return {
+        'v1_read': env.get('V1_THROTTLE_READ', '') or '120/min',
+        'v1_refresh': env.get('V1_THROTTLE_REFRESH', '') or '12/hour',
+    }

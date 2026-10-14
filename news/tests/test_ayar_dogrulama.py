@@ -9,7 +9,8 @@ from django.db import connection
 from django.test import SimpleTestCase
 
 from cybernews.ayar_dogrulama import (
-    BILINEN_ORNEKLER, GELISTIRME_ANAHTARI, dogrulanmis_secret_key, veritabani_ayari,
+    BILINEN_ORNEKLER, GELISTIRME_ANAHTARI, dogrulanmis_secret_key, v1_hiz_sinirlari,
+    veritabani_ayari,
 )
 
 GUCLU = 'a3f1' * 16  # 64 karakter, openssl rand -hex 32 ciktisi uzunlugunda
@@ -113,3 +114,14 @@ class VeritabaniAyariTest(SimpleTestCase):
     def test_test_ortami_postgresql(self):
         """settings.py fonksiyona bagli mi: testler yalniz PostgreSQL'de kosar (CI, pg_test.sh)."""
         self.assertEqual(connection.vendor, 'postgresql')
+
+
+class V1HizSinirlariTest(SimpleTestCase):
+    """DAST (P5-c) v1 throttle'ini ortamdan gevsetir; uretim varsayilani degismez."""
+
+    def test_varsayilanlar(self):
+        self.assertEqual(v1_hiz_sinirlari({}), {'v1_read': '120/min', 'v1_refresh': '12/hour'})
+
+    def test_ortamdan_gevsetilir_bos_deger_varsayilana_duser(self):
+        self.assertEqual(v1_hiz_sinirlari({'V1_THROTTLE_READ': '100000/min', 'V1_THROTTLE_REFRESH': ''}),
+                         {'v1_read': '100000/min', 'v1_refresh': '12/hour'})

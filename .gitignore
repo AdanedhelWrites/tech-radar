@@ -50,6 +50,8 @@ Thumbs.db
 !README.md
 # Helm kurulum sonrasi notlari (chart sablonu, eski cikti dosyasi degil)
 !helm/tech-radar/templates/NOTES.txt
+# DAST: ZAP API taramasinin gecici token dosyasi (zaten *.txt; acikca)
+.zap/api-token.txt
 
 # Celery
 celerybeat-schedule
