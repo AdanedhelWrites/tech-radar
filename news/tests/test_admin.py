@@ -2,7 +2,7 @@
 from datetime import date
 
 from django.contrib import admin
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory, TestCase
 
@@ -112,3 +112,21 @@ class CeviriDenemeSifirlamaTests(TestCase):
         self.assertEqual((secili.translation_attempts, secili.needs_translation), (0, True))
         self.assertEqual((digeri.translation_attempts, digeri.needs_translation), (5, False))
         self.assertEqual([str(m) for m in self.istek._messages], ['1 kayit yeniden ceviri kuyruguna alindi.'])
+
+    def _istek_yetkili(self, ad, *kodlar):
+        istek = RequestFactory().get('/admin/')
+        kullanici = User.objects.create_user(ad, f'{ad}@ornek.test', 'gecici-parola-123', is_staff=True)
+        kullanici.user_permissions.add(*Permission.objects.filter(codename__in=kodlar))
+        istek.user = User.objects.get(pk=kullanici.pk)  # izin onbellegi temiz
+        istek.session = {}
+        istek._messages = FallbackStorage(istek)
+        return istek
+
+    def test_eylem_yalniz_degistirme_yetkisiyle_gorunur(self):
+        yalniz_gorur = self._istek_yetkili('gozlemci', 'view_sreentry')
+        degistirir = self._istek_yetkili('duzenleyici', 'view_sreentry', 'change_sreentry')
+
+        self.assertNotIn('ceviri_denemelerini_sifirla',
+                         admin.site._registry[SREEntry].get_actions(yalniz_gorur))
+        self.assertIn('ceviri_denemelerini_sifirla',
+                      admin.site._registry[SREEntry].get_actions(degistirir))

@@ -49,7 +49,7 @@ class CeviriDenemeSifirlamaMixin:
     """
     actions = ['ceviri_denemelerini_sifirla']
 
-    @admin.action(description='Ceviri denemelerini sifirla (yeniden kuyruga al)')
+    @admin.action(permissions=['change'], description='Ceviri denemelerini sifirla (yeniden kuyruga al)')
     def ceviri_denemelerini_sifirla(self, request, queryset):
         sayi = queryset.update(translation_attempts=0, needs_translation=True)
         self.message_user(request, f'{sayi} kayit yeniden ceviri kuyruguna alindi.')
