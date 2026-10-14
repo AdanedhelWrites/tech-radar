@@ -1,6 +1,6 @@
 # Teknoloji Radar
 
-Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri, DevTools altyapi araclari guncellemeleri ve yapay zeka (AI) gelismelerini **48 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
+Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reliability Engineering) haberleri, DevTools altyapi araclari guncellemeleri ve yapay zeka (AI) gelismelerini **47 farkli kaynaktan** toplayan, Turkceye ceviren ve modern bir arayuzde sunan full-stack haber agregasyon uygulamasi.
 
 > Bu proje **Vibe Coding** yaklasimiyla, Claude Code (claude-opus-4-6) ile birlikte gelistirilmistir.
 
@@ -71,7 +71,7 @@ Ayni kod uc bicimde calisir:
 
 ## Ozellikler
 
-- **48 farkli kaynak** — 12 siber guvenlik, 6 CVE, 3 Kubernetes, 5 SRE, 14 DevTools, 8 Yapay Zeka; hepsi anahtarsiz ve ucretsiz (GitHub API icin istege bagli `GITHUB_TOKEN`)
+- **47 farkli kaynak** — 12 siber guvenlik, 5 CVE, 3 Kubernetes, 5 SRE, 13 DevTools, 9 Yapay Zeka; hepsi anahtarsiz ve ucretsiz (GitHub API icin istege bagli `GITHUB_TOKEN`)
 - **Asenkron cekim** — "Getir" istegi Celery worker'a devredilir; arayuz 5 saniyede bir yeni kayitlari otomatik yansitir
 - **Periyodik cekim** — Celery Beat tum bolumleri 6 saatte bir otomatik gunceller (sadece yeni kayitlar cevrilir)
 - **Yonetici korumali sifirlama** — Veritabanini silen `clear` endpoint'leri yalnizca Django admin oturumuyla calisir
@@ -583,11 +583,11 @@ cybersecurity_news/
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
 │   ├── tests/                  # 369 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
-│   ├── ai_scraper.py           # 8 Yapay Zeka kaynagi scraper'i
+│   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
 │   ├── cve_scraper.py          # 5 CVE kaynagi scraper'i
 │   ├── k8s_scraper.py          # 3 Kubernetes kaynagi scraper'i
 │   ├── sre_scraper.py          # 5 SRE kaynagi scraper'i
-│   ├── devtools_scraper.py     # 9 DevTools kaynagi scraper'i
+│   ├── devtools_scraper.py     # 13 DevTools kaynagi scraper'i
 │   ├── fetch_runs.py           # FetchRun satirlarini yazan Celery sinyalleri
 │   ├── api_v1/                 # Dis tuketici entegrasyon katmani (ADR-0003)
 │   │   ├── views.py            # Delta, refresh, jobs, status, health uc noktalari
