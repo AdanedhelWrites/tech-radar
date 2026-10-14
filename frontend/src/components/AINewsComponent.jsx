@@ -10,7 +10,7 @@ import CeviriEtiketi from './CeviriEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
   FaChartBar, FaCogs, FaExternalLinkAlt,
-  FaRobot, FaMicrochip
+  FaRobot, FaMicrochip, FaNewspaper, FaEnvelope
 } from 'react-icons/fa'
 import { aiApi, istekHataMesaji } from '../services/api'
 
@@ -21,8 +21,10 @@ const sources = [
   { id: 'ai_source4', name: 'AWS ML Blog', value: 'AWS ML Blog', icon: FaRobot, color: '#f39c12' },
   { id: 'ai_source5', name: 'TechCrunch AI', value: 'TechCrunch AI', icon: FaMicrochip, color: '#00a562' },
   { id: 'ai_source6', name: 'Google DeepMind', value: 'Google DeepMind', icon: FaRobot, color: '#4285f4' },
-  { id: 'ai_source7', name: 'KDnuggets', value: 'KDnuggets', icon: FaMicrochip, color: '#f1c40f' },
   { id: 'ai_source8', name: 'OpenAI Blog', value: 'OpenAI Blog', icon: FaRobot, color: '#10a37f' },
+  // 2026-10-14: KDnuggets (403) yerine; value arka uctaki kaynak adiyla birebir (news/ai_scraper.py)
+  { id: 'ai_source9', name: 'Ars Technica AI', value: 'Ars Technica AI', icon: FaNewspaper, color: '#ff4e00' },
+  { id: 'ai_source10', name: 'Import AI', value: 'Import AI', icon: FaEnvelope, color: '#ff6719' },
 ]
 
 function AINewsComponent() {

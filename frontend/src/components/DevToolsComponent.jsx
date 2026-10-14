@@ -18,7 +18,7 @@ import {
 import { devtoolsApi, istekHataMesaji } from '../services/api'
 
 const sources = [
-  { id: 'dt_source1', name: 'MinIO', value: 'MinIO', icon: FaDatabase, color: '#c72c48' },
+  // 2026-10-14: MinIO cikarildi (ust kaynak Ekim 2025'ten beri surum yayinlamiyor)
   { id: 'dt_source2', name: 'Seq', value: 'Seq', icon: FaStream, color: '#5b86a7' },
   { id: 'dt_source3', name: 'Ceph', value: 'Ceph', icon: FaHdd, color: '#ef5350' },
   { id: 'dt_source4', name: 'MongoDB', value: 'MongoDB', icon: FaLeaf, color: '#4db33d' },
