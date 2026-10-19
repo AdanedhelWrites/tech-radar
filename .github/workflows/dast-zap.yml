@@ -130,7 +130,7 @@ jobs:
           python3 -c 'import json,sys; d=json.load(open("zap-baseline.sarif")); assert d["version"]=="2.1.0" and d["runs"], "SARIF iskeleti bozuk"'
 
       - name: SARIF yukle
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: zap-baseline.sarif
           category: zap-baseline
@@ -182,7 +182,7 @@ jobs:
           python3 -c 'import json; d=json.load(open("zap-api.sarif")); assert d["version"]=="2.1.0" and d["runs"], "SARIF iskeleti bozuk"'
 
       - name: API SARIF yukle
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: zap-api.sarif
           category: zap-api
