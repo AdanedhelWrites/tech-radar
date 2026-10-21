@@ -288,6 +288,53 @@ class ZehirliKayitTests(RetranslateTestBase):
         self.assertEqual(sonraki.turkish_title, 'LIBRE Farmers adopt new sensors')
 
 
+class SureButcesiTests(RetranslateTestBase):
+    """2026-10-21: elle tetiklenen tur 30 dk calisip sert sinirda olduruldu. SoftTimeLimitExceeded
+    siradan bir Exception'dir; ceviri katmanindaki genis except'ler onu yutuyor, tur durmuyordu.
+    Tur kendi sure butcesini izler ve yumusak sinirdan once temiz biter."""
+
+    def test_butce_dolunca_tur_temiz_biter_ve_imlec_ilerlemez(self):
+        self.use_translator(FakeTranslator(CEVIRILER))
+        ilk = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'butce-1')
+        ikinci = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'butce-2')
+
+        # Ilk kayit cevrilince butce dolmus sayilir
+        with mock.patch('news.retranslate._sure_doldu',
+                        side_effect=lambda bitis: AINewsEntry.objects.filter(needs_translation=False).exists()):
+            sonuc = self._calistir()
+
+        ilk.refresh_from_db()
+        ikinci.refresh_from_db()
+        self.assertFalse(ilk.needs_translation)
+        self.assertTrue(ikinci.needs_translation)
+        self.assertEqual(ikinci.translation_attempts, 0, 'Butce dolmasi kaydin hatasi degil')
+        self.assertTrue(sonuc['stopped'])
+        self.assertEqual(sonuc['stopped_reason'], 'time_budget')
+
+        # Sonraki tur kaldigi yerden: ikinci kayit cevrilir
+        self._calistir()
+        ikinci.refresh_from_db()
+        self.assertFalse(ikinci.needs_translation)
+
+    def test_sifir_butcede_hic_kayit_islenmez(self):
+        self.use_translator(FakeTranslator(CEVIRILER))
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'butce-0')
+        from news.retranslate import retranslate_pending
+
+        sonuc = retranslate_pending(redis_client=self.redis, prefix=self.prefix, sure_butcesi=0)
+
+        kayit.refresh_from_db()
+        self.assertTrue(kayit.needs_translation)
+        self.assertEqual(sonuc['stopped_reason'], 'time_budget')
+        self.assertEqual(sonuc['sections'], {})
+
+    def test_varsayilan_butce_yumusak_sinirin_altinda(self):
+        from django.conf import settings
+        from news.retranslate import RETRANSLATE_TIME_BUDGET
+        self.assertLess(RETRANSLATE_TIME_BUDGET, settings.CELERY_TASK_SOFT_TIME_LIMIT)
+        self.assertGreater(RETRANSLATE_TIME_BUDGET, 0)
+
+
 class RetranslateSaglayiciTests(SaglayiciZinciriMixin, RetranslateTestBase):
     """Spec 2026-09-15: bekleyenler Gemini-once, sonra zincir; yukseltme yalniz Gemini."""
 
