@@ -155,6 +155,47 @@ class GeminiDogrulamaTests(GeminiTestMixin, SimpleTestCase):
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
 
 
+class TurkceKarakterTests(GeminiTestMixin, SimpleTestCase):
+    """2026-10-16: Gemini cevirilerinin yarisi (CVE'de %53) Turkce karaktersiz geliyordu
+    ('kimligi dogrulanmamis saldirgan'). Sistem talimati diakritiksiz yazildigi icin model taklit ediyordu."""
+
+    ASCII_GOVDE = ('Kimligi dogrulanmamis saldirganlar ozel hazirlanmis bir istek gondererek '
+                   'uzaktan rastgele kod calistirabilir.')
+
+    def test_uzun_turkce_harfsiz_ceviri_reddedilir(self):
+        self._post(_yanit(govde={'title': CEVIRI['title'], 'description': self.ASCII_GOVDE}))
+        self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+
+    def test_kisa_turkce_harfsiz_alan_kabul_edilir(self):
+        # Kisa basliklar (urun adi + surum) mesru olarak Turkce harf icermeyebilir
+        self._post(_yanit(govde={'title': 'Kubernetes 1.31 yayinda', 'description': CEVIRI['description']}))
+        sonuc = gemini.kaydi_cevir({'title': 'Kubernetes 1.31 is out', 'description': ALANLAR['description']})
+        self.assertEqual(sonuc['title'], 'Kubernetes 1.31 yayinda')
+
+    def test_turkce_harfli_ceviri_kabul_edilir(self):
+        self._post(_yanit(govde=CEVIRI))
+        self.assertEqual(gemini.kaydi_cevir(ALANLAR), CEVIRI)
+
+    def test_orijinalde_olmayan_yabanci_alfabe_reddedilir(self):
+        # 2026-10-21 canli olcum: 'sunarken' yerine 'sերerken' (Ermeni harfleri) uydurulmustu
+        bozuk = CEVIRI['description'].replace('istek', 'isտek')  # 'տ' Ermenice
+        self._post(_yanit(govde={'title': CEVIRI['title'], 'description': bozuk}))
+        self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+
+    def test_orijinalde_olan_yabanci_alfabe_kabul_edilir(self):
+        alanlar = {'title': 'Attackers target the Привет botnet panel'}
+        ceviri = {'title': 'Saldırganlar Привет botnet panelini hedef alıyor'}
+        self._post(_yanit(govde=ceviri))
+        self.assertEqual(gemini.kaydi_cevir(alanlar), ceviri)
+
+    def test_talimat_turkce_karakterle_yazilmis_ve_acik_kural_var(self):
+        talimat = gemini.SISTEM_TALIMATI
+        for harf in 'çğıöşü':
+            self.assertIn(harf, talimat, f'Talimat {harf!r} icermeli: model talimatin yazimini taklit ediyor')
+        self.assertIn('Türkçe karakter', talimat)
+        self.assertNotIn('dogrulanmamis', talimat, 'Ornek ceviriler ASCII olmamali')
+
+
 class GeminiHataTests(GeminiTestMixin, SimpleTestCase):
 
     def test_429_devre_kesiciyi_acar_butceyi_geri_almaz(self):
