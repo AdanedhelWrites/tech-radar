@@ -259,7 +259,10 @@ CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 # calistigi icin Beat'in diger gorevleri kuyrukta beklerdi.
 #   soft: task icinde SoftTimeLimitExceeded yukselir; fetch task'lari bunu yakalayip
 #         {'success': False, 'error': 'SoftTimeLimitExceeded: ...'} doner, FetchRun 'failure' olur.
-#   hard: worker alt surecini oldurur; FetchRun 'running' kalir (fetch_runs.py), bolum
+#         Ceviri katmanindaki genis except'ler onu yutabilir; retranslate bu yuzden kendi sure
+#         butcesiyle (RETRANSLATE_TIME_BUDGET) yumusak sinirdan once biter.
+#   hard: worker alt surecini oldurur; ana surecteki task_failure FetchRun satirini
+#         'failure' / stopped_reason='time_limit' kapatir (fetch_runs.py), bolum
 #         kilidi TTL sonunda kendiliginden duser. Soft'tan en az 60 sn buyuk tutulur.
 # En uzun gozlenen cekim 751 sn (CVE, 2026-09-12); 12 haber kaynagiyla ~15 dk beklenir.
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.environ.get('CELERY_TASK_SOFT_TIME_LIMIT', '1500'))
