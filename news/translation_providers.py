@@ -12,6 +12,7 @@ kayit duzeyinde kullanilir (news/gemini.py).
 """
 import os
 import re
+from collections import Counter
 from typing import List, Optional
 
 import requests
@@ -111,6 +112,61 @@ class LibreTranslateProvider:
         if not parcalar:
             return protected
 
+        cevrilen = self._istek(adres, parcalar)
+        if cevrilen is None:
+            return None
+        return birlestir(satirlar, self._onar(adres, parcalar, cevrilen))
+
+    def _onar(self, adres: str, parcalar: List[str], cevrilen: List[str]) -> List[str]:
+        """Bozuk parcalari tek ek istekle onarir (2026-10-21 bulgu 9). Yer tutucu basina kayip
+        %4.4 ama 4500 karakterlik metin ~20 yer tutucu tasidigi icin metinlerin %37'si tumden
+        reddediliyordu. Yalniz bozuk parca yeniden cevrilir:
+          - yer tutucusu eksik/yinelenen parca: yer tutucular arasindaki metinler ayri ayri
+            cevrilip yer tutucular yerine geri dizilir (cumle bolunur ama hicbir terim kaybolmaz)
+          - baslik bicimli (Title Case) yanki: model ozel ad sanip aynen dondurur; cumle
+            bicimiyle yeniden denenir, cevrilmeyen ozel adlarin buyuk harfi geri konur
+        Ek istek basarisizsa ilk ceviri doner; dogrulama (verify_translation) onu yine reddeder."""
+        sonuc = list(cevrilen)
+        isler = []  # (parca indisi, tur, veri)
+        q = []
+        for i, (kaynak, ceviri) in enumerate(zip(parcalar, cevrilen)):
+            if _yer_tutucular(kaynak) != _yer_tutucular(tu._repair_placeholders(ceviri)):
+                dilimler = _YER_TUTUCU_BOL.split(kaynak)
+                hedefler = [j for j, d in enumerate(dilimler) if _HARFLI.search(d) and not _YER_TUTUCU_TAM.match(d)]
+                if not hedefler:
+                    sonuc[i] = kaynak  # yalniz isaret/sayi: cevrilecek bir sey yok
+                    continue
+                isler.append((i, 'dilim', (dilimler, hedefler, len(q))))
+                q.extend(dilimler[j].strip() for j in hedefler)
+            elif (tu._normalize_for_echo(ceviri) == tu._normalize_for_echo(kaynak)
+                  and tu._translatable_word_count(kaynak) >= tu.ECHO_MIN_WORDS and _baslik_bicimli(kaynak)):
+                cumle, geri = _cumle_bicimi(kaynak)
+                isler.append((i, 'baslik', (geri, len(q))))
+                q.append(cumle)
+        if not q:
+            return sonuc
+        ek = self._istek(adres, q)
+        if ek is None:
+            return list(cevrilen)
+        for i, tur, veri in isler:
+            if tur == 'dilim':
+                dilimler, hedefler, bas = veri
+                dilimler = list(dilimler)
+                for sira, j in enumerate(hedefler):
+                    eski = dilimler[j]
+                    on = eski[:len(eski) - len(eski.lstrip())]
+                    son = eski[len(eski.rstrip()):]
+                    dilimler[j] = on + ek[bas + sira].strip() + son
+                sonuc[i] = ''.join(dilimler)
+            else:
+                geri, bas = veri
+                metin = ek[bas]
+                for kucuk, ozgun in geri.items():
+                    metin = re.sub(rf'(?<!\w){re.escape(kucuk)}(?!\w)', ozgun, metin)
+                sonuc[i] = metin
+        return sonuc
+
+    def _istek(self, adres: str, parcalar: List[str]) -> Optional[List[str]]:
         try:
             yanit = requests.post(
                 f'{adres}/translate',
@@ -137,7 +193,46 @@ class LibreTranslateProvider:
         if not isinstance(cevrilen, list) or len(cevrilen) != len(parcalar):
             log.warning("  [Ceviri] LibreTranslate parca sayisi uyusmadi.")
             return None
-        return birlestir(satirlar, cevrilen)
+        return cevrilen
+
+
+_YER_TUTUCU_BOL = re.compile(r'(XTRM\d{4}X)')
+_YER_TUTUCU_TAM = re.compile(r'^XTRM\d{4}X$')
+_HARFLI = re.compile(r'[^\W\d_]{2,}')
+_KELIME = re.compile(r'[^\W\d_]+')
+# Kelimelerin bu orani buyuk harfle basliyorsa parca baslik bicimlidir
+BASLIK_BICIMI_ORANI = 0.6
+
+
+def _yer_tutucular(metin: str) -> Counter:
+    return Counter(tu._PLACEHOLDER_RE.findall(metin))
+
+
+def _baslik_bicimli(parca: str) -> bool:
+    kelimeler = _KELIME.findall(tu._PLACEHOLDER_RE.sub(' ', parca))
+    if len(kelimeler) < tu.ECHO_MIN_WORDS:
+        return False
+    return sum(1 for k in kelimeler if k[0].isupper()) / len(kelimeler) >= BASLIK_BICIMI_ORANI
+
+
+def _cumle_bicimi(parca: str):
+    """'Rival Gangs Vie For Market' -> 'Rival gangs vie for market'. Ilk kelime, tamami buyuk
+    (CVE, CAs) ve karisik harfli (eMudhra) kelimeler korunur. Donus: (metin, {kucuk: ozgun})."""
+    geri = {}
+    ilk = [True]
+
+    def degistir(m):
+        kelime = m.group(0)
+        if ilk[0]:
+            ilk[0] = False
+            return kelime
+        if len(kelime) > 1 and kelime[0].isupper() and kelime[1:].islower():
+            geri[kelime.lower()] = kelime
+            return kelime.lower()
+        return kelime
+
+    dilimler = _YER_TUTUCU_BOL.split(parca)
+    return ''.join(d if _YER_TUTUCU_TAM.match(d) else _KELIME.sub(degistir, d) for d in dilimler), geri
 
 
 SAGLAYICILAR = (LibreTranslateProvider(),)
