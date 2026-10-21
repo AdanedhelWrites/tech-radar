@@ -14,6 +14,7 @@ import re
 from typing import List, Dict
 
 from news.translation_utils import translate_text, translate_long_text
+from news.metin_temizle import kayit_hazirla
 from news.base_scraper import BaseRSSScraper, oturum_kur
 import logging
 
@@ -456,6 +457,7 @@ class MultiSREScraper(SREScraper):
         log.info(f"\nSRE haberleri cevriliyor ({total} adet)...")
 
         for i, entry in enumerate(entries, 1):
+            kayit_hazirla(entry)
             try:
                 if i % 10 == 0:
                     log.info(f"  Cevriliyor: {i}/{total}")
