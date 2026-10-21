@@ -1,6 +1,7 @@
 from typing import List, Dict
 from news.base_scraper import BaseRSSScraper
 from news.translation_utils import translate_text, translate_long_text
+from news.metin_temizle import kayit_hazirla
 import logging
 
 log = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class MultiAINewsScraper:
     def process_entries(self, entries: List[Dict]):
         log.info(f'\nAI Haberleri isleniyor ve Turkceye cevriliyor ({len(entries)} adet)...')
         for i, entry in enumerate(entries):
+            kayit_hazirla(entry)
             log.info(f'[{i+1}/{len(entries)}] {entry["source"]} - {entry["title"]}')
             try:
                 turkish_title = translate_text(entry['title'])
