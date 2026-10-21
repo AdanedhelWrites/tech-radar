@@ -19,6 +19,15 @@ class CelerySinirAyarlariTests(SimpleTestCase):
         self.assertGreaterEqual(settings.CELERY_TASK_TIME_LIMIT, settings.CELERY_TASK_SOFT_TIME_LIMIT + 60)
         self.assertGreater(settings.CELERY_WORKER_MAX_TASKS_PER_CHILD, 0)
 
+    def test_worker_eszamanliligi_sinirli_ve_celery_e_gecer(self):
+        """Bulgu 5 (acilis firtinasi): compose worker'i CPU sayisi kadar (12) surecle calisiyordu;
+        Docker acilisinda Beat kacirilan 7 gorevi ayni saniyede atiyor, hepsi LibreTranslate'e (4 CPU)
+        birden yukleniyordu -> ReadTimeout, devre kesici, acilis turlarinda kayit basina 4.18 ceviri
+        hatasi (normal 0.34). Helm zaten --concurrency=2 kullaniyor; ayar tek kaynaktan gelir."""
+        from cybernews.celery import app
+        self.assertEqual(settings.CELERY_WORKER_CONCURRENCY, 2)
+        self.assertEqual(app.conf.worker_concurrency, 2)
+
     def test_hard_limit_soft_un_altina_dusemez(self):
         # settings yeniden okunmaz; ayni formulu dogrular (max(hard, soft + 60))
         self.assertEqual(max(100, 1500 + 60), 1560)
