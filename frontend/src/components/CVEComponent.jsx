@@ -6,6 +6,7 @@ import {
 } from 'react-bootstrap'
 import useAraliklaYenile from '../hooks/useAraliklaYenile'
 import { kacis, guvenliHref } from '../utils/html'
+import { cveListeBasligi } from '../utils/cve'
 import CeviriEtiketi, { ceviriEtiketiHtml } from './CeviriEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
@@ -450,6 +451,7 @@ ${items.map(item => {
                         <small className="text-muted">{item.published_date}</small>
                       </div>
                       <h6 className="mb-1 fw-bold">{item.cve_id}</h6>
+                      {cveListeBasligi(item) && <div className="small mb-1">{cveListeBasligi(item)}</div>}
                       <CeviriEtiketi kayit={item} className="mb-1" />
                       <div className="d-flex justify-content-between align-items-center mt-2">
                         <Badge className={getSeverityClass(item.severity)}>
