@@ -23,7 +23,9 @@ const ROZETLER = {
 
 // Hic cevrilememis kayit (fetch aninda LibreTranslate basarisiz, retranslate 5 denemede vazgecti ya da
 // GEMINI_MAX_CHARS ustu): metin Ingilizce gosterilir; okuyucu bunu bilmeli (2026-10-14).
-// Yalniz en az bir retranslate denemesi basarisiz olmus kayit isaretlenir; taze kayit (0 deneme) degil.
+// 2026-10-21 (bulgu 6): onceden yalniz en az bir deneme yapilmis kayit isaretleniyordu; kuyruk takilinca
+// hic denenmemis kayitlar (10-16'da 42, 10-21'de 16 Ingilizce baslik) rozetsiz kaliyordu. Saglayicisi
+// bos ve ceviri bekleyen kaydin metni her durumda orijinaldir.
 const CEVRILMEDI = {
   metin: 'Çevrilmedi: orijinal metin',
   bg: 'light', text: 'dark', arka: '#e9ecef', on: '#212529',
@@ -32,8 +34,7 @@ const CEVRILMEDI = {
 
 const rozetSec = (kayit) =>
   ROZETLER[kayit?.translation_provider]
-  || (kayit?.needs_translation && !kayit?.translation_provider && (kayit?.translation_attempts ?? 0) >= 1
-    ? CEVRILMEDI : null)
+  || (kayit?.needs_translation && !kayit?.translation_provider ? CEVRILMEDI : null)
 
 export default function CeviriEtiketi({ kayit, className = 'ms-2' }) {
   const rozet = rozetSec(kayit)

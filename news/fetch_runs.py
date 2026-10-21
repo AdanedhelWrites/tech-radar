@@ -207,6 +207,36 @@ def tur_coktu(sender=None, task_id=None, exception=None, **kwargs):
         log.warning(f'  [FetchRun] Cokme yazilamadi ({task_id}): {hata}')
 
 
+# Bu kadar ardisik bitmis retranslate turu hic kayit cevirmediyse (ve bekleyen varsa) kuyruk takili sayilir.
+# Tur 2 saatte bir: 3 tur ~6 saat ilerlemesizlik demektir.
+TAKILMA_TUR_SAYISI = 3
+
+
+def ceviri_kuyrugu_ozeti() -> dict:
+    """Anonim /api/saglik/ icin ceviri kuyrugu ozeti (bulgu 6, 2026-10-21).
+
+    2026-10-16: retranslate 3 gun ayni kayitta takili kaldi, serit her bolumu "ok" gosterdi.
+    pending yalniz yeniden denenebilir kayitlari sayar (vazgecilenler kuyrugu tikamaz).
+    stalled: bekleyen var ve son TAKILMA_TUR_SAYISI bitmis tur hic kayit cevirmedi/yukseltmedi.
+    """
+    from .retranslate import RETRANSLATE_MAX_ATTEMPTS
+
+    bekleyen = sum(model.objects.filter(needs_translation=True,
+                                        translation_attempts__lt=RETRANSLATE_MAX_ATTEMPTS).count()
+                   for model in BOLUM_MODELLERI.values())
+    son_turlar = list(FetchRun.objects.filter(section='retranslate').exclude(status='running')
+                      [:TAKILMA_TUR_SAYISI])
+    son_basarili = FetchRun.objects.filter(section='retranslate', status='success').first()
+    takili = (bekleyen > 0 and len(son_turlar) == TAKILMA_TUR_SAYISI
+              and all(tur.saved_count == 0 for tur in son_turlar))
+    return {
+        'pending': bekleyen,
+        'last_success_at': (son_basarili.finished_at.isoformat()
+                            if son_basarili and son_basarili.finished_at else None),
+        'stalled': takili,
+    }
+
+
 def bolum_ozetleri() -> dict:
     """Anonim /api/saglik/ icin bolum basina tazelik ozeti (2026-10-14).
 
