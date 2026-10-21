@@ -224,7 +224,13 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
 
         if hata:
             if not tu.herhangi_saglayici_hazir():
-                # Erisim sorunu: imleci ilerletme, bir sonraki tur once bu kaydi denesin
+                # Erisim sorunu: imleci ilerletme, bir sonraki tur once bu kaydi denesin. Ama devre
+                # kesiciyi kaydin kendisi aciyor olabilir (2026-10-16: 102k karakterlik bir haber her turda
+                # LibreTranslate'i ReadTimeout'a dusurdu, retranslate 3 gun ayni kayitta kaldi). Sayac
+                # artmazsa boyle bir kayit kuyrugu sonsuza dek kilitler; artarsa en gec
+                # RETRANSLATE_MAX_ATTEMPTS turda kuyruktan duser. Gercek kesintide bedel: bastaki
+                # kayit tur basina bir deneme kaybeder.
+                _basarisiz_say(kayit)
                 durdu = True
                 break
             basarisiz += 1  # icerik hatasi: imlec gecer, kayit sirada kalir (sayac esigine kadar)
@@ -302,8 +308,10 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
         sonuc['upgraded'] += yukseltilen
 
         if durdu:
+            # Bolum durdu ama tur bitmez: diger bolumler hazir bir saglayiciyla (cogunlukla Gemini)
+            # islenmeye devam eder. Dongunun basindaki kontrol hicbir saglayici kalmadiysa turu bitirir.
+            # 2026-10-16: haberdeki tek bir kayit k8s/sre/devtools/ai'yi 3 gun hic islenmeden birakti.
             sonuc['stopped'] = True
             sonuc['stopped_reason'] = 'no_provider'
-            break
 
     return sonuc
