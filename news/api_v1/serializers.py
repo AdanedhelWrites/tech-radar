@@ -95,6 +95,12 @@ class CVEEntryV1Serializer(BaseEntrySerializer):
     def get_severity(self, obj) -> SiddetAlani:
         return {'code': SEVERITY_TR_TO_CODE.get(obj.severity), 'label': obj.severity}
 
+    def get_title(self, obj) -> DilAlani:
+        # Sablon "CVE-x - Güvenlik Açığı" basliginda tr, aciklamadan turetilir (news/cve_basligi.py)
+        from news.cve_basligi import cve_basligi
+        return {'original': obj.original_title,
+                'tr': cve_basligi(obj.cve_id, obj.turkish_title, obj.turkish_description, obj.original_description)}
+
 
 class KubernetesEntryV1Serializer(BaseEntrySerializer):
     entry_type_name = 'kubernetes'
