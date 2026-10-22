@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 
 from news.translation_utils import translate_text, translate_long_text
 from news.base_scraper import BaseRSSScraper, kok_alan, link_guvenli, oturum_kur
+from news.metin_temizle import kayit_hazirla, paragraf_metni
 import logging
 
 log = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ class NewsSource(BaseRSSScraper):
                 paragraphs = article_body.find_all('p')
                 text_parts = []
                 for p in paragraphs:
-                    txt = p.get_text(strip=True)
+                    txt = paragraf_metni(p)
                     # Kisa ve gereksiz paragraflari atla
                     if len(txt) > 20 and not re.match(
                         r'^(Share|Tweet|Email|Print|Related|Also read|Read more|'
@@ -687,6 +688,7 @@ class MultiSourceScraper(BaseRSSScraper):
         log.debug(f"{'='*60}\n")
 
         for i, article in enumerate(articles):
+            kayit_hazirla(article)
             log.info(f"Cevriliyor: {i+1}/{total} - {article['title'][:50]}...")
 
             try:

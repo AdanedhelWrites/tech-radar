@@ -1,4 +1,5 @@
 from news.base_scraper import BaseRSSScraper, link_guvenli, oturum_kur
+from news.metin_temizle import kayit_hazirla, paragraf_metni
 """
 Kubernetes Scraper Module
 kubernetes.io/blog, GitHub Releases, CNCF Blog kaynaklarindan
@@ -81,7 +82,7 @@ class K8sScraper(BaseRSSScraper):
                 paragraphs = article_body.find_all('p')
                 text_parts = []
                 for p in paragraphs:
-                    txt = p.get_text(strip=True)
+                    txt = paragraf_metni(p)
                     if len(txt) > 20 and not re.match(
                         r'^(Share|Tweet|Email|Print|Related|Also read|Read more|'
                         r'Subscribe|Sign up|Follow us|Advertisement|Recommended)',
@@ -793,6 +794,9 @@ class MultiK8sScraper(K8sScraper):
         total = len(entries)
 
         for i, entry in enumerate(entries, 1):
+            # Yapisal CHANGELOG kendi bicimini korur; kisaltma bolum isaretlerini bozar
+            kayit_hazirla(entry, 'original_title', 'original_description',
+                          kisaltma='===SECTION:' not in entry.get('original_description', ''))
             try:
                 desc = entry.get('original_description', '')
                 source = entry.get('source', '')

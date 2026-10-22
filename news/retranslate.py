@@ -22,8 +22,10 @@ Yazma kurallari:
     updated_at yazilir; ceviri delta akisindan tuketiciye gider.
 """
 import os
+import time
 from typing import Dict, Optional
 
+from django.conf import settings
 from django.db import DatabaseError, OperationalError
 from django.db.models import F
 
@@ -47,6 +49,16 @@ RETRANSLATE_UPGRADE_BATCH = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH', '40'
 # translation_given_up ile sayar. 2026-10-08: ayni ~23 kayit her 2 saatte Gemini
 # kotasi yiyerek yeniden reddediliyordu (turda 23-39 "hata", bekleyen toplam 23).
 RETRANSLATE_MAX_ATTEMPTS = int(os.environ.get('RETRANSLATE_MAX_ATTEMPTS', '5'))
+# Tur sure butcesi (sn). 2026-10-21: SoftTimeLimitExceeded siradan bir Exception'dir; ceviri
+# katmanindaki genis except'ler onu yutuyor, tur sert sinirda (1800 sn) olduruluyordu. Tur her
+# kayittan once butceye bakar; yumusak sinirdan once temiz biter, imlec yerinde kalir. Pay, tek
+# bir kaydin en uzun suresidir (10k karakter LibreTranslate parcalari + zaman asimlari).
+RETRANSLATE_TIME_BUDGET = int(os.environ.get(
+    'RETRANSLATE_TIME_BUDGET', str(max(60, settings.CELERY_TASK_SOFT_TIME_LIMIT - 300))))
+
+
+def _sure_doldu(bitis) -> bool:
+    return bitis is not None and time.monotonic() >= bitis
 
 
 def _basarisiz_say(kayit) -> None:
@@ -188,7 +200,7 @@ def _yaz(kayit, alanlar, saglayici) -> bool:
     return True
 
 
-def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
+def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc, bitis=None):
     """Asama 1. Donus: (cevrilen, basarisiz, durdu)."""
     anahtar = f'{prefix}:cursor:{ad}'
     sorgu = (model.objects.filter(needs_translation=True, translation_attempts__lt=RETRANSLATE_MAX_ATTEMPTS)
@@ -198,6 +210,9 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
     cevrilen = basarisiz = 0
     durdu = False
     for kayit in kayitlar:
+        if _sure_doldu(bitis):
+            durdu = True  # imlec ilerlemez: sonraki tur bu kayittan baslar
+            break
         if not (tu.herhangi_saglayici_hazir() or gemini.hazir(ad)):
             durdu = True
             break
@@ -224,7 +239,13 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
 
         if hata:
             if not tu.herhangi_saglayici_hazir():
-                # Erisim sorunu: imleci ilerletme, bir sonraki tur once bu kaydi denesin
+                # Erisim sorunu: imleci ilerletme, bir sonraki tur once bu kaydi denesin. Ama devre
+                # kesiciyi kaydin kendisi aciyor olabilir (2026-10-16: 102k karakterlik bir haber her turda
+                # LibreTranslate'i ReadTimeout'a dusurdu, retranslate 3 gun ayni kayitta kaldi). Sayac
+                # artmazsa boyle bir kayit kuyrugu sonsuza dek kilitler; artarsa en gec
+                # RETRANSLATE_MAX_ATTEMPTS turda kuyruktan duser. Gercek kesintide bedel: bastaki
+                # kayit tur basina bir deneme kaybeder.
+                _basarisiz_say(kayit)
                 durdu = True
                 break
             basarisiz += 1  # icerik hatasi: imlec gecer, kayit sirada kalir (sayac esigine kadar)
@@ -242,7 +263,7 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc):
     return cevrilen, basarisiz, durdu
 
 
-def _yukselt(ad, model, redis_client, prefix, sinir, sonuc):
+def _yukselt(ad, model, redis_client, prefix, sinir, sonuc, bitis=None):
     """Asama 2. Yalnizca Gemini. Donus: yukseltilen kayit sayisi."""
     if not gemini.hazir(ad):
         if not gemini.butce_var(ad):
@@ -256,6 +277,9 @@ def _yukselt(ad, model, redis_client, prefix, sinir, sonuc):
     yukseltilen = 0
     durdu = False
     for kayit in kayitlar:
+        if _sure_doldu(bitis):
+            durdu = True
+            break
         if not gemini.hazir(ad):
             durdu = True  # butce/devre kesici asama ortasinda; imleci ilerletme
             if not gemini.butce_var(ad):
@@ -278,21 +302,27 @@ def _yukselt(ad, model, redis_client, prefix, sinir, sonuc):
 
 
 def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
-                        batch: int = None, upgrade_batch: int = None) -> Dict:
+                        batch: int = None, upgrade_batch: int = None, sure_butcesi: int = None) -> Dict:
     redis_client = redis_client or _canli_redis()
+    sure_butcesi = RETRANSLATE_TIME_BUDGET if sure_butcesi is None else sure_butcesi
+    bitis = time.monotonic() + sure_butcesi
     batch = RETRANSLATE_BATCH if batch is None else batch
     upgrade_batch = RETRANSLATE_UPGRADE_BATCH if upgrade_batch is None else upgrade_batch
     sonuc = {'translated': 0, 'failed': 0, 'upgraded': 0, 'stopped': False, 'stopped_reason': None,
              'by_provider': {'gemini': 0, 'libretranslate': 0}, 'sections': {}}
 
     for ad, model, cevir in BOLUMLER:
+        if _sure_doldu(bitis):
+            sonuc['stopped'] = True
+            sonuc['stopped_reason'] = 'time_budget'
+            break
         if not (tu.herhangi_saglayici_hazir() or gemini.hazir()):
             sonuc['stopped'] = True
             sonuc['stopped_reason'] = 'no_provider'
             break
 
-        cevrilen, basarisiz, durdu = _bekleyenler(ad, model, cevir, redis_client, prefix, batch, sonuc)
-        yukseltilen = 0 if durdu else _yukselt(ad, model, redis_client, prefix, upgrade_batch, sonuc)
+        cevrilen, basarisiz, durdu = _bekleyenler(ad, model, cevir, redis_client, prefix, batch, sonuc, bitis)
+        yukseltilen = 0 if durdu else _yukselt(ad, model, redis_client, prefix, upgrade_batch, sonuc, bitis)
 
         if cevrilen or yukseltilen:
             cache_yenile(ad)
@@ -301,9 +331,15 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
         sonuc['failed'] += basarisiz
         sonuc['upgraded'] += yukseltilen
 
+        if _sure_doldu(bitis):
+            sonuc['stopped'] = True
+            sonuc['stopped_reason'] = 'time_budget'
+            break
         if durdu:
+            # Bolum durdu ama tur bitmez: diger bolumler hazir bir saglayiciyla (cogunlukla Gemini)
+            # islenmeye devam eder. Dongunun basindaki kontrol hicbir saglayici kalmadiysa turu bitirir.
+            # 2026-10-16: haberdeki tek bir kayit k8s/sre/devtools/ai'yi 3 gun hic islenmeden birakti.
             sonuc['stopped'] = True
             sonuc['stopped_reason'] = 'no_provider'
-            break
 
     return sonuc

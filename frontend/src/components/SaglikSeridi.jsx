@@ -16,12 +16,14 @@ const BAYAT_SAAT = 12
 
 export default function SaglikSeridi() {
   const [veri, setVeri] = useState(null)
+  const [kuyruk, setKuyruk] = useState(null)
   const [hata, setHata] = useState(false)
 
   const yukle = useCallback(async () => {
     try {
       const yanit = await saglikApi.getSaglik()
       setVeri(yanit.data.sections)
+      setKuyruk(yanit.data.translation_queue ?? null)
       setHata(false)
     } catch {
       setHata(true)
@@ -55,6 +57,19 @@ export default function SaglikSeridi() {
           </span>
         )
       })}
+      {kuyruk && (
+        // Bulgu 6 (2026-10-16): retranslate 3 gun takili kaldi, serit her bolumu "ok" gosterdi.
+        // stalled: bekleyen var ve son 3 tur (~6 sa) hic kayit cevirmedi (news/fetch_runs.py).
+        <span className="border rounded px-2 py-1 small" title={`Bekleyen çeviri: ${kuyruk.pending}`}>
+          <strong>Çeviri kuyruğu</strong>{' '}
+          <span className="text-muted">{goreliZaman(kuyruk.last_success_at)}</span>{' '}
+          {kuyruk.stalled
+            ? <Badge bg="danger">ilerlemiyor</Badge>
+            : kuyruk.pending > 0
+              ? <Badge bg="secondary">{kuyruk.pending} bekliyor</Badge>
+              : <Badge bg="success">ok</Badge>}
+        </span>
+      )}
     </div>
   )
 }

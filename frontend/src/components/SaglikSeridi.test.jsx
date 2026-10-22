@@ -63,3 +63,45 @@ describe('SaglikSeridi', () => {
     expect(await screen.findByText('Sağlık bilgisi alınamadı.')).toBeInTheDocument()
   })
 })
+
+describe('SaglikSeridi ceviri kuyrugu', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const bolumler = () => ({
+    news: bolum(), cve: bolum(), kubernetes: bolum(), sre: bolum(), devtools: bolum(), ai: bolum(),
+  })
+  const kuyruk = (ek = {}) => ({
+    pending: 0, last_success_at: new Date(Date.now() - 3600 * 1000).toISOString(), stalled: false, ...ek,
+  })
+
+  it('takili kuyruk kirmizi "ilerlemiyor" rozeti alir', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler(), translation_queue: kuyruk({ pending: 102, stalled: true }) } })
+
+    render(<SaglikSeridi />)
+
+    expect(await screen.findByText('Çeviri kuyruğu')).toBeInTheDocument()
+    expect(screen.getByText('ilerlemiyor')).toBeInTheDocument()
+    expect(screen.getByTitle('Bekleyen çeviri: 102')).toBeInTheDocument()
+  })
+
+  it('ilerleyen kuyruk bekleyen sayisini gosterir, bos kuyruk ok', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler(), translation_queue: kuyruk({ pending: 12 }) } })
+    const { unmount } = render(<SaglikSeridi />)
+    expect(await screen.findByText('12 bekliyor')).toBeInTheDocument()
+    unmount()
+
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler(), translation_queue: kuyruk() } })
+    render(<SaglikSeridi />)
+    expect(await screen.findByText('Çeviri kuyruğu')).toBeInTheDocument()
+    expect(screen.getAllByText('ok')).toHaveLength(7)
+  })
+
+  it('eski API (translation_queue yok) seridi bozmaz', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler() } })
+
+    render(<SaglikSeridi />)
+
+    expect(await screen.findByText('DevTools')).toBeInTheDocument()
+    expect(screen.queryByText('Çeviri kuyruğu')).not.toBeInTheDocument()
+  })
+})

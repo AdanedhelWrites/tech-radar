@@ -126,6 +126,97 @@ class LibreTranslateCeviriTests(LibreTranslateTestMixin, SimpleTestCase):
             self.assertIsNone(tp.LibreTranslateProvider().translate('Some text here.'))
 
 
+@override_settings(LIBRETRANSLATE_URL=LT_ADRES)
+class ParcaOnarimiTests(LibreTranslateTestMixin, SimpleTestCase):
+    """2026-10-21 bulgu 9: yer tutucu basina kayip %4.4 ama 4500 karakterlik parca ~20 yer tutucu
+    tasidigi icin parcalarin %37'si, cok parcali makalelerin neredeyse hepsi reddediliyordu. Baslik
+    bicimli (Title Case) basliklar ozel ad sanilip aynen donuyordu (yanki). Onarim parca duzeyinde."""
+
+    def _sirali(self, *govdeler):
+        return mock.patch('news.translation_providers.requests.post',
+                          side_effect=[self._yanit(govde={'translatedText': g}) for g in govdeler])
+
+    def test_yer_tutucu_kaybeden_parca_yer_tutucu_arasi_metinlerle_yeniden_cevrilir(self):
+        metin = 'Scores of XTRM0001X and XTRM0002X were reported. Second sentence.'
+        with self._sirali(['XTRM0001X puanları bildirildi.', 'İkinci cümle.'],
+                          ['Puanları', 've', 'bildirildi.']) as post:
+            sonuc = tp.LibreTranslateProvider().translate(metin)
+
+        self.assertEqual(sonuc, 'Puanları XTRM0001X ve XTRM0002X bildirildi. İkinci cümle.')
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(post.call_args.kwargs['json']['q'], ['Scores of', 'and', 'were reported.'])
+
+    def test_yinelenen_yer_tutucu_da_bozuk_sayilir(self):
+        metin = 'See XTRM0001X then XTRM0002X now.'
+        with self._sirali(['Bakın XTRM0001X sonra XTRM0001X şimdi.'], ['Bakın', 'sonra', 'şimdi.']):
+            sonuc = tp.LibreTranslateProvider().translate(metin)
+        self.assertEqual(sonuc, 'Bakın XTRM0001X sonra XTRM0002X şimdi.')
+
+    def test_harfsiz_parcalar_gonderilmez(self):
+        # Tablo/sayi dizisi: yer tutucular arasi yalniz isaret ve sayi; ikinci istege gerek yok
+        metin = 'XTRM0001X% / XTRM0002X% 45 XTRM0003X%'
+        with self._sirali(['XTRM0001X% / XTRM00% 45']) as post:
+            sonuc = tp.LibreTranslateProvider().translate(metin)
+        self.assertEqual(sonuc, metin)
+        self.assertEqual(post.call_count, 1)
+
+    def test_saglam_ceviride_ikinci_istek_yok(self):
+        with self._sirali(['XTRM0001X sürümü yayımlandı.']) as post:
+            tp.LibreTranslateProvider().translate('XTRM0001X version released.')
+        self.assertEqual(post.call_count, 1)
+
+    def test_onarim_istegi_basarisizsa_ilk_ceviri_doner(self):
+        metin = 'Scores of XTRM0001X and XTRM0002X were reported.'
+        with mock.patch('news.translation_providers.requests.post', side_effect=[
+                self._yanit(govde={'translatedText': ['XTRM0001X puanları bildirildi.']}),
+                self._yanit(400)]):
+            sonuc = tp.LibreTranslateProvider().translate(metin)
+        self.assertEqual(sonuc, 'XTRM0001X puanları bildirildi.')  # dogrulama yine reddeder
+
+    def test_baslik_bicimli_yanki_cumle_bicimiyle_yeniden_denenir(self):
+        baslik = 'Browsers Block eMudhra Intermediate CAs Over Microsoft Keys'
+        with self._sirali([baslik], ['Tarayıcılar microsoft anahtarları nedeniyle eMudhra ara CA\'larını engelliyor']) as post:
+            sonuc = tp.LibreTranslateProvider().translate(baslik)
+
+        self.assertEqual(post.call_args.kwargs['json']['q'],
+                         ['Browsers block eMudhra intermediate CAs over microsoft keys'])
+        self.assertEqual(sonuc, 'Tarayıcılar Microsoft anahtarları nedeniyle eMudhra ara CA\'larını engelliyor')
+
+    def test_cumle_bicimi_yer_tutucuyu_kelime_saymaz(self):
+        self.assertEqual(tp._cumle_bicimi('XTRM0001X Utility Powers Modern ClickFix Attack'),
+                         ('XTRM0001X Utility powers modern ClickFix attack',
+                          {'powers': 'Powers', 'modern': 'Modern', 'attack': 'Attack'}))
+
+    def test_kisa_ya_da_cumle_bicimli_yanki_yeniden_denenmez(self):
+        for metin in ('Spotlight on XTRM0001X', 'kubectl get pods output is unchanged here'):
+            with self.subTest(metin=metin), self._sirali([metin]) as post:
+                tp.LibreTranslateProvider().translate(metin)
+            self.assertEqual(post.call_count, 1)
+
+    def test_translate_text_onarilan_parcayla_dogrulamadan_gecer(self):
+        metin = 'The flaw has a CVSS score of 9.8 and affects PHP 8.3.1 servers.'
+        korunmus, _ = tu._protect_terms(metin)
+        self.assertEqual(korunmus.count('XTRM'), 3)
+
+        def cevap(adres, json, timeout):
+            q = json['q']
+            if len(q) == 1 and 'XTRM' in q[0]:  # ilk istek: bir yer tutucuyu dusur
+                return self._yanit(govde={'translatedText': ['Kusurun XTRM0003X puanı var ve sunucuları etkiliyor.']})
+            return self._yanit(govde={'translatedText': [f'<{p}>' for p in q]})
+
+        tu.consume_translation_failures()
+        with mock.patch('news.translation_providers.requests.post', side_effect=cevap):
+            sonuc = tu.translate_text(metin)
+
+        self.assertEqual(tu.consume_translation_failures(), 0, 'Onarilan parca dogrulamadan gecmeli')
+        self.assertNotEqual(sonuc, metin)
+        self.assertIn('<', sonuc)
+        self.assertNotIn('XTRM', sonuc)
+        self.assertIn('CVSS', sonuc)
+        self.assertIn('9.8', sonuc)
+        self.assertIn('8.3.1', sonuc)
+
+
 class SaglayiciZinciriSirasiTests(SimpleTestCase):
 
     def test_zincirde_yalniz_libretranslate_var(self):

@@ -238,6 +238,103 @@ class RetranslatePendingTests(RetranslateTestBase):
         self.assertFalse(k8s.needs_translation)
 
 
+class ZehirliKayitTests(RetranslateTestBase):
+    """2026-10-16: 102k karakterlik bir haber her turda LibreTranslate'i zaman asimina dusurup devre
+    kesiciyi aciyordu; erisim sorunu sayildigi icin deneme sayaci artmiyor, imlec ilerlemiyordu ve
+    retranslate 3 gun ayni kayitta takili kaldi (haberden sonraki bolumlere hic ulasilmadi)."""
+
+    def _devre_kesen_saglayici(self, zehirli_metin):
+        """Zehirli metinde devre kesiciyi acar (gercek LibreTranslate ReadTimeout'u gibi); digerlerini cevirir."""
+        saglayici = SahteSaglayici('libretranslate')
+
+        def cevap(protected):
+            if zehirli_metin in protected:
+                saglayici.hazir = False
+                return None
+            return 'LIBRE ' + protected
+
+        saglayici._cevap = cevap
+        yama = mock.patch.object(tp, 'SAGLAYICILAR', (saglayici,))
+        yama.start()
+        self.addCleanup(yama.stop)
+        return saglayici
+
+    def test_devre_kesiciyi_acan_kayit_deneme_sayar(self):
+        self._devre_kesen_saglayici('Poison body')
+        zehirli = self._ai('Poison headline for the queue', 'Poison body ' * 5, 'zehir-1')
+
+        sonuc = self._calistir()
+
+        zehirli.refresh_from_db()
+        self.assertTrue(sonuc['stopped'])
+        self.assertTrue(zehirli.needs_translation)
+        self.assertEqual(zehirli.translation_attempts, 1,
+                         'Devre kesiciyi acan kayit sayac artirmali; yoksa kuyrugu sonsuza dek kilitler')
+
+    def test_zehirli_kayit_esikten_sonra_kuyrugu_birakir(self):
+        from news.retranslate import RETRANSLATE_MAX_ATTEMPTS
+        saglayici = self._devre_kesen_saglayici('Poison body')
+        zehirli = self._ai('Poison headline for the queue', 'Poison body ' * 5, 'zehir-2')
+        sonraki = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'zehir-2b')
+
+        for _ in range(RETRANSLATE_MAX_ATTEMPTS + 1):
+            saglayici.hazir = True  # devre kesicinin suresi turlar arasinda dolar (60 sn < 2 sa)
+            self._calistir()
+
+        zehirli.refresh_from_db()
+        sonraki.refresh_from_db()
+        self.assertEqual(zehirli.translation_attempts, RETRANSLATE_MAX_ATTEMPTS)
+        self.assertFalse(sonraki.needs_translation, 'Zehirli kayit esige ulasinca siradaki kayit cevrilmeli')
+        self.assertEqual(sonraki.turkish_title, 'LIBRE Farmers adopt new sensors')
+
+
+class SureButcesiTests(RetranslateTestBase):
+    """2026-10-21: elle tetiklenen tur 30 dk calisip sert sinirda olduruldu. SoftTimeLimitExceeded
+    siradan bir Exception'dir; ceviri katmanindaki genis except'ler onu yutuyor, tur durmuyordu.
+    Tur kendi sure butcesini izler ve yumusak sinirdan once temiz biter."""
+
+    def test_butce_dolunca_tur_temiz_biter_ve_imlec_ilerlemez(self):
+        self.use_translator(FakeTranslator(CEVIRILER))
+        ilk = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'butce-1')
+        ikinci = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'butce-2')
+
+        # Ilk kayit cevrilince butce dolmus sayilir
+        with mock.patch('news.retranslate._sure_doldu',
+                        side_effect=lambda bitis: AINewsEntry.objects.filter(needs_translation=False).exists()):
+            sonuc = self._calistir()
+
+        ilk.refresh_from_db()
+        ikinci.refresh_from_db()
+        self.assertFalse(ilk.needs_translation)
+        self.assertTrue(ikinci.needs_translation)
+        self.assertEqual(ikinci.translation_attempts, 0, 'Butce dolmasi kaydin hatasi degil')
+        self.assertTrue(sonuc['stopped'])
+        self.assertEqual(sonuc['stopped_reason'], 'time_budget')
+
+        # Sonraki tur kaldigi yerden: ikinci kayit cevrilir
+        self._calistir()
+        ikinci.refresh_from_db()
+        self.assertFalse(ikinci.needs_translation)
+
+    def test_sifir_butcede_hic_kayit_islenmez(self):
+        self.use_translator(FakeTranslator(CEVIRILER))
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'butce-0')
+        from news.retranslate import retranslate_pending
+
+        sonuc = retranslate_pending(redis_client=self.redis, prefix=self.prefix, sure_butcesi=0)
+
+        kayit.refresh_from_db()
+        self.assertTrue(kayit.needs_translation)
+        self.assertEqual(sonuc['stopped_reason'], 'time_budget')
+        self.assertEqual(sonuc['sections'], {})
+
+    def test_varsayilan_butce_yumusak_sinirin_altinda(self):
+        from django.conf import settings
+        from news.retranslate import RETRANSLATE_TIME_BUDGET
+        self.assertLess(RETRANSLATE_TIME_BUDGET, settings.CELERY_TASK_SOFT_TIME_LIMIT)
+        self.assertGreater(RETRANSLATE_TIME_BUDGET, 0)
+
+
 class RetranslateSaglayiciTests(SaglayiciZinciriMixin, RetranslateTestBase):
     """Spec 2026-09-15: bekleyenler Gemini-once, sonra zincir; yukseltme yalniz Gemini."""
 
@@ -543,6 +640,31 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
         self.assertEqual(self.gemini_cagrilar, [])
         self.assertFalse(kayit.needs_translation)
         self.assertEqual(kayit.translation_provider, 'libretranslate')
+
+    def test_bir_bolumdeki_durma_sonraki_bolumleri_kilitlemez(self):
+        """Haberdeki zehirli kayit LibreTranslate'i kapatsa da Gemini hazirken ai bolumu ayni turda islenir."""
+        def cevap(protected):
+            if 'Z' * 50 in protected:
+                self.libre.hazir = False  # 102k haber: LibreTranslate ReadTimeout -> devre kesici
+                return None
+            return 'LIBRE ' + protected
+
+        self.libre._cevap = cevap
+        self.gemini_ayarla(_gemini_cevirisi)
+        NewsArticle.objects.create(
+            source='SANS ISC', original_title='Patch Tuesday summary',
+            turkish_title='Patch Tuesday summary', original_description='Z' * 13000,
+            turkish_description='Z' * 13000, link='https://ornek.test/haber/zehir',
+            date=date(2026, 10, 13), original_date='2026-10-13', needs_translation=True)
+        ai = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'sonraki-bolum')
+
+        sonuc = self._calistir()
+
+        ai.refresh_from_db()
+        self.assertTrue(sonuc['stopped'])
+        self.assertIn('ai', sonuc['sections'], 'Haberdeki durma ai bolumunu atlatmamali')
+        self.assertFalse(ai.needs_translation)
+        self.assertEqual(ai.translation_provider, 'gemini')
 
     def test_cok_uzun_kayit_yukseltmede_atlanir(self):
         self.gemini_ayarla(_gemini_cevirisi)

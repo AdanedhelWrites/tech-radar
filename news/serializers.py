@@ -12,10 +12,16 @@ class NewsArticleSerializer(serializers.ModelSerializer):
 
 class CVEEntrySerializer(serializers.ModelSerializer):
     """CVE serializer"""
-    
+    # Sablon "CVE-x - Güvenlik Açığı" basliginda aciklamadan turetilir (news/cve_basligi.py)
+    turkish_title = serializers.SerializerMethodField()
+
     class Meta:
         model = CVEEntry
         fields = '__all__'
+
+    def get_turkish_title(self, obj) -> str:
+        from .cve_basligi import cve_basligi
+        return cve_basligi(obj.cve_id, obj.turkish_title, obj.turkish_description, obj.original_description)
 
 
 def _kaynak_listesi():
