@@ -135,12 +135,18 @@ def _kapat(task_id, **alanlar):
 
 
 @task_postrun.connect
-def tur_bitti(sender=None, task_id=None, retval=None, **kwargs):
+def tur_bitti(sender=None, task_id=None, retval=None, state=None, **kwargs):
     try:
         if not _bolum(sender):
             return
         if not isinstance(retval, dict):
-            _kapat(task_id, status='success')
+            # state=FAILURE iken retval istisnadir (2026-10-21: sert sinirda oldurulen tur 'success'
+            # yaziliyordu). state yoksa (eski cagri bicimi) sozluk olmayan donus basari sayilir.
+            if state not in (None, 'SUCCESS'):
+                _kapat(task_id, status='failure',
+                       error=f'{type(retval).__name__}: {retval}'[:HATA_TAVANI])
+            else:
+                _kapat(task_id, status='success')
             return
 
         hata_var = 'error' in retval
@@ -169,14 +175,66 @@ def tur_bitti(sender=None, task_id=None, retval=None, **kwargs):
         log.warning(f'  [FetchRun] Satir kapatilamadi ({task_id}): {hata}')
 
 
+def _sert_sinir_kapat(bolum, exception):
+    """Sert sure sinirinda task_failure worker ANA surecinde gelir; _acik_turlar alt surecteydi.
+    Satir, yumusak siniri asmis en eski running satiri olarak bulunur: ayni bolumde sonradan
+    baslamis paralel bir tur (Beat + manuel) sinirdan once oldurulemeyecegi icin dokunulmaz."""
+    from django.conf import settings
+    sinir = timezone.now() - timedelta(seconds=settings.CELERY_TASK_SOFT_TIME_LIMIT)
+    kayit = (FetchRun.objects.filter(section=bolum, status='running', started_at__lte=sinir)
+             .order_by('started_at').first())
+    if kayit is None:
+        return
+    FetchRun.objects.filter(pk=kayit.pk, status='running').update(
+        status='failure', finished_at=timezone.now(), stopped_reason='time_limit',
+        error=f'{type(exception).__name__}: {exception}'[:HATA_TAVANI])
+    log.warning(f'  [FetchRun] {bolum}: tur sert sure sinirinda olduruldu (satir {kayit.pk})')
+
+
 @task_failure.connect
 def tur_coktu(sender=None, task_id=None, exception=None, **kwargs):
     try:
-        if not _bolum(sender):
+        bolum = _bolum(sender)
+        if not bolum:
+            return
+        if task_id not in _acik_turlar:
+            from billiard.exceptions import TimeLimitExceeded
+            if isinstance(exception, TimeLimitExceeded):
+                _sert_sinir_kapat(bolum, exception)
             return
         _kapat(task_id, status='failure', error=f'{type(exception).__name__}: {exception}'[:HATA_TAVANI])
     except Exception as hata:
         log.warning(f'  [FetchRun] Cokme yazilamadi ({task_id}): {hata}')
+
+
+# Bu kadar ardisik bitmis retranslate turu hic kayit cevirmediyse (ve bekleyen varsa) kuyruk takili sayilir.
+# Tur 2 saatte bir: 3 tur ~6 saat ilerlemesizlik demektir.
+TAKILMA_TUR_SAYISI = 3
+
+
+def ceviri_kuyrugu_ozeti() -> dict:
+    """Anonim /api/saglik/ icin ceviri kuyrugu ozeti (bulgu 6, 2026-10-21).
+
+    2026-10-16: retranslate 3 gun ayni kayitta takili kaldi, serit her bolumu "ok" gosterdi.
+    pending yalniz yeniden denenebilir kayitlari sayar (vazgecilenler kuyrugu tikamaz).
+    stalled: bekleyen var ve son TAKILMA_TUR_SAYISI bitmis tur hic kayit cevirmedi/yukseltmedi.
+    """
+    from .retranslate import RETRANSLATE_MAX_ATTEMPTS
+
+    bekleyen = sum(model.objects.filter(needs_translation=True,
+                                        translation_attempts__lt=RETRANSLATE_MAX_ATTEMPTS).count()
+                   for model in BOLUM_MODELLERI.values())
+    son_turlar = list(FetchRun.objects.filter(section='retranslate').exclude(status='running')
+                      [:TAKILMA_TUR_SAYISI])
+    son_basarili = FetchRun.objects.filter(section='retranslate', status='success').first()
+    takili = (bekleyen > 0 and len(son_turlar) == TAKILMA_TUR_SAYISI
+              and all(tur.saved_count == 0 for tur in son_turlar))
+    return {
+        'pending': bekleyen,
+        'last_success_at': (son_basarili.finished_at.isoformat()
+                            if son_basarili and son_basarili.finished_at else None),
+        'stalled': takili,
+    }
 
 
 def bolum_ozetleri() -> dict:

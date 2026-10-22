@@ -43,21 +43,33 @@ ONCELIKLI_BOLUM = 'cve'
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 MAX_RATIO = 3.0
 ECHO_MIN_WORDS = 4
+# En az bu kadar kelimelik bir ceviride hic Turkce harf yoksa model ASCII'ye kaymistir (bkz. _alan_sorunu)
+TURKCE_HARF_MIN_KELIME = 10
+_TURKCE_HARF = re.compile('[çğıöşüÇĞİÖŞÜ]')
+# Latin disi alfabeler (Kiril, Yunan, Ermeni, Ibrani, Arap, CJK, Hangul): orijinalde yoksa ceviride
+# uydurulmustur (2026-10-21 canli olcum: 'sunarken' -> 'sերerken'). Orijinalde varsa (ozel ad) serbest.
+_YABANCI_YAZI = re.compile('[Ͱ-ϿЀ-ӿ԰-֏֐-׿؀-ۿ'
+                           '぀-ヿ一-鿿가-힯]')
 
+# Proje kurali "kod ASCII Turkce" bu metne UYGULANMAZ: talimat modele gider ve model yazimini taklit
+# eder. 2026-10-16'ya kadar diakritiksiz yazilmisti; Gemini cevirilerinin yarisi (CVE'de %53) Turkce
+# karaktersiz geldi ('kimligi dogrulanmamis saldirgan'). Ornekler ve kural bu yuzden duzgun Turkcedir.
 SISTEM_TALIMATI = (
-    "Sen teknik haber ve guvenlik bultenleri ceviren bir cevirmensin. Verilen JSON nesnesindeki "
-    "her alanin Ingilizce metnini dogal ve anlasilir Turkceye cevir; ayni anahtarlarla bir JSON nesnesi dondur.\n"
+    "Sen teknik haber ve güvenlik bültenleri çeviren bir çevirmensin. Verilen JSON nesnesindeki "
+    "her alanın İngilizce metnini doğal ve anlaşılır Türkçeye çevir; aynı anahtarlarla bir JSON nesnesi döndür.\n"
     "Kurallar:\n"
-    "- Teknik terimleri, urun/kutuphane/sirket/kisi adlarini, kod parcalarini, dosya yollarini, fonksiyon "
-    "adlarini, CVE numaralarini, surum ve commit numaralarini AYNEN birak; Turkce ek getirmek disinda degistirme.\n"
-    "- Satir sonlarini, madde isaretlerini, numaralandirmayi ve '===SECTION:' gibi yapisal isaretleri "
-    "oldugu gibi koru.\n"
-    "- Kubernetes changelog'larinda '===SECTION: ...===', '---ITEM---' ve '<<<PR#...|...|...>>>' "
-    "satirlarini birebir koru; sayilarini ve sirasini degistirme.\n"
-    "- Ozetleme, ekleme, yorum yapma; metnin tamamini cevir.\n"
-    "- Guvenlik terimlerini teknik anlamiyla cevir (orn. 'unauthenticated attacker' -> "
-    "'kimligi dogrulanmamis saldirgan', 'remote code execution' -> 'uzaktan kod calistirma').\n"
-    "- Yalnizca JSON dondur."
+    "- Çeviriyi mutlaka Türkçe karakterlerle yaz (ç, ğ, ı, İ, ö, ş, ü); harfleri ASCII karşılıklarına "
+    "(c, g, i, o, s, u) dönüştürme.\n"
+    "- Teknik terimleri, ürün/kütüphane/şirket/kişi adlarını, kod parçalarını, dosya yollarını, fonksiyon "
+    "adlarını, CVE numaralarını, sürüm ve commit numaralarını AYNEN bırak; Türkçe ek getirmek dışında değiştirme.\n"
+    "- Satır sonlarını, madde işaretlerini, numaralandırmayı ve '===SECTION:' gibi yapısal işaretleri "
+    "olduğu gibi koru.\n"
+    "- Kubernetes changelog'larında '===SECTION: ...===', '---ITEM---' ve '<<<PR#...|...|...>>>' "
+    "satırlarını birebir koru; sayılarını ve sırasını değiştirme.\n"
+    "- Özetleme, ekleme, yorum yapma; metnin tamamını çevir.\n"
+    "- Güvenlik terimlerini teknik anlamıyla çevir (örn. 'unauthenticated attacker' -> "
+    "'kimliği doğrulanmamış saldırgan', 'remote code execution' -> 'uzaktan kod çalıştırma').\n"
+    "- Yalnızca JSON döndür."
 )
 
 _gate = None
@@ -189,6 +201,12 @@ def _alan_sorunu(orijinal: str, ceviri) -> Optional[str]:
     if (_kelime_sayisi(orijinal) >= ECHO_MIN_WORDS
             and tu._normalize_for_echo(ceviri) == tu._normalize_for_echo(orijinal)):
         return 'yanki'
+    if _kelime_sayisi(ceviri) >= TURKCE_HARF_MIN_KELIME and not _TURKCE_HARF.search(ceviri):
+        # Bu uzunlukta duzgun Turkce metin bu harflerden en az birini icerir; hic yoksa model ASCII'ye kaymistir
+        return 'turkce harf yok'
+    yabanci = set(_YABANCI_YAZI.findall(ceviri)) - set(_YABANCI_YAZI.findall(orijinal))
+    if yabanci:
+        return 'yabanci alfabe'
     return None
 
 

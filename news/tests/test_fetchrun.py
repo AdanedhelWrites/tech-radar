@@ -228,6 +228,55 @@ class SinyalTests(TestCase):
         self.assertEqual(kayit.status, 'failure')
         self.assertEqual(kayit.saved_count, 0)
 
+    def test_basarisiz_durumlu_postrun_basarili_yazmaz(self):
+        """2026-10-21: FetchRun 1086 sert sure sinirinda olduruldu ama 'success' kaydedildi. Postrun
+        state=FAILURE ve sozluk olmayan retval (istisna) ile geldiginde basarisizlik yazilmali."""
+        from news import fetch_runs
+        sender = self._sender('news.tasks.retranslate_pending_task')
+        fetch_runs.tur_basladi(sender=sender, task_id='t-durum')
+
+        fetch_runs.tur_bitti(sender=sender, task_id='t-durum',
+                             retval=RuntimeError('alt surec kesildi'), state='FAILURE')
+
+        kayit = FetchRun.objects.get()
+        self.assertEqual(kayit.status, 'failure')
+        self.assertIn('alt surec kesildi', kayit.error)
+
+    def _eski_running(self, bolum, saniye_once):
+        kayit = FetchRun.objects.create(section=bolum, trigger='beat', status='running')
+        FetchRun.objects.filter(pk=kayit.pk).update(
+            started_at=timezone.now() - timezone.timedelta(seconds=saniye_once))
+        return kayit
+
+    def test_sert_sure_siniri_ana_surecte_satiri_kapatir(self):
+        """Sert sinirda task_failure ana surecte gelir; task_id -> satir haritasi alt surecteydi.
+        Sure sinirini asmis en eski running satiri kapatilir; ayni bolumde yeni baslamis tur dokunulmaz."""
+        from billiard.exceptions import TimeLimitExceeded
+        from news import fetch_runs
+        oldurulen = self._eski_running('retranslate', 1800)
+        paralel = self._eski_running('retranslate', 60)
+
+        fetch_runs.tur_coktu(sender=self._sender('news.tasks.retranslate_pending_task'),
+                             task_id='ana-surecte-bilinmeyen', exception=TimeLimitExceeded(1800))
+
+        oldurulen.refresh_from_db()
+        paralel.refresh_from_db()
+        self.assertEqual(oldurulen.status, 'failure')
+        self.assertEqual(oldurulen.stopped_reason, 'time_limit')
+        self.assertIn('TimeLimitExceeded', oldurulen.error)
+        self.assertIsNotNone(oldurulen.finished_at)
+        self.assertEqual(paralel.status, 'running')
+
+    def test_bilinmeyen_task_baska_hatada_satira_dokunmaz(self):
+        from news import fetch_runs
+        kayit = self._eski_running('cve', 1800)
+
+        fetch_runs.tur_coktu(sender=self._sender('news.tasks.fetch_cve_task'),
+                             task_id='bilinmeyen', exception=ValueError('baska'))
+
+        kayit.refresh_from_db()
+        self.assertEqual(kayit.status, 'running')
+
     def test_eski_kayitlar_temizlenir(self):
         from news import fetch_runs
         eski = FetchRun.objects.create(section='cve', trigger='beat', status='success')

@@ -255,16 +255,25 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 
 # Gorev sure sinirlari (2026-10-08). Onceden yoktu: takilan tek bir kaynak istegi
-# bolum kilidini REFRESH_LOCK_TTL (3600 sn) boyunca tutar, worker tek concurrency ile
+# bolum kilidini REFRESH_LOCK_TTL (3600 sn) boyunca tutar, worker sinirli eszamanlilikla
 # calistigi icin Beat'in diger gorevleri kuyrukta beklerdi.
 #   soft: task icinde SoftTimeLimitExceeded yukselir; fetch task'lari bunu yakalayip
 #         {'success': False, 'error': 'SoftTimeLimitExceeded: ...'} doner, FetchRun 'failure' olur.
-#   hard: worker alt surecini oldurur; FetchRun 'running' kalir (fetch_runs.py), bolum
+#         Ceviri katmanindaki genis except'ler onu yutabilir; retranslate bu yuzden kendi sure
+#         butcesiyle (RETRANSLATE_TIME_BUDGET) yumusak sinirdan once biter.
+#   hard: worker alt surecini oldurur; ana surecteki task_failure FetchRun satirini
+#         'failure' / stopped_reason='time_limit' kapatir (fetch_runs.py), bolum
 #         kilidi TTL sonunda kendiliginden duser. Soft'tan en az 60 sn buyuk tutulur.
 # En uzun gozlenen cekim 751 sn (CVE, 2026-09-12); 12 haber kaynagiyla ~15 dk beklenir.
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.environ.get('CELERY_TASK_SOFT_TIME_LIMIT', '1500'))
 CELERY_TASK_TIME_LIMIT = max(int(os.environ.get('CELERY_TASK_TIME_LIMIT', '1800')),
                              CELERY_TASK_SOFT_TIME_LIMIT + 60)
+# Worker eszamanliligi (2026-10-21, uctan uca test bulgusu 5). Ayar yokken compose worker'i CPU
+# sayisi kadar (12) surecle calisiyordu; Docker acilisinda Beat kacirilan 7 gorevi ayni saniyede
+# atiyor, hepsi LibreTranslate'e (cpus: 4) birden yukleniyordu -> ReadTimeout, devre kesici; acilis
+# turlarinda kayit basina 4.18 ceviri hatasi (normal turlarda 0.34; k8s 308'e karsi 14). Helm
+# zaten --concurrency=2 kullaniyordu; iki ortam artik ayni ayardan beslenir. Fazlasi kuyrukta bekler.
+CELERY_WORKER_CONCURRENCY = int(os.environ.get('CELERY_WORKER_CONCURRENCY', '2'))
 # Uzun omurlu alt surecte requests oturumlari ve BeautifulSoup agaclari birikmesin
 CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.environ.get('CELERY_WORKER_MAX_TASKS_PER_CHILD', '50'))
 
