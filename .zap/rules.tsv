@@ -1,8 +1,9 @@
 # ZAP baseline kural dosyasi (zaproxy/action-baseline rules_file_name). Bicim: <pluginid>\t<IGNORE|WARN|FAIL>\t(<aciklama>)
 # IGNORE: ZAP konsol ozetinde ve cikis kodunda yok sayilir; JSON rapora YINE girer (ZAP boyle). Security sekmesine
 # dusmemesi icin scripts/zap_sarif.py ayni dosyayi okur ve IGNORE eklentilerini SARIF'e almaz.
-# Ilk sutun alertRef de olabilir (or. 100000-1): yalniz o alt kural atilir; ZAP bu anahtari eslestirmez
-# (zap-api-scan esik ayari icin denenir, sonucu kontrol edilmez), filtre zap_sarif.py'dedir.
+# Ilk sutun YALNIZ sayisal pluginid olabilir: ZAP (zap_common.get_af_output_summary) kimligi int() ile cozer, '100000-1'
+# baseline taramasini dusurur (2026-10-23). Tek alt kurali (alertRef) atmak icin yorum yonergesi: #SARIF-IGNORE<TAB><alertRef><TAB>(...)
+# ZAP '#' satirlarini atlar; yalniz scripts/zap_sarif.py okur.
 # Buraya yalniz gurultu girer; gercek bulgu dismiss ile kapatilir.
 90005	IGNORE	(Sec-Fetch-* istek basliklari ZAP'in kendi isteklerinde eksik; uygulama sorunu degil)
 10049	IGNORE	(Non-Storable / Storable and Cacheable Content: bilgi amacli)
@@ -10,7 +11,7 @@
 10112	IGNORE	(Session Management Response Identified: bilgi amacli)
 10094	IGNORE	(Base64 Disclosure: login sayfasindaki csrfmiddlewaretoken, yanlis pozitif)
 # 2026-10-23: zap-api (P5-c) 10-14'ten beri 530+ bilgi amacli bulgu acti (URL basina bir alert).
-100000-1	IGNORE	(Client Error 4xx: API taramasi bulanik istek atar; 401/403/404/405/400 beklenen yanit. 5xx alt kurali 100000-2 KALIR)
+#SARIF-IGNORE	100000-1	(Client Error 4xx: API taramasi bulanik istek atar; 401/403/404/405/400 beklenen yanit. 5xx alt kurali 100000-2 KALIR)
 100001	IGNORE	(Unexpected Content-Type: API disi yollarda Django'nun HTML 404 sayfasi; bilgi amacli)
 10104	IGNORE	(User Agent Fuzzer: farkli User-Agent'a farkli yanit bilgisi; bilgi amacli)
 10106	IGNORE	(HTTP Only Site: DAST hedefi CI'da http://localhost; TLS uygulamanin degil onundeki katmanin isi)

@@ -234,7 +234,8 @@ class ZapSarifTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as d:
             kurallar = os.path.join(d, 'rules.tsv')
             with open(kurallar, 'w', encoding='utf-8') as f:
-                f.write("100000-1\tIGNORE\t(4xx beklenen)\n")
+                # ZAP'in okudugu satirlarda alertRef OLAMAZ (int() ile cozer); yorum yonergesiyle verilir
+                f.write("#SARIF-IGNORE\t100000-1\t(4xx beklenen)\n")
             run = self.m.donustur(rapor, yok_say=self.m.ignore_eklentileri(kurallar))['runs'][0]
         self.assertEqual({s['ruleId'] for s in run['results']}, {'zap/100000-2'})
         self.assertEqual(run['properties']['ignoredAlertTypes'], 1)
@@ -246,6 +247,20 @@ class ZapSarifTests(SimpleTestCase):
         self.assertTrue({'100000-1', '100001', '10104', '10106'} <= yok_say)
         self.assertNotIn('100000', yok_say)
         self.assertNotIn('100000-2', yok_say)
+
+    def test_depodaki_kural_dosyasi_zap_ile_uyumlu(self):
+        # 2026-10-23: '100000-1' kural satiri ZAP baseline'i "invalid literal for int()" ile dusurdu (zap_common).
+        # ZAP'in okudugu (yorum olmayan) her satir: sayisal kimlik + 3 sekme alani + bilinen seviye.
+        from pathlib import Path
+        yol = Path(__file__).resolve().parents[2] / '.zap' / 'rules.tsv'
+        for satir in yol.read_text(encoding='utf-8').splitlines():
+            if not satir.strip() or satir.startswith('#'):
+                continue
+            with self.subTest(satir=satir):
+                alanlar = satir.split('\t')
+                self.assertGreaterEqual(len(alanlar), 3)
+                self.assertTrue(alanlar[0].isdigit(), f'ZAP sayisal kimlik bekler: {alanlar[0]!r}')
+                self.assertIn(alanlar[1], {'IGNORE', 'INFO', 'WARN', 'FAIL', 'OUTOFSCOPE'})
 
     def test_bos_rapor_gecerli_sarif(self):
         sarif = self.m.donustur({"@version": "2.16.1", "site": []})

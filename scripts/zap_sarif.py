@@ -137,12 +137,20 @@ def _sonuc(alert, instance, kural_id, kural_index):
 
 
 def ignore_eklentileri(yol):
-    """ZAP rules.tsv -> IGNORE satirlarindaki kimlik kumesi. Bicim: <pluginid|alertRef>\\t<IGNORE|WARN|FAIL>\\t(...).
-    alertRef (or. 100000-1) yalniz o alt kurali atar; ZAP'in kendisi bu anahtari eslestirmez (zararsiz)."""
+    """ZAP rules.tsv -> yok sayilacak kimlik kumesi. Bicim: <pluginid>\\t<IGNORE|WARN|FAIL>\\t(...).
+
+    Alt kural (alertRef, or. 100000-1) icin yorum yonergesi: `#SARIF-IGNORE\\t<alertRef>\\t(...)`. ZAP '#'
+    satirlarini atlar; kural satirindaki alertRef ise ZAP baseline/API taramasini (zap_common.get_af_output_summary,
+    "invalid literal for int()") dusurur (2026-10-23). Yonerge yalniz o alt kurali atar, eklentinin diger alt kurallari kalir."""
     eklentiler = set()
     with open(yol, encoding="utf-8") as f:
         for satir in f:
             satir = satir.strip()
+            if satir.startswith("#SARIF-IGNORE\t"):
+                alanlar = satir.split("\t")
+                if len(alanlar) >= 2 and alanlar[1].strip():
+                    eklentiler.add(alanlar[1].strip())
+                continue
             if not satir or satir.startswith("#"):
                 continue
             alanlar = satir.split("\t")
