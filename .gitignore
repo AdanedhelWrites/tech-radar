@@ -48,6 +48,7 @@ Thumbs.db
 *.txt
 !requirements.txt
 !requirements-dev.txt
+!requirements-araclar.txt
 !README.md
 # Helm kurulum sonrasi notlari (chart sablonu, eski cikti dosyasi degil)
 !helm/tech-radar/templates/NOTES.txt

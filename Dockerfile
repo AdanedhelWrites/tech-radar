@@ -17,10 +17,13 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 # acik var; bunlar requirements.txt'te olmadigi icin ancak boyle kapanir.
 # pip BILEREK yukseltilmiyor: pip 26.x kendi _vendor agacinda acikli msgpack
 # tasiyor ve trivy onu da sayiyor, yani yukseltmek net kazanc birakmiyor.
-RUN pip install --no-cache-dir --upgrade setuptools wheel
+# Tum pip kurulumlari hash'e sabitli (--require-hashes; Scorecard PinnedDependencies, 2026-10-23):
+# *.in kaynak, *.txt pip-compile --generate-hashes ciktisi (Dependabot ikisini birlikte gunceller).
+COPY requirements-araclar.txt .
+RUN pip install --no-cache-dir --require-hashes -r requirements-araclar.txt
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes --prefix=/install -r requirements.txt
 
 # --- Stage 2: Runtime ---
 FROM python:3.11-slim@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
@@ -32,7 +35,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && rm -rf /var/lib/apt/lists/*
 
 # Son imajda kalan setuptools bu asamadan gelir; builder'i yukseltmek yetmez.
-RUN pip install --no-cache-dir --upgrade setuptools wheel
+COPY requirements-araclar.txt /tmp/requirements-araclar.txt
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements-araclar.txt && rm /tmp/requirements-araclar.txt
 
 # Non-root user
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
