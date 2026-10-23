@@ -137,7 +137,8 @@ def _sonuc(alert, instance, kural_id, kural_index):
 
 
 def ignore_eklentileri(yol):
-    """ZAP rules.tsv -> IGNORE satirlarindaki pluginid kumesi. Bicim: <pluginid>\\t<IGNORE|WARN|FAIL>\\t(...)."""
+    """ZAP rules.tsv -> IGNORE satirlarindaki kimlik kumesi. Bicim: <pluginid|alertRef>\\t<IGNORE|WARN|FAIL>\\t(...).
+    alertRef (or. 100000-1) yalniz o alt kurali atar; ZAP'in kendisi bu anahtari eslestirmez (zararsiz)."""
     eklentiler = set()
     with open(yol, encoding="utf-8") as f:
         for satir in f:
@@ -159,7 +160,8 @@ def donustur(rapor, yok_say=frozenset()):
 
     for site in rapor.get("site") or []:
         for alert in site.get("alerts") or []:
-            if str(alert.get("pluginid", "")).strip() in yok_say:
+            # Eklentinin tamami (pluginid) ya da tek alt kurali (alertRef, or. 100000-1) yok sayilabilir
+            if ({str(alert.get("pluginid", "")).strip(), str(alert.get("alertRef") or "").strip()} & set(yok_say)):
                 atlanan += 1
                 continue
             kural = _kural(alert)

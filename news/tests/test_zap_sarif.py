@@ -220,6 +220,33 @@ class ZapSarifTests(SimpleTestCase):
                 self.assertEqual(len(json.load(f)['runs'][0]['results']), 3)
             self.assertNotEqual(self.m.main([girdi, cikti, '--kurallar', os.path.join(d, 'yok.tsv')]), 0)
 
+    def test_alertref_duzeyinde_ignore_eklentinin_diger_alt_kuralini_birakir(self):
+        # 2026-10-23: zap-api 228 "Client Error" (100000-1) bulgusu acti; ayni eklentinin 5xx alt kurali
+        # (100000-2) gercek sinyaldir ve kalmali. rules.tsv'de alertRef ile tek alt kural yok sayilir.
+        def alert(ref, ad):
+            return {"pluginid": "100000", "alertRef": ref, "name": ad, "riskcode": "1", "confidence": "2",
+                    "riskdesc": "Low (Medium)", "desc": "", "count": "1", "solution": "", "otherinfo": "",
+                    "reference": "", "cweid": "", "wascid": "", "sourceid": "1",
+                    "instances": [{"uri": "http://localhost:8000/api/v1/x/", "method": "GET"}]}
+        rapor = {"@version": "2.16.1", "site": [{"@name": "http://localhost:8000", "alerts": [
+            alert("100000-1", "A Client Error response code was returned by the server"),
+            alert("100000-2", "A Server Error response code was returned by the server")]}]}
+        with tempfile.TemporaryDirectory() as d:
+            kurallar = os.path.join(d, 'rules.tsv')
+            with open(kurallar, 'w', encoding='utf-8') as f:
+                f.write("100000-1\tIGNORE\t(4xx beklenen)\n")
+            run = self.m.donustur(rapor, yok_say=self.m.ignore_eklentileri(kurallar))['runs'][0]
+        self.assertEqual({s['ruleId'] for s in run['results']}, {'zap/100000-2'})
+        self.assertEqual(run['properties']['ignoredAlertTypes'], 1)
+
+    def test_depodaki_kural_dosyasi_gurultuyu_atar_sunucu_hatasini_birakir(self):
+        # .zap/rules.tsv'nin kendisi: 4xx ve icerik turu gurultusu atilir, 5xx alt kurali atilmaz
+        from pathlib import Path
+        yok_say = self.m.ignore_eklentileri(Path(__file__).resolve().parents[2] / '.zap' / 'rules.tsv')
+        self.assertTrue({'100000-1', '100001', '10104', '10106'} <= yok_say)
+        self.assertNotIn('100000', yok_say)
+        self.assertNotIn('100000-2', yok_say)
+
     def test_bos_rapor_gecerli_sarif(self):
         sarif = self.m.donustur({"@version": "2.16.1", "site": []})
         self.assertEqual(sarif['runs'][0]['results'], [])
