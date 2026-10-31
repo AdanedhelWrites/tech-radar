@@ -776,6 +776,7 @@ class CISAKEVScraper(CVEScraper):
                     if son_tarih:
                         onek += f"; required action due {son_tarih}"
                     kayit['original_description'] = f"{onek}. {kayit['original_description']}"
+                    kayit['kev_added_date'] = eklenme_tarihi
                     kayit['references'] = [self.KEV_KATALOG] + kayit['references'][:4]
                     cves.append(kayit)
                 except Exception as e:

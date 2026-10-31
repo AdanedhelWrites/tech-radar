@@ -132,26 +132,28 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
             for cve in scraper.process_cves(cves):
                 basarisizlik = consume_translation_failures()
                 ceviri_hatalari += basarisizlik
-                CVEEntry.objects.update_or_create(
-                    cve_id=cve['cve_id'],
-                    defaults={
-                        'source': cve['source'],
-                        'original_title': cve['original_title'],
-                        'turkish_title': cve.get('turkish_title', ''),
-                        'original_description': cve.get('original_description', ''),
-                        'turkish_description': cve.get('turkish_description', ''),
-                        'severity': cve.get('severity', 'Bilinmiyor'),
-                        'cvss_score': cve.get('cvss_score'),
-                        'published_date': cve.get('published_date'),
-                        'modified_date': cve.get('modified_date'),
-                        'link': cve.get('link', ''),
-                        'cwe_ids': cve.get('cwe_ids', []),
-                        'references': cve.get('references', []),
-                        'affected_products': cve.get('affected_products', ''),
-                        'needs_translation': basarisizlik > 0,
-                        'translation_provider': kayit_saglayicisi(consume_translation_providers()),
-                    }
-                )
+                defaults = {
+                    'source': cve['source'],
+                    'original_title': cve['original_title'],
+                    'turkish_title': cve.get('turkish_title', ''),
+                    'original_description': cve.get('original_description', ''),
+                    'turkish_description': cve.get('turkish_description', ''),
+                    'severity': cve.get('severity', 'Bilinmiyor'),
+                    'cvss_score': cve.get('cvss_score'),
+                    'published_date': cve.get('published_date'),
+                    'modified_date': cve.get('modified_date'),
+                    'link': cve.get('link', ''),
+                    'cwe_ids': cve.get('cwe_ids', []),
+                    'references': cve.get('references', []),
+                    'affected_products': cve.get('affected_products', ''),
+                    'needs_translation': basarisizlik > 0,
+                    'translation_provider': kayit_saglayicisi(consume_translation_providers()),
+                }
+                # KEV tarihi yalniz KEV kaynagi verdiginde yazilir: ayni CVE'yi NVD yolu yeniden
+                # yazdiginda (anahtar yok) mevcut tarih None ile ezilmesin
+                if cve.get('kev_added_date'):
+                    defaults['kev_added_date'] = cve['kev_added_date']
+                CVEEntry.objects.update_or_create(cve_id=cve['cve_id'], defaults=defaults)
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, cve['source'])
                 if saved_count % CACHE_YENILEME_ARALIGI == 0:
