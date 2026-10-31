@@ -1,0 +1,329 @@
+/* Koyu tema temeli (arayuz yenileme, spec 2026-10-31 G1-G3).
+   Yalniz koyu tema: <html data-bs-theme="dark">. Bu dosya Bootstrap'tan SONRA yuklenir (main.jsx).
+   Renkler yalniz buradaki token'lardan okunur; bilesenler sabit renk yazmaz. */
+
+/* ==================== TOKEN'LAR ==================== */
+
+:root {
+  /* Zemin */
+  --zemin: radial-gradient(1200px 520px at 12% -12%, #1d2b5a 0%, #0a0e1f 58%);
+  --zemin-taban: #0a0e1f;
+  --yuzey-yukseltilmis: #141b36; /* opak yuzey: acilir menu, bildirim, panel */
+
+  /* Cam kart */
+  --cam: rgba(255, 255, 255, .045);
+  --cam-kenar: rgba(255, 255, 255, .085);
+  --cam-hafif: rgba(255, 255, 255, .03);
+  --ayrac: rgba(255, 255, 255, .07);
+  --kenar-belirgin: rgba(255, 255, 255, .14); /* form alanlari gibi secilmesi gereken kenarlar */
+
+  /* Metin */
+  --metin: #e6e9ff;
+  --metin-ikincil: #a9c0ff;
+  --metin-soluk: rgba(230, 233, 255, .62);
+  --metin-okuma: rgba(230, 233, 255, .9);
+
+  /* Vurgu (mavi -> mor) */
+  --vurgu: #7aa2ff;
+  --vurgu-2: #b98bff;
+  --vurgu-gradyan: linear-gradient(135deg, var(--vurgu), var(--vurgu-2));
+  --vurgu-zemin: rgba(122, 162, 255, .14);
+
+  /* Durum renkleri */
+  --kritik: #ff5d8f;
+  --kritik-2: #ff8a5d;
+  --kritik-gradyan: linear-gradient(135deg, var(--kritik), var(--kritik-2));
+  --kritik-metin: #ff9bb8;
+  --kritik-zemin: rgba(255, 93, 143, .16);
+
+  --yuksek: #ffb35d;
+  --yuksek-2: #ffd36b;
+  --yuksek-gradyan: linear-gradient(135deg, var(--yuksek), var(--yuksek-2));
+  --yuksek-metin: #ffc27a;
+  --yuksek-zemin: rgba(255, 179, 93, .16);
+  --yuksek-uzeri: #2a1a00; /* sari-turuncu zemin uzerindeki koyu metin */
+
+  --orta: var(--vurgu);
+  --orta-zemin: rgba(122, 162, 255, .16);
+
+  --saglikli: #7ee0c3;
+  --saglikli-zemin: rgba(126, 224, 195, .14);
+
+  /* Yazi tipleri (CSP: harici font yok, sistem yigini) */
+  --font-govde: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: Consolas, 'Cascadia Mono', monospace;
+
+  /* Olcu */
+  --yaricap-kart: 12px;
+  --yaricap-kutu: 8px;
+  --gecis: .15s ease;
+
+  /* Bootstrap yazi tipi degiskenleri token'lara baglanir */
+  --bs-body-font-family: var(--font-govde);
+  --bs-font-monospace: var(--font-mono);
+}
+
+/* Bootstrap koyu temasini token'lara bagla. Ayni secici Bootstrap'ta da var; bu dosya sonra
+   yuklendigi icin kazanir. Ic ice data-bs-theme="dark" alan ogeler de ayni degerleri alir. */
+[data-bs-theme=dark] {
+  --bs-body-color: var(--metin);
+  --bs-body-color-rgb: 230, 233, 255;
+  --bs-body-bg: var(--zemin-taban);
+  --bs-body-bg-rgb: 10, 14, 31;
+  --bs-emphasis-color: #fff;
+  --bs-emphasis-color-rgb: 255, 255, 255;
+  --bs-heading-color: #f1f3ff;
+  --bs-secondary-color: var(--metin-soluk);
+  --bs-secondary-color-rgb: 230, 233, 255;
+  --bs-secondary-bg: var(--yuzey-yukseltilmis);
+  --bs-secondary-bg-rgb: 20, 27, 54;
+  --bs-tertiary-bg: #10162e;
+  --bs-tertiary-bg-rgb: 16, 22, 46;
+  --bs-border-color: var(--kenar-belirgin);
+  --bs-border-color-translucent: var(--cam-kenar);
+  --bs-link-color: var(--metin-ikincil);
+  --bs-link-color-rgb: 169, 192, 255;
+  --bs-link-hover-color: #ccd9ff;
+  --bs-link-hover-color-rgb: 204, 217, 255;
+}
+
+/* ==================== TABAN ==================== */
+
+html {
+  background-color: var(--zemin-taban);
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--zemin-taban);
+  background-image: var(--zemin);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  color: var(--metin);
+}
+
+/* ==================== UST BANT ==================== */
+
+.ust-bant {
+  --bs-navbar-padding-y: 10px;
+  --bs-navbar-color: var(--metin-soluk);
+  --bs-navbar-hover-color: var(--metin);
+  --bs-navbar-active-color: var(--metin);
+  --bs-navbar-brand-color: var(--metin);
+  --bs-navbar-brand-hover-color: var(--metin);
+  --bs-navbar-toggler-border-color: var(--cam-kenar);
+  background: var(--cam-hafif);
+  border-bottom: 1px solid var(--ayrac);
+}
+
+.marka {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.marka-logo {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--vurgu-gradyan);
+}
+
+.marka-adi {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: .2px;
+}
+
+.marka-alt {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--metin-soluk);
+}
+
+.ust-menu .nav-link {
+  font-size: 13px;
+  padding: 6px 0 4px;
+  border-bottom: 2px solid transparent;
+  transition: color var(--gecis), border-color var(--gecis);
+}
+
+.ust-menu .nav-link.active {
+  border-bottom-color: var(--vurgu);
+}
+
+.ust-menu .nav-link:focus-visible {
+  outline: 2px solid var(--vurgu);
+  outline-offset: 3px;
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+@media (min-width: 992px) {
+  .ust-menu {
+    gap: 20px;
+  }
+}
+
+/* Dar ekranda menu dikey listelenir; aktif isaret alt cizgi yerine sol cizgi olur */
+@media (max-width: 991.98px) {
+  .ust-menu {
+    padding: 8px 0 4px;
+  }
+
+  .ust-menu .nav-link {
+    padding: 8px 0 8px 12px;
+    border-bottom: 0;
+    border-left: 2px solid transparent;
+  }
+
+  .ust-menu .nav-link.active {
+    border-left-color: var(--vurgu);
+  }
+}
+
+/* ==================== ORTAK SINIFLAR ==================== */
+
+/* Yari saydam "cam" kart */
+.cam-kart {
+  background: var(--cam);
+  border: 1px solid var(--cam-kenar);
+  border-radius: var(--yaricap-kart);
+  padding: 14px 16px;
+}
+
+/* Kucuk buyuk harfli bolum etiketi ("ZAFIYET DURUMU · SON 24 SAAT") */
+.etiket-kucuk {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--metin-soluk);
+}
+
+/* CVSS skor kutusu: sayi + altinda <small>KRITIK</small>. Renk tek basina anlam tasimaz. */
+.skor-kutusu {
+  min-width: 58px;
+  padding: 7px 4px;
+  border-radius: var(--yaricap-kutu);
+  background: var(--cam);
+  color: var(--metin);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.skor-kutusu small {
+  display: block;
+  margin-top: 1px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .8px;
+  opacity: .9;
+}
+
+.skor-kutusu.kritik {
+  background: var(--kritik-gradyan);
+  color: #fff;
+  /* acik pembe zeminde beyaz rakamin okunurlugu icin hafif golge */
+  text-shadow: 0 1px 2px rgba(60, 0, 20, .45);
+  box-shadow: 0 0 16px rgba(255, 93, 143, .3);
+}
+
+.skor-kutusu.yuksek {
+  background: var(--yuksek-gradyan);
+  color: var(--yuksek-uzeri);
+}
+
+.skor-kutusu.orta {
+  background: var(--orta-zemin);
+  border: 1px solid rgba(122, 162, 255, .3);
+  color: var(--metin-ikincil);
+}
+
+/* Hap rozet: KEV, Yeni, CWE/urun, bilgi, uyari */
+.rozet {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .08);
+  color: var(--metin);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.rozet + .rozet {
+  margin-left: 4px;
+}
+
+.rozet.kev {
+  background: var(--kritik-zemin);
+  color: var(--kritik-metin);
+}
+
+.rozet.yeni {
+  background: var(--saglikli-zemin);
+  color: var(--saglikli);
+}
+
+.rozet.ur {
+  background: var(--vurgu-zemin);
+  color: var(--metin-ikincil);
+}
+
+.rozet.bilgi {
+  background: rgba(255, 255, 255, .08);
+  color: var(--metin-soluk);
+}
+
+.rozet.uyari {
+  background: var(--yuksek-zemin);
+  color: var(--yuksek-metin);
+}
+
+/* Uzun Turkce metin okuma alani. Yaslama (justify) yok; lang="tr" ile hece bolme. */
+.okuma-metni {
+  max-width: 62ch;
+  font-size: 15.5px;
+  line-height: 1.75;
+  text-align: left;
+  -webkit-hyphens: auto;
+  hyphens: auto;
+  overflow-wrap: break-word;
+  color: var(--metin-okuma);
+}
+
+.okuma-metni p {
+  margin: 0 0 1em;
+}
+
+.okuma-metni p:last-child {
+  margin-bottom: 0;
+}
+
+/* ==================== HAREKET AZALTMA ==================== */
+
+/* Kullanici hareket azaltma istediyse butun animasyon ve gecisler durur
+   (Task 6 CVSS grafigi taramasi dahil). Sure ~0 tutulur: transitionend bekleyen
+   bilesenler (react-bootstrap Collapse) yine tamamlanir. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition-duration: .01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}

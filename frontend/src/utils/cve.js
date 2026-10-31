@@ -9,3 +9,13 @@ export const cveListeBasligi = (item) => {
   const ozet = item?.cve_id && baslik.startsWith(onek) ? baslik.slice(onek.length) : baslik
   return SABLON.test(ozet) ? '' : ozet
 }
+
+// CVSS skorunun renk sinifi (tema.css .skor-kutusu ve rozetler): >=9 kritik, >=7 yuksek, >=4 orta.
+// Skorsuz ya da 4.0 alti kayitlar bos sinif alir (notr gorunum).
+export const skorSinifi = (skor) => {
+  if (!Number.isFinite(skor)) return ''
+  if (skor >= 9) return 'kritik'
+  if (skor >= 7) return 'yuksek'
+  if (skor >= 4) return 'orta'
+  return ''
+}

@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
-import { Routes, Route, NavLink } from 'react-router-dom'
+import { Routes, Route, NavLink, Link } from 'react-router-dom'
 import { Navbar, Nav, Container } from 'react-bootstrap'
-import { FaNewspaper, FaShieldAlt, FaHome, FaDharmachakra, FaSun, FaMoon, FaTree, FaServer, FaToolbox, FaRobot } from 'react-icons/fa'
+import { FaNewspaper, FaShieldAlt, FaDharmachakra, FaServer, FaToolbox, FaRobot } from 'react-icons/fa'
 import NewsComponent from './components/NewsComponent'
 import CVEComponent from './components/CVEComponent'
 import KubernetesComponent from './components/KubernetesComponent'
@@ -12,59 +11,47 @@ import SaglikSeridi from './components/SaglikSeridi'
 import { Toaster } from 'react-hot-toast'
 import './App.css'
 
+// Ust menu: tam adlar, spec G3 sirasi. Rotalar degismedi.
+const MENU = [
+  { ad: 'Genel Bakış', yol: '/' },
+  { ad: 'Zafiyetler', yol: '/cve' },
+  { ad: 'Siber Güvenlik', yol: '/news' },
+  { ad: 'Kubernetes', yol: '/k8s' },
+  { ad: 'SRE', yol: '/sre' },
+  { ad: 'DevTools', yol: '/devtools' },
+  { ad: 'Yapay Zeka', yol: '/ai' },
+]
+
+// Bildirimler koyu yuzeyde (react-hot-toast varsayilani beyaz)
+const BILDIRIM_STILI = {
+  background: 'var(--yuzey-yukseltilmis)',
+  color: 'var(--metin)',
+  border: '1px solid var(--cam-kenar)',
+}
+
 function App() {
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('darkMode')
-    return saved ? JSON.parse(saved) : false
-  })
-
-  useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(darkMode))
-    document.body.setAttribute('data-theme', darkMode ? 'dark' : 'light')
-  }, [darkMode])
-
   return (
-    <div className={`App ${darkMode ? 'dark-mode' : 'light-mode'}`}>
-      <Toaster position="bottom-right" toastOptions={{ duration: 4000 }} />
-      <Navbar bg="dark" variant="dark" expand="lg" className="mb-4">
-        <Container>
-          <Navbar.Brand href="/">
-            <FaTree className="me-2" />
-            Teknoloji Radar
+    <div className="App">
+      <Toaster position="bottom-right" toastOptions={{ duration: 4000, style: BILDIRIM_STILI }} />
+      {/* role={null}: header kendiliginden "banner"; gezinme bolgesi icteki <nav> */}
+      <Navbar as="header" role={null} expand="lg" collapseOnSelect className="ust-bant mb-4">
+        <Container fluid className="px-4">
+          <Navbar.Brand as={Link} to="/" className="marka">
+            <span className="marka-logo" aria-hidden="true" />
+            <span className="marka-adi">Teknoloji Radar</span>
+            <small className="marka-alt d-none d-sm-inline">Tehdit ve Teknoloji İzleme</small>
           </Navbar.Brand>
-          <Navbar.Toggle aria-controls="basic-navbar-nav" />
-          <Navbar.Collapse id="basic-navbar-nav">
-            <Nav className="me-auto">
-              <Nav.Link as={NavLink} to="/" end>
-                <FaHome className="me-1" /> Ana Sayfa
-              </Nav.Link>
-              <Nav.Link as={NavLink} to="/news">
-                <FaNewspaper className="me-1" /> Siber Güvenlik
-              </Nav.Link>
-              <Nav.Link as={NavLink} to="/cve">
-                <FaShieldAlt className="me-1" /> CVE
-              </Nav.Link>
-              <Nav.Link as={NavLink} to="/k8s">
-                <FaDharmachakra className="me-1" /> Kubernetes
-              </Nav.Link>
-              <Nav.Link as={NavLink} to="/sre">
-                <FaServer className="me-1" /> SRE
-              </Nav.Link>
-              <Nav.Link as={NavLink} to="/devtools">
-                <FaToolbox className="me-1" /> DevTools
-              </Nav.Link>
-              <Nav.Link as={NavLink} to="/ai">
-                <FaRobot className="me-1" /> Yapay Zeka
-              </Nav.Link>
+          <Navbar.Toggle aria-controls="ust-menu" label="Menüyü aç/kapat" />
+          <Navbar.Collapse id="ust-menu">
+            <Nav as="nav" aria-label="Ana menü" className="ust-menu ms-auto">
+              {/* eventKey dar ekranda secimde menuyu kapatir (collapseOnSelect). active={false}:
+                  aktiflik yalniz router NavLink'ten gelir; Nav'in ic durumu bayat kalmasin. */}
+              {MENU.map(({ ad, yol }) => (
+                <Nav.Link key={yol} as={NavLink} to={yol} eventKey={yol} active={false} end={yol === '/'}>
+                  {ad}
+                </Nav.Link>
+              ))}
             </Nav>
-            <button
-              className="theme-toggle-icon"
-              onClick={() => setDarkMode(!darkMode)}
-              title={darkMode ? 'Aydınlık Mod' : 'Karanlık Mod'}
-              aria-label={darkMode ? 'Aydınlık Mod' : 'Karanlık Mod'}
-            >
-              {darkMode ? <FaSun /> : <FaMoon />}
-            </button>
           </Navbar.Collapse>
         </Container>
       </Navbar>
@@ -84,6 +71,7 @@ function App() {
   )
 }
 
+// Gecici: Task 6 bu sayfayi Genel Bakis panosuyla degistirir
 function HomePage() {
   return (
     <div className="text-center py-5">

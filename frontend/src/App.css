@@ -1,58 +1,65 @@
-/* Bootstrap info (turkuaz) rengini daha sakin bir steel blue ile override */
+/* Bolum sayfalarinin (Siber Guvenlik, CVE, Kubernetes, SRE, DevTools, Yapay Zeka) stilleri.
+   Yalniz koyu tema; renkler styles/tema.css token'larindan gelir. Yukleme sirasi: Bootstrap,
+   tema.css, bu dosya (main.jsx). Bolum sayfalari Task 7-8'de yeni gorsel dile tasinacak. */
+
+/* Bootstrap info rengi: sakin celik mavisi (beyaz baslik metni koyu zeminde okunur kalir) */
 :root {
-  --bs-info: #5b86a7;
-  --bs-info-rgb: 91, 134, 167;
+  --bs-info: #3d6480;
+  --bs-info-rgb: 61, 100, 128;
 }
 .bg-info {
-  background-color: #5b86a7 !important;
+  background-color: #3d6480 !important;
 }
 .btn-info {
-  --bs-btn-bg: #5b86a7;
-  --bs-btn-border-color: #5b86a7;
+  --bs-btn-color: #fff;
+  --bs-btn-bg: #3d6480;
+  --bs-btn-border-color: #3d6480;
+  --bs-btn-hover-color: #fff;
   --bs-btn-hover-bg: #4d7593;
   --bs-btn-hover-border-color: #4d7593;
+  --bs-btn-active-color: #fff;
   --bs-btn-active-bg: #436880;
   --bs-btn-active-border-color: #436880;
-  --bs-btn-disabled-bg: #5b86a7;
-  --bs-btn-disabled-border-color: #5b86a7;
+  --bs-btn-disabled-bg: #3d6480;
+  --bs-btn-disabled-border-color: #3d6480;
 }
 .btn-outline-info {
-  --bs-btn-color: #5b86a7;
-  --bs-btn-border-color: #5b86a7;
-  --bs-btn-hover-bg: #5b86a7;
-  --bs-btn-hover-border-color: #5b86a7;
-  --bs-btn-active-bg: #5b86a7;
-  --bs-btn-active-border-color: #5b86a7;
-  --bs-btn-disabled-color: #5b86a7;
-  --bs-btn-disabled-border-color: #5b86a7;
+  --bs-btn-color: #7ea8c4;
+  --bs-btn-border-color: #7ea8c4;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #3d6480;
+  --bs-btn-hover-border-color: #3d6480;
+  --bs-btn-active-bg: #3d6480;
+  --bs-btn-active-border-color: #3d6480;
+  --bs-btn-disabled-color: #7ea8c4;
+  --bs-btn-disabled-border-color: #7ea8c4;
 }
 .text-info {
-  color: #5b86a7 !important;
+  color: #7ea8c4 !important;
 }
 
 .App {
   min-height: 100vh;
-  background-color: #f5f6fa;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  color: var(--metin);
 }
 
-.navbar {
-  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
+/* ==================== KARTLAR ==================== */
 
 .card {
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-  transition: transform 0.3s ease;
+  --bs-card-bg: var(--cam);
+  --bs-card-border-color: var(--cam-kenar);
+  --bs-card-cap-bg: var(--cam-hafif);
+  --bs-card-border-radius: var(--yaricap-kart);
+  --bs-card-inner-border-radius: calc(var(--yaricap-kart) - 1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .3);
+  transition: transform .3s ease;
 }
 
 .card:hover {
   transform: translateY(-5px);
 }
 
-/* Scrollable panel cards - no hover jump, proper flex scroll */
+/* Kaydirilan panel kartlari: hover ziplamasi yok, flex icinde kaydirma */
 .panel-card {
   display: flex;
   flex-direction: column;
@@ -68,8 +75,50 @@
   min-height: 0;
 }
 
+.stats-card {
+  --bs-card-bg: transparent;
+  background: linear-gradient(135deg, rgba(122, 162, 255, .16), rgba(185, 139, 255, .16));
+  color: var(--metin);
+}
+
+/* Bootstrap .bg-light koyu temada da acik kalir; metin kutularini cam zemine cevir.
+   Rozetler (Badge bg="light") renkli kart basliginda oldugu gibi kalir. */
+.bg-light:not(.badge) {
+  background-color: var(--cam-hafif) !important;
+  color: var(--metin);
+}
+
+/* ==================== LISTELER ==================== */
+
+.list-group {
+  --bs-list-group-color: var(--metin);
+  --bs-list-group-bg: transparent;
+  --bs-list-group-border-color: var(--ayrac);
+  --bs-list-group-active-color: var(--metin);
+  --bs-list-group-active-bg: var(--vurgu-zemin);
+  --bs-list-group-active-border-color: var(--ayrac);
+}
+
+.news-item, .cve-item, .k8s-item {
+  cursor: pointer;
+  transition: background-color var(--gecis), border-color var(--gecis);
+  border-left: 4px solid transparent;
+}
+
+.news-item:hover, .cve-item:hover, .k8s-item:hover {
+  background-color: rgba(255, 255, 255, .04);
+  border-left-color: var(--metin-ikincil);
+}
+
+.news-item.active, .cve-item.active, .k8s-item.active {
+  background-color: var(--vurgu-zemin);
+  border-left-color: var(--vurgu);
+}
+
+/* ==================== KAYNAK ROZETLERI ==================== */
+
 .source-badge {
-  font-size: 0.75rem;
+  font-size: .75rem;
   padding: 5px 10px;
   border-radius: 20px;
   font-weight: 600;
@@ -77,71 +126,61 @@
 
 .source-the-hacker-news { background-color: #e74c3c; color: white; }
 .source-bleeping-computer { background-color: #3498db; color: white; }
-.source-securityweek { background-color: #2ecc71; color: white; }
+.source-securityweek { background-color: #27ae60; color: white; }
 .source-dark-reading { background-color: #9b59b6; color: white; }
-.source-krebs-on-security { background-color: #f39c12; color: white; }
+.source-krebs-on-security { background-color: #d68910; color: white; }
 .source-nvd { background-color: #3498db; color: white; }
 .source-cvedetails { background-color: #e74c3c; color: white; }
-.source-rapid7 { background-color: #f39c12; color: white; }
-.source-tenable { background-color: #00b894; color: white; }
+.source-rapid7 { background-color: #d68910; color: white; }
+.source-tenable { background-color: #00a383; color: white; }
 .source-vuldb { background-color: #6c5ce7; color: white; }
 
-/* Kubernetes source badges */
+/* Kubernetes kaynak rozetleri */
 .source-k8s-blog { background-color: #326ce5; color: white; }
-.source-github-releases { background-color: #24292e; color: white; }
-.source-cncf-blog { background-color: #00aec7; color: white; }
+.source-github-releases { background-color: #3a4048; color: white; }
+.source-cncf-blog { background-color: #0090a6; color: white; }
 
-.news-item, .cve-item, .k8s-item {
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border-left: 4px solid transparent;
-}
+/* ==================== SIDDET, CVSS, KATEGORI ==================== */
 
-.news-item:hover, .cve-item:hover, .k8s-item:hover {
-  background-color: #f8f9fa;
-  border-left-color: #3498db;
-}
-
-.news-item.active, .cve-item.active, .k8s-item.active {
-  background-color: #e3f2fd;
-  border-left-color: #3498db;
-}
-
-.severity-kritik { background-color: #dc3545; color: white; }
-.severity-yuksek { background-color: #fd7e14; color: white; }
-.severity-orta { background-color: #ffc107; color: black; }
-.severity-dusuk { background-color: #28a745; color: white; }
-.severity-bilinmiyor { background-color: #6c757d; color: white; }
+/* react-bootstrap Badge varsayilan bg-primary (!important) ekler; renklerin gorunmesi icin
+   arka plan da !important. Skor olcegi tema token'lariyla ayni: kritik, yuksek, orta. */
+.severity-kritik { background: var(--kritik-gradyan) !important; color: #fff; }
+.severity-yuksek { background: var(--yuksek-gradyan) !important; color: var(--yuksek-uzeri); }
+.severity-orta { background-color: var(--orta-zemin) !important; color: var(--metin-ikincil); }
+.severity-dusuk { background-color: var(--saglikli-zemin) !important; color: var(--saglikli); }
+.severity-bilinmiyor { background-color: rgba(255, 255, 255, .1) !important; color: var(--metin-soluk); }
 
 .cvss-score {
   font-weight: bold;
   padding: 2px 8px;
   border-radius: 12px;
-  font-size: 0.9rem;
+  font-size: .9rem;
+  font-variant-numeric: tabular-nums;
 }
 
-.cvss-critical { background-color: #dc3545; color: white; }
-.cvss-high { background-color: #fd7e14; color: white; }
-.cvss-medium { background-color: #ffc107; color: black; }
-.cvss-low { background-color: #28a745; color: white; }
+.cvss-critical { background: var(--kritik-gradyan); color: #fff; }
+.cvss-high { background: var(--yuksek-gradyan); color: var(--yuksek-uzeri); }
+.cvss-medium { background-color: var(--orta-zemin); color: var(--metin-ikincil); }
+.cvss-low { background-color: var(--saglikli-zemin); color: var(--saglikli); }
 
-.stats-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+/* Kubernetes kategori rozetleri */
+.category-release { background-color: #326ce5 !important; color: white; }
+.category-security { background-color: var(--kritik-zemin) !important; color: var(--kritik-metin); }
+.category-feature { background-color: var(--saglikli-zemin) !important; color: var(--saglikli); }
+.category-ecosystem { background-color: var(--yuksek-zemin) !important; color: var(--yuksek-metin); }
+.category-blog { background-color: rgba(255, 255, 255, .1) !important; color: var(--metin-soluk); }
+
+.version-badge {
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: .85rem;
+  background-color: var(--saglikli-zemin);
+  color: var(--saglikli);
+  border: 1px solid rgba(126, 224, 195, .3);
 }
 
-.loading-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-}
+/* ==================== GECIS ==================== */
 
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -149,75 +188,25 @@
 }
 
 .fade-in {
-  animation: fadeIn 0.3s ease-in;
+  animation: fadeIn .3s ease-in;
 }
 
-/* Kubernetes category badges */
-.category-release { background-color: #326ce5; color: white; }
-.category-security { background-color: #dc3545; color: white; }
-.category-feature { background-color: #28a745; color: white; }
-.category-ecosystem { background-color: #fd7e14; color: white; }
-.category-blog { background-color: #6c757d; color: white; }
-
-.version-badge {
-  font-weight: bold;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  background-color: #e8f5e9;
-  color: #2e7d32;
-  border: 1px solid #a5d6a7;
-}
-
-/* ==================== THEME TOGGLE ICON ==================== */
-
-.theme-toggle-icon {
-  background: none;
-  border: none;
-  color: #adb5bd;
-  font-size: 1.25rem;
-  padding: 6px;
-  line-height: 1;
-  cursor: pointer;
-  border-radius: 50%;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-}
-
-.theme-toggle-icon:hover {
-  color: #ffc107;
-  background-color: rgba(255, 255, 255, 0.1);
-  transform: scale(1.15);
-}
-
-.dark-mode .theme-toggle-icon {
-  color: #ffc107;
-}
-
-.dark-mode .theme-toggle-icon:hover {
-  color: #fff;
-  background-color: rgba(255, 193, 7, 0.15);
-}
-
-/* ==================== ARTICLE CONTENT ==================== */
+/* ==================== MAKALE ICERIGI ==================== */
 
 .article-content {
-  font-size: 0.95rem;
+  font-size: .95rem;
   line-height: 1.7;
+  color: var(--metin-okuma);
 }
 
 .article-content p:last-child {
   margin-bottom: 0;
 }
 
-/* ==================== CHANGELOG STRUCTURED CONTENT ==================== */
+/* ==================== CHANGELOG (Kubernetes surum notlari) ==================== */
 
 .changelog-content {
-  font-size: 0.9rem;
+  font-size: .9rem;
 }
 
 .changelog-section {
@@ -225,23 +214,24 @@
 }
 
 .changelog-section-header {
-  font-size: 0.95rem;
+  font-size: .95rem;
   font-weight: 700;
   padding: 6px 10px;
   margin-bottom: 8px;
-  border-left: 4px solid #6c757d;
-  background-color: rgba(0, 0, 0, 0.03);
+  border-left: 4px solid var(--metin-soluk);
+  background-color: var(--cam-hafif);
+  color: var(--metin);
   border-radius: 0 4px 4px 0;
   display: flex;
   align-items: center;
 }
 
 .changelog-count-badge {
-  font-size: 0.7rem;
+  font-size: .7rem;
   padding: 1px 6px;
   border-radius: 10px;
-  background-color: rgba(0, 0, 0, 0.08) !important;
-  color: #6c757d !important;
+  background-color: rgba(255, 255, 255, .06) !important;
+  color: var(--metin-soluk) !important;
   font-weight: 600;
 }
 
@@ -253,8 +243,8 @@
 
 .changelog-item {
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  font-size: 0.88rem;
+  border-bottom: 1px solid var(--ayrac);
+  font-size: .88rem;
 }
 
 .changelog-item:last-child {
@@ -262,21 +252,21 @@
 }
 
 .changelog-desc {
-  color: #2c3e50;
+  color: var(--metin-okuma);
   line-height: 1.6;
 }
 
 .changelog-code {
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  font-size: .82rem;
   padding: 1px 5px;
-  background-color: rgba(27, 31, 35, 0.05);
+  background-color: rgba(255, 255, 255, .06);
   border-radius: 3px;
-  color: #e83e8c;
+  color: var(--yuksek-metin);
 }
 
 .changelog-meta {
-  font-size: 0.78rem;
+  font-size: .78rem;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -284,301 +274,48 @@
 }
 
 .changelog-pr-link {
-  color: #0366d6;
+  color: var(--metin-ikincil);
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.78rem;
+  font-size: .78rem;
 }
 
 .changelog-pr-link:hover {
   text-decoration: underline;
-  color: #0056b3;
+  color: var(--metin);
 }
 
 .changelog-author {
-  color: #6a737d;
+  color: var(--metin-soluk);
   font-style: italic;
-  font-size: 0.78rem;
+  font-size: .78rem;
 }
 
 .changelog-sig-badge {
-  font-size: 0.68rem !important;
+  font-size: .68rem !important;
   padding: 1px 6px !important;
   border-radius: 8px !important;
-  background-color: #e1ecf4 !important;
-  color: #39739d !important;
+  background-color: var(--vurgu-zemin) !important;
+  color: var(--metin-ikincil) !important;
   font-weight: 600;
-  border: 1px solid #c8dae8 !important;
+  border: 1px solid rgba(122, 162, 255, .25) !important;
 }
 
-/* ==================== DARK MODE ==================== */
+/* ==================== KAYDIRMA CUBUGU ==================== */
 
-.dark-mode {
-  background-color: #0a0a0f !important;
-  color: #d8d8e0;
-}
-
-.dark-mode .navbar {
-  background: linear-gradient(135deg, #0d0d14 0%, #111118 100%) !important;
-  border-bottom: 1px solid #1a1a24;
-}
-
-/* Cards */
-.dark-mode .card {
-  background-color: #111118;
-  color: #d8d8e0;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-  border: 1px solid #1a1a24;
-}
-
-.dark-mode .card:hover {
-  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
-}
-
-.dark-mode .panel-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-}
-
-.dark-mode .card-header {
-  border-bottom-color: #1a1a24;
-}
-
-.dark-mode .card-body {
-  color: #d8d8e0;
-}
-
-.dark-mode .card-text {
-  color: #a0a0b0;
-}
-
-/* List items */
-.dark-mode .list-group-item {
-  background-color: #111118;
-  color: #d8d8e0;
-  border-color: #1a1a24;
-}
-
-.dark-mode .news-item:hover,
-.dark-mode .cve-item:hover,
-.dark-mode .k8s-item:hover {
-  background-color: #161620 !important;
-}
-
-.dark-mode .news-item.active,
-.dark-mode .cve-item.active,
-.dark-mode .k8s-item.active {
-  background-color: #141428 !important;
-  border-left-color: #4fc3f7;
-}
-
-/* Text */
-.dark-mode .text-muted {
-  color: #707088 !important;
-}
-
-.dark-mode h1, .dark-mode h2, .dark-mode h3,
-.dark-mode h4, .dark-mode h5, .dark-mode h6 {
-  color: #e4e4f0;
-}
-
-.dark-mode p {
-  color: #b8b8c8;
-}
-
-.dark-mode .lead {
-  color: #a0a8b8;
-}
-
-/* Background light overrides */
-.dark-mode .bg-light {
-  background-color: #0e0e16 !important;
-  color: #c8c8d8;
-}
-
-/* Form controls */
-.dark-mode .form-control,
-.dark-mode .form-select {
-  background-color: #141420;
-  color: #d8d8e0;
-  border-color: #222230;
-}
-
-.dark-mode .form-control:focus,
-.dark-mode .form-select:focus {
-  background-color: #181828;
-  color: #d8d8e0;
-  border-color: #4fc3f7;
-  box-shadow: 0 0 0 0.2rem rgba(79, 195, 247, 0.15);
-}
-
-.dark-mode .form-check-label {
-  color: #c8c8d8;
-}
-
-.dark-mode .form-label {
-  color: #c8c8d8;
-}
-
-/* Stats card - keep gradient but darker */
-.dark-mode .stats-card {
-  background: linear-gradient(135deg, #1a1040 0%, #241040 100%);
-}
-
-/* Buttons */
-.dark-mode .btn-outline-danger {
-  color: #ff6b6b;
-  border-color: #ff6b6b;
-}
-
-.dark-mode .btn-outline-info {
-  color: #7ea8c4;
-  border-color: #7ea8c4;
-}
-
-.dark-mode .bg-info {
-  background-color: #3d6480 !important;
-}
-
-.dark-mode .btn-outline-secondary {
-  color: #adb5bd;
-  border-color: #6c757d;
-}
-
-.dark-mode .btn-outline-secondary:hover {
-  background-color: #6c757d;
-  color: #fff;
-}
-
-.dark-mode .btn-outline-warning {
-  color: #ffc107;
-  border-color: #ffc107;
-}
-
-.dark-mode .btn-outline-warning:hover {
-  background-color: #ffc107;
-  color: #212529;
-}
-
-.dark-mode .btn-outline-primary {
-  color: #6ea8fe;
-  border-color: #6ea8fe;
-}
-
-.dark-mode .btn-outline-primary:hover {
-  background-color: #6ea8fe;
-  color: #212529;
-}
-
-/* Scrollbar */
-.dark-mode ::-webkit-scrollbar {
+::-webkit-scrollbar {
   width: 8px;
 }
 
-.dark-mode ::-webkit-scrollbar-track {
-  background: #0a0a0f;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.dark-mode ::-webkit-scrollbar-thumb {
-  background: #222230;
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .12);
   border-radius: 4px;
 }
 
-.dark-mode ::-webkit-scrollbar-thumb:hover {
-  background: #2a2a3a;
-}
-
-/* Modal */
-.dark-mode .modal-content {
-  background-color: #111118;
-  color: #d8d8e0;
-  border: 1px solid #1a1a24;
-}
-
-/* Alert */
-.dark-mode .alert {
-  border: none;
-}
-
-/* Version badge dark mode */
-.dark-mode .version-badge {
-  background-color: #0e1e14;
-  color: #66bb6a;
-  border-color: #1a3020;
-}
-
-/* Article content dark mode */
-.dark-mode .article-content {
-  background-color: #0e0e16 !important;
-  color: #c8c8d8;
-}
-
-.dark-mode .article-content p {
-  color: #c8c8d8;
-}
-
-/* Changelog dark mode */
-.dark-mode .changelog-section-header {
-  background-color: rgba(255, 255, 255, 0.02);
-  color: #d8d8e0;
-}
-
-.dark-mode .changelog-count-badge {
-  background-color: rgba(255, 255, 255, 0.06) !important;
-  color: #8890a0 !important;
-}
-
-.dark-mode .changelog-item {
-  border-bottom-color: rgba(255, 255, 255, 0.04);
-}
-
-.dark-mode .changelog-desc {
-  color: #b8c0d0;
-}
-
-.dark-mode .changelog-code {
-  background-color: rgba(255, 255, 255, 0.05);
-  color: #f78166;
-}
-
-.dark-mode .changelog-pr-link {
-  color: #58a6ff;
-}
-
-.dark-mode .changelog-pr-link:hover {
-  color: #79b8ff;
-}
-
-.dark-mode .changelog-author {
-  color: #707888;
-}
-
-.dark-mode .changelog-sig-badge {
-  background-color: #101828 !important;
-  color: #58a6ff !important;
-  border-color: #1a2438 !important;
-}
-
-/* Home page cards */
-.dark-mode .shadow-sm {
-  box-shadow: 0 2px 10px rgba(0,0,0,0.6) !important;
-}
-
-/* Badge overrides */
-.dark-mode .badge.bg-light {
-  background-color: #1a1a24 !important;
-  color: #c8c8d8 !important;
-}
-
-.dark-mode .border {
-  border-color: #1a1a24 !important;
-}
-
-/* CVSS score dark mode */
-.dark-mode .cvss-score {
-  opacity: 0.95;
-}
-
-/* Severity badges - ensure visibility in dark mode */
-.dark-mode .severity-orta {
-  color: #212529;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, .2);
 }
