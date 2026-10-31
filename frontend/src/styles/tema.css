@@ -985,6 +985,282 @@ body {
   }
 }
 
+/* ==================== BOLUM SAYFALARI ==================== */
+
+/* Bolum sayfasi duzeni (spec G4, CVEComponent): sayfa basligi, kompakt filtre/eylem cubugu,
+   tam genislikte liste; detay okuma panelinde. */
+.bolum-sayfasi {
+  padding-bottom: 24px;
+}
+
+.sayfa-kafa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 20px;
+  margin-bottom: 14px;
+}
+
+.sayfa-baslik {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -.2px;
+}
+
+.veritabani-ozeti {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 12px;
+  color: var(--metin-soluk);
+}
+
+.siddet-dagilimi {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.siddet-dagilimi .rozet + .rozet {
+  margin-left: 0;
+}
+
+.filtre-cubugu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.filtre-gruplari,
+.eylem-gruplari {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.filtre-grubu {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.filtre-etiketi {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--metin-soluk);
+}
+
+.filtre-cubugu .cubuk-secim {
+  width: auto;
+  border-color: var(--cam-kenar);
+  background-color: var(--cam);
+  color: var(--metin);
+  font-size: 12.5px;
+}
+
+.filtre-cubugu .cubuk-secim option {
+  background-color: var(--yuzey-yukseltilmis);
+}
+
+/* Cubuk dugmeleri (Dropdown.Toggle'daki .btn dahil) cam gorunumu alir */
+.filtre-cubugu .cubuk-dugme {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--cam-kenar);
+  border-radius: var(--yaricap-kutu);
+  background: var(--cam);
+  color: var(--metin-ikincil);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  transition: background-color var(--gecis), border-color var(--gecis);
+}
+
+.filtre-cubugu .cubuk-dugme:hover:not(:disabled),
+.filtre-cubugu .cubuk-dugme.show {
+  border-color: rgba(122, 162, 255, .35);
+  background: var(--vurgu-zemin);
+  color: var(--metin);
+}
+
+.filtre-cubugu .cubuk-dugme:disabled {
+  opacity: .6;
+}
+
+.filtre-cubugu .cubuk-dugme.tehlike {
+  color: var(--kritik-metin);
+}
+
+.filtre-cubugu .cubuk-dugme.tehlike:hover:not(:disabled) {
+  border-color: rgba(255, 93, 143, .4);
+  background: var(--kritik-zemin);
+  color: var(--kritik-metin);
+}
+
+/* Birincil eylem (Cek): vurgu gradyani, koyu metin */
+.filtre-cubugu .cubuk-dugme.birincil {
+  border-color: transparent;
+  background: var(--vurgu-gradyan);
+  color: var(--zemin-taban);
+  font-weight: 600;
+}
+
+.filtre-cubugu .cubuk-dugme.birincil:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--vurgu-gradyan);
+  color: var(--zemin-taban);
+  filter: brightness(1.08);
+}
+
+.filtre-cubugu .cubuk-dugme:focus-visible,
+.siddet-dugmesi:focus-visible,
+.filtre-cubugu .cubuk-secim:focus-visible {
+  outline: 2px solid var(--vurgu);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.kaynak-menusu {
+  --bs-dropdown-bg: var(--yuzey-yukseltilmis);
+  --bs-dropdown-border-color: var(--cam-kenar);
+  --bs-dropdown-color: var(--metin);
+  min-width: 250px;
+  padding: 8px 12px;
+}
+
+.kaynak-secenegi {
+  margin: 0;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.kaynak-secenegi .form-check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font-size: 13px;
+}
+
+.kaynak-secenegi svg {
+  flex: none;
+  color: var(--metin-soluk);
+}
+
+.kaynak-adi {
+  flex: 1;
+}
+
+.kaynak-sayisi {
+  font-size: 11.5px;
+  color: var(--metin-soluk);
+  font-variant-numeric: tabular-nums;
+}
+
+.kaynak-diger {
+  margin: 6px 0 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ayrac);
+  font-size: 11.5px;
+  color: var(--metin-soluk);
+}
+
+/* CVSS siddet filtresi: bitisik dugme grubu; secili dugme skor rengini alir */
+.siddet-secici {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--cam-kenar);
+  border-radius: var(--yaricap-kutu);
+}
+
+.siddet-dugmesi {
+  padding: 5px 11px;
+  border: 0;
+  border-left: 1px solid var(--cam-kenar);
+  background: var(--cam);
+  color: var(--metin-soluk);
+  font-size: 12.5px;
+  line-height: 1.5;
+  transition: background-color var(--gecis), color var(--gecis);
+}
+
+.siddet-dugmesi:first-child {
+  border-left: 0;
+}
+
+.siddet-dugmesi:hover {
+  background: rgba(255, 255, 255, .08);
+  color: var(--metin);
+}
+
+.siddet-dugmesi.secili {
+  font-weight: 600;
+  background: var(--vurgu-zemin);
+  color: var(--metin);
+}
+
+.siddet-dugmesi.secili.critical {
+  background: var(--kritik-gradyan);
+  color: var(--kritik-uzeri);
+}
+
+.siddet-dugmesi.secili.high {
+  background: var(--yuksek-gradyan);
+  color: var(--yuksek-uzeri);
+}
+
+.siddet-dugmesi.secili.medium {
+  background: var(--orta-zemin);
+  color: var(--metin-ikincil);
+}
+
+.siddet-dugmesi.secili.low {
+  background: var(--saglikli-zemin);
+  color: var(--saglikli);
+}
+
+.liste-sayaci {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--metin-soluk);
+  font-variant-numeric: tabular-nums;
+}
+
+.liste-bos {
+  margin: 0;
+  padding: 40px 16px;
+  border: 1px dashed var(--cam-kenar);
+  border-radius: var(--yaricap-kart);
+  font-size: 14px;
+  text-align: center;
+  color: var(--metin-soluk);
+}
+
+@media (max-width: 767.98px) {
+  .filtre-cubugu,
+  .filtre-gruplari,
+  .eylem-gruplari {
+    justify-content: flex-start;
+  }
+
+  .siddet-secici {
+    flex-wrap: wrap;
+  }
+}
+
 /* ==================== HAREKET AZALTMA ==================== */
 
 /* Kullanici hareket azaltma istediyse butun animasyon ve gecisler durur

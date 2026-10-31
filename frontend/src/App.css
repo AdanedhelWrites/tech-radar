@@ -139,8 +139,9 @@
 /* ==================== SIDDET, CVSS, KATEGORI ==================== */
 
 /* react-bootstrap Badge varsayilan bg-primary (!important) ekler; renklerin gorunmesi icin
-   arka plan da !important. Skor olcegi tema token'lariyla ayni: kritik, yuksek, orta. */
-.severity-kritik { background: var(--kritik-gradyan) !important; color: #fff; }
+   arka plan da !important. Skor olcegi tema token'lariyla ayni: kritik, yuksek, orta.
+   Kritik/yuksek gradyan uzerinde koyu metin: .skor-kutusu ile ayni kontrast (karar R6, R11). */
+.severity-kritik { background: var(--kritik-gradyan) !important; color: var(--kritik-uzeri); }
 .severity-yuksek { background: var(--yuksek-gradyan) !important; color: var(--yuksek-uzeri); }
 .severity-orta { background-color: var(--orta-zemin) !important; color: var(--metin-ikincil); }
 .severity-dusuk { background-color: var(--saglikli-zemin) !important; color: var(--saglikli); }
@@ -154,7 +155,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.cvss-critical { background: var(--kritik-gradyan); color: #fff; }
+.cvss-critical { background: var(--kritik-gradyan); color: var(--kritik-uzeri); }
 .cvss-high { background: var(--yuksek-gradyan); color: var(--yuksek-uzeri); }
 .cvss-medium { background-color: var(--orta-zemin); color: var(--metin-ikincil); }
 .cvss-low { background-color: var(--saglikli-zemin); color: var(--saglikli); }
