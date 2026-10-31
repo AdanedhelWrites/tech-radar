@@ -3,10 +3,17 @@ import { kevOnekiAyir } from './okuma'
 import { cveListeBasligi } from './cve'
 
 // Ceviri KEV onekini de Turkceye cevirir ("2026-10-20 tarihinde CISA KEV kataloguna eklendi; ... ."),
-// Ingilizce regex onu tanimaz. Yalniz orijinalde onek bulunduysa, metnin basindaki ve "CISA KEV katalog"
-// geciren ilk cumle (en fazla 200 karakter) atilir. Tarihler "14.10.2026" bicimindeyse noktadan sonra
-// bosluk gelmedigi icin cumle sonu sayilmaz.
-const TR_KEV_ONEK = /^[^\n]{0,200}?CISA KEV katalo[gğ][^\n]{0,200}?\.(?:\s+|$)/i
+// Ingilizce regex onu tanimaz. Yalniz orijinalde onek bulunduysa ve metnin ILK cumlesi hem "CISA KEV
+// katalog" hem bir tarih iceriyorsa o cumle atilir; sonraki cumlelere hic dokunulmaz. Cumle sonu =
+// ardindan bosluk ya da metin sonu gelen nokta; "14.10.2026" gibi tarihlerdeki noktalar sayilmaz.
+const ILK_CUMLE = /^[^\n]{0,250}?\.(?:\s+|$)/
+const KEV_ANMA = /CISA KEV katalo[gğ]/i
+const TARIH = /\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4}|\d{1,2} (?:Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık) \d{4}/i
+
+const trKevOnekiAt = (govde) => {
+  const cumle = ILK_CUMLE.exec(govde)?.[0]
+  return cumle && KEV_ANMA.test(cumle) && TARIH.test(cumle) ? govde.slice(cumle.length) : govde
+}
 
 const KATEGORI = { release: 'Sürüm', security: 'Güvenlik', feature: 'Özellik', ecosystem: 'Ekosistem', blog: 'Blog' }
 const KAYIT_TURU = { release: 'Sürüm', blog: 'Blog', news: 'Haber' }
@@ -33,7 +40,7 @@ const kayitIskeleti = (kayit) => ({
 export const cveOkumaKaydi = (cve) => {
   const orijinal = kevOnekiAyir(metin(cve?.original_description))
   const tr = kevOnekiAyir(metin(cve?.turkish_description))
-  const trGovde = !tr.kevEklenme && orijinal.kevEklenme ? tr.govde.replace(TR_KEV_ONEK, '') : tr.govde
+  const trGovde = !tr.kevEklenme && orijinal.kevEklenme ? trKevOnekiAt(tr.govde) : tr.govde
   const onek = orijinal.kevEklenme ? orijinal : tr
   const kevEklenme = cve?.kev_added_date || onek.kevEklenme
   const kevMeta = kevEklenme ? { kevEklenme, sonTarih: onek.sonTarih } : null

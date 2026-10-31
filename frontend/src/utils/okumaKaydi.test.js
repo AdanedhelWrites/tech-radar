@@ -57,8 +57,20 @@ describe('cveOkumaKaydi', () => {
     "2026-10-30'da CISA KEV kataloguna eklendi; 2026-11-02 nedeniyle gerekli eylem. Gövde metni burada.",
     '14.10.2026 tarihinde CISA KEV kataloğuna eklenmiştir; 17.10.2026 tarihine kadar yapılması gereken eylem zorunludur. Gövde metni burada.',
     "2026-10-13 tarihinde CISA KEV kataloguna eklenmiştir; 2026-10-16 tarihine kadar gerekli aksiyonun alınması gerekmektedir. Gövde metni burada.",
+    '20 Ekim 2026 tarihinde CISA KEV kataloğuna eklendi. Gövde metni burada.',
   ])('cevrilmis kev oneki turkce govdeden ayrilir: %s', (tr) => {
     expect(cveOkumaKaydi(kevCve({ turkish_description: tr })).govdeTr).toBe('Gövde metni burada.')
+  })
+
+  it.each([
+    // KEV anmasi ilk cumlede degil: sonraki cumleler silinmez
+    'Zafiyet uzaktan kod çalıştırmaya izin verir. Saldırganlar aktif olarak istismar eder. CISA KEV kataloğuna eklenmiştir. Yamayı uygulayın.',
+    // ilk cumle KEV'i anar ama tarih yok: cevrilmis onek degil
+    'Bu açık CISA KEV kataloğunda listelenir. Yamayı uygulayın.',
+    // govde tamamen silinip kayit "cevrilmedi" durumuna dusmemeli
+    'Bir komut enjeksiyonu zafiyeti. CISA KEV katalogu referans alınmalıdır.',
+  ])('onek olmayan turkce cumleye dokunulmaz: %s', (tr) => {
+    expect(cveOkumaKaydi(kevCve({ turkish_description: tr })).govdeTr).toBe(tr)
   })
 
   it('orijinalde kev oneki yoksa turkce govdeye dokunulmaz', () => {
