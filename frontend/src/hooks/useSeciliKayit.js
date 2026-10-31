@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 // Bolum sayfalarinda okuma panelinde acik kayit (spec 2026-10-31 §6): secim ?kayit=<id> sorgu
@@ -10,8 +10,12 @@ const PARAMETRE = 'kayit'
 
 export default function useSeciliKayit(kayitlar) {
   const [parametreler, setParametreler] = useSearchParams()
-  const { state } = useLocation()
+  const { state, key } = useLocation()
   const navigate = useNavigate()
+  // Kapatilan gecmis girisinin anahtari: Offcanvas onHide, popstate islenmeden iki kez gelebilir
+  // (Esc + kapat dugmesi); ikinci cagri ikinci kez geri gidip sayfadan cikmamali (karar R12).
+  // Her secim yeni bir giris (yeni anahtar) acar, boylece ayni kayit yeniden acilip kapatilabilir.
+  const kapatilanGiris = useRef(null)
 
   const deger = parametreler.get(PARAMETRE)
   const id = deger ? Number(deger) : NaN
@@ -29,6 +33,8 @@ export default function useSeciliKayit(kayitlar) {
   }, [setParametreler, parametreler, state])
 
   const kapat = useCallback(() => {
+    if (!parametreler.has(PARAMETRE) || kapatilanGiris.current === key) return
+    kapatilanGiris.current = key
     // Panel bu sayfadan acildiysa onceki giris ayni sayfanin panelsiz hali: geri gidilir, boylece
     // geri tusu paneli yeniden acmaz. Paylasilan adresle gelindiyse parametre yerinde silinir.
     if (state?.panelAcildi) {
@@ -40,7 +46,7 @@ export default function useSeciliKayit(kayitlar) {
       sonraki.delete(PARAMETRE)
       return sonraki
     }, { replace: true })
-  }, [state, navigate, setParametreler])
+  }, [parametreler, key, state, navigate, setParametreler])
 
   return { secili, sec, kapat }
 }

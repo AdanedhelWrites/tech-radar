@@ -61,6 +61,31 @@ describe('useSeciliKayit', () => {
     expect(result.current.konum.key).toBe('default')
   })
 
+  it('art arda iki kapat cagrisi bir kez geri gider', () => {
+    // Offcanvas onHide, popstate islenmeden iki kez gelebilir (Esc + kapat dugmesi)
+    const { result } = kur('/onceki')
+    act(() => result.current.git('/cve'))
+    act(() => result.current.sec(7))
+    act(() => {
+      result.current.kapat()
+      result.current.kapat()
+    })
+    expect(result.current.konum.pathname).toBe('/cve')
+    expect(result.current.konum.search).toBe('')
+    // Ayni kayit yeniden acilip kapatilabilir
+    act(() => result.current.sec(7))
+    act(() => result.current.kapat())
+    expect(result.current.konum.pathname).toBe('/cve')
+    expect(result.current.konum.search).toBe('')
+  })
+
+  it('panel kapaliyken kapat bir sey yapmaz', () => {
+    const { result } = kur('/onceki')
+    act(() => result.current.git('/cve'))
+    act(() => result.current.kapat())
+    expect(result.current.konum.pathname).toBe('/cve')
+  })
+
   it('paylasilan adreste kapat parametreyi yerinde siler', () => {
     const { result } = kur('/cve?kayit=7')
     act(() => result.current.kapat())

@@ -1,42 +1,38 @@
 import toast from 'react-hot-toast';
 import { useState, useEffect } from 'react'
-import {
-  Container, Row, Col, Card, Button, Form,
-  Badge, Spinner, Alert, Modal
-} from 'react-bootstrap'
+import { Alert } from 'react-bootstrap'
 import useAraliklaYenile from '../hooks/useAraliklaYenile'
 import { kacis, guvenliHref } from '../utils/html'
-import CeviriEtiketi from './CeviriEtiketi'
-import {
-  FaDownload, FaSync, FaTrash, FaFileExport,
-  FaChartBar, FaCogs, FaExternalLinkAlt,
-  FaDatabase, FaStream, FaHdd, FaLeaf,
-  FaEnvelope, FaSearch, FaBolt, FaGraduationCap,
-  FaToolbox, FaTag, FaRobot, FaProjectDiagram, FaChartLine,
-  FaGitlab, FaKey
-} from 'react-icons/fa'
+import { KAYIT_TURU } from '../utils/okumaKaydi'
+import BolumSayfasi, { BolumCubugu } from './bolum/BolumSayfasi'
+import { FaDatabase, FaStream, FaHdd, FaLeaf, FaEnvelope, FaSearch, FaBolt, FaGraduationCap,
+  FaRobot, FaProjectDiagram, FaChartLine, FaGitlab, FaKey } from 'react-icons/fa'
 import { devtoolsApi, istekHataMesaji } from '../services/api'
+
+// DevTools sayfasi (spec 2026-10-31 G4): gorunum bolum/BolumSayfasi'nda, veri ve eylemler burada.
+// Surum ve kayit turu (release/blog/news) satirda ve panelde bilgi rozeti; tur dagilimi baslikta.
 
 const sources = [
   // 2026-10-14: MinIO cikarildi (ust kaynak Ekim 2025'ten beri surum yayinlamiyor)
-  { id: 'dt_source2', name: 'Seq', value: 'Seq', icon: FaStream, color: '#5b86a7' },
-  { id: 'dt_source3', name: 'Ceph', value: 'Ceph', icon: FaHdd, color: '#ef5350' },
-  { id: 'dt_source4', name: 'MongoDB', value: 'MongoDB', icon: FaLeaf, color: '#4db33d' },
-  { id: 'dt_source5', name: 'PostgreSQL', value: 'PostgreSQL', icon: FaDatabase, color: '#336791' },
-  { id: 'dt_source6', name: 'RabbitMQ', value: 'RabbitMQ', icon: FaEnvelope, color: '#ff6600' },
-  { id: 'dt_source7', name: 'Elastic', value: 'Elastic', icon: FaSearch, color: '#fed10a' },
-  { id: 'dt_source8', name: 'Redis', value: 'Redis', icon: FaBolt, color: '#dc382d' },
-  { id: 'dt_source9', name: 'Moodle', value: 'Moodle', icon: FaGraduationCap, color: '#f98012' },
-  { id: 'dt_source10', name: 'LiteLLM', value: 'LiteLLM', icon: FaRobot, color: '#6c5ce7' },
-  { id: 'dt_source11', name: 'LangGraph', value: 'LangGraph', icon: FaProjectDiagram, color: '#1c3c3c' },
-  { id: 'dt_source12', name: 'Langfuse', value: 'Langfuse', icon: FaChartLine, color: '#0a60ff' },
-  { id: 'dt_source13', name: 'GitLab', value: 'GitLab', icon: FaGitlab, color: '#fc6d26' },
-  { id: 'dt_source14', name: 'Keycloak', value: 'Keycloak', icon: FaKey, color: '#4d9de0' },
+  { id: 'dt_source2', name: 'Seq', value: 'Seq', icon: FaStream },
+  { id: 'dt_source3', name: 'Ceph', value: 'Ceph', icon: FaHdd },
+  { id: 'dt_source4', name: 'MongoDB', value: 'MongoDB', icon: FaLeaf },
+  { id: 'dt_source5', name: 'PostgreSQL', value: 'PostgreSQL', icon: FaDatabase },
+  { id: 'dt_source6', name: 'RabbitMQ', value: 'RabbitMQ', icon: FaEnvelope },
+  { id: 'dt_source7', name: 'Elastic', value: 'Elastic', icon: FaSearch },
+  { id: 'dt_source8', name: 'Redis', value: 'Redis', icon: FaBolt },
+  { id: 'dt_source9', name: 'Moodle', value: 'Moodle', icon: FaGraduationCap },
+  { id: 'dt_source10', name: 'LiteLLM', value: 'LiteLLM', icon: FaRobot },
+  { id: 'dt_source11', name: 'LangGraph', value: 'LangGraph', icon: FaProjectDiagram },
+  { id: 'dt_source12', name: 'Langfuse', value: 'Langfuse', icon: FaChartLine },
+  { id: 'dt_source13', name: 'GitLab', value: 'GitLab', icon: FaGitlab },
+  { id: 'dt_source14', name: 'Keycloak', value: 'Keycloak', icon: FaKey },
 ]
+
+const GUN_SECENEKLERI = [1, 3, 7, 14, 21, 30, 45, 60]
 
 function DevToolsComponent() {
   const [entries, setEntries] = useState([])
-  const [selectedEntry, setSelectedEntry] = useState(null)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState(null)
@@ -53,7 +49,6 @@ function DevToolsComponent() {
 
   // Sekme arka plandayken durur (hooks/useAraliklaYenile)
   useAraliklaYenile(() => loadEntries(true), 5000)
-
 
   useEffect(() => {
     loadEntries()
@@ -100,7 +95,6 @@ function DevToolsComponent() {
       setFetching(true)
       setError(null)
 
-
       const response = await devtoolsApi.fetchDevTools({
         days: parseInt(days),
         sources: activeSources
@@ -124,8 +118,8 @@ function DevToolsComponent() {
 
     try {
       await devtoolsApi.clearCache()
+      // Liste bosalinca acik kayit cozulemez, panel kendiliginden kapanir
       setEntries([])
-      setSelectedEntry(null)
       loadStats()
       toast.success("Veriler başarıyla temizlendi", { icon: "🗑️" })
     } catch (err) {
@@ -197,271 +191,36 @@ ${items.map(item => {
     }))
   }
 
-  const getSourceIcon = (sourceName) => {
-    const found = sources.find(s => s.value === sourceName)
-    if (found) {
-      const IconComp = found.icon
-      return <IconComp className="me-1" size={12} />
-    }
-    return null
-  }
-
-  const getSourceColor = (sourceName) => {
-    const found = sources.find(s => s.value === sourceName)
-    return found ? found.color : '#95a5a6'
-  }
+  const turDagilimi = Object.entries(stats.by_type || {}).map(([tur, count]) => [KAYIT_TURU[tur] || tur, count])
 
   return (
-    <Container fluid>
-      <Row>
-        {/* Sol Panel - Kontroller */}
-        <Col md={3}>
-          <Card className="mb-4">
-            <Card.Header className="bg-primary text-white">
-              <h5 className="mb-0"><FaCogs className="me-2" />Kontroller</h5>
-            </Card.Header>
-            <Card.Body>
-              <Form.Group className="mb-4">
-                <Form.Label className="fw-bold">Kaç Günlük Güncelleme?</Form.Label>
-                <Form.Range
-                  min={1}
-                  max={60}
-                  value={days}
-                  onChange={(e) => setDays(e.target.value)}
-                />
-                <div className="text-center">
-                  <Badge bg="secondary" className="fs-6">{days} Gün</Badge>
-                </div>
-              </Form.Group>
-
-              <Form.Group className="mb-4">
-                <Form.Label className="fw-bold">Araç Kaynakları</Form.Label>
-                {sources.map(source => {
-                  const IconComp = source.icon
-                  return (
-                    <Form.Check
-                      key={source.id}
-                      type="checkbox"
-                      id={source.id}
-                      checked={selectedSources[source.value]}
-                      onChange={() => toggleSource(source.value)}
-                      label={
-                        <span className="d-flex align-items-center gap-2">
-                          <IconComp style={{ color: source.color }} />
-                          {source.name}
-                        </span>
-                      }
-                    />
-                  )
-                })}
-              </Form.Group>
-
-              <Button
-                variant="primary"
-                className="w-100 mb-2"
-                onClick={handleFetchDevTools}
-                disabled={fetching}
-              >
-                {fetching ? (
-                  <><Spinner size="sm" className="me-2" />Getiriliyor...</>
-                ) : (
-                  <><FaDownload className="me-2" />Güncellemeleri Getir</>
-                )}
-              </Button>
-
-              <Button
-                variant="outline-secondary"
-                className="w-100 mb-2"
-                onClick={() => loadEntries()}
-                disabled={loading}
-              >
-                <FaSync className="me-2" />Yenile
-              </Button>
-
-              <div className="d-flex gap-2">
-                <Button
-                  variant="outline-danger"
-                  className="flex-fill"
-                  size="sm"
-                  onClick={handleClearCache}
-                  title="Tüm DevTools güncellemelerini sil ve sıfırla"
-                >
-                  <FaTrash className="me-1" />Sıfırla
-                </Button>
-
-                <Button
-                  variant="outline-warning"
-                  className="flex-fill"
-                  size="sm"
-                  onClick={handleExport}
-                  title="DevTools güncellemelerini HTML rapor olarak indir"
-                >
-                  <FaFileExport className="me-1" />İndir
-                </Button>
-              </div>
-            </Card.Body>
-          </Card>
-
-          <Card className="stats-card">
-            <Card.Body>
-              <h5 className="card-title"><FaChartBar className="me-2" />İstatistikler</h5>
-              <div className="mt-3">
-                <div className="d-flex justify-content-between mb-2">
-                  <span>Toplam Güncelleme:</span>
-                  <span className="fw-bold fs-5">{stats.total}</span>
-                </div>
-                <div className="d-flex justify-content-between mb-2">
-                  <span>Son Güncelleme:</span>
-                  <span className="fw-bold">
-                    {stats.last_update
-                      ? new Date(stats.last_update).toLocaleString('tr-TR')
-                      : '-'}
-                  </span>
-                </div>
-                <div className="mt-3">
-                  <small><strong>Kaynaklar:</strong></small><br />
-                  {Object.entries(stats.by_source).map(([source, count]) => (
-                    <div key={source} className="d-flex justify-content-between mt-1">
-                      <span>{source}:</span>
-                      <span className="fw-bold">{count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-
-        {/* Orta Panel - Güncelleme Listesi */}
-        <Col md={5}>
-          <Card className="panel-card" style={{ height: 'calc(100vh - 150px)' }}>
-            <Card.Header className="bg-info text-white d-flex justify-content-between align-items-center">
-              <h5 className="mb-0"><FaToolbox className="me-2" />DevTools Güncellemeleri</h5>
-              <Badge bg="light" text="dark">{entries.length} güncelleme</Badge>
-            </Card.Header>
-            <Card.Body className="p-0">
-              {loading ? (
-                <div className="text-center p-5">
-                  <Spinner animation="border" />
-                  <p className="mt-3">DevTools güncellemeleri yükleniyor...</p>
-                </div>
-              ) : entries.length === 0 ? (
-                <div className="text-center p-5 text-muted">
-                  <FaToolbox size={48} className="mb-3" />
-                  <p>Güncelleme listesi boş.<br />"Güncellemeleri Getir" butonuna basın.</p>
-                </div>
-              ) : (
-                <div className="list-group list-group-flush">
-                  {entries.map((item, index) => (
-                    <div
-                      key={index}
-                      className={`list-group-item news-item p-3 ${selectedEntry === item ? 'active' : ''}`}
-                      onClick={() => setSelectedEntry(item)}
-                    >
-                      <div className="d-flex w-100 justify-content-between mb-2">
-                        <div className="d-flex align-items-center gap-1">
-                          <span
-                            className="badge rounded-pill text-white"
-                            style={{ backgroundColor: getSourceColor(item.source) }}
-                          >
-                            {getSourceIcon(item.source)}{item.source}
-                          </span>
-                          {item.version && (
-                            <span className="badge rounded-pill bg-success">
-                              <FaTag className="me-1" size={9} />{item.version}
-                            </span>
-                          )}
-                        </div>
-                        <small className="text-muted">{item.published_date}</small>
-                      </div>
-                      <h6 className="mb-1 fw-bold">
-                        {item.turkish_title?.length > 80
-                          ? item.turkish_title.substring(0, 80) + '...'
-                          : item.turkish_title || item.original_title}
-                      </h6>
-                      <CeviriEtiketi kayit={item} className="mt-1" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-
-        {/* Sag Panel - Detaylar */}
-        <Col md={4}>
-          <Card className="panel-card" style={{ height: 'calc(100vh - 150px)' }}>
-            <Card.Header className="bg-secondary text-white">
-              <h5 className="mb-0"><FaToolbox className="me-2" />Güncelleme Detayları</h5>
-            </Card.Header>
-            <Card.Body>
-              {!selectedEntry ? (
-                <div className="text-center p-5 text-muted">
-                  <FaToolbox size={48} className="mb-3" />
-                  <p>Detayları görmek için<br />listeden bir güncelleme seçin.</p>
-                </div>
-              ) : (
-                <div className="fade-in">
-                  <div
-                    className="p-2 text-white mb-3 rounded d-flex justify-content-between align-items-center"
-                    style={{ backgroundColor: getSourceColor(selectedEntry.source) }}
-                  >
-                    <small><FaToolbox className="me-2" />{selectedEntry.source}</small>
-                    <small>{selectedEntry.published_date}</small>
-                  </div>
-
-                  {selectedEntry.version && (
-                    <div className="mb-2">
-                      <Badge bg="success" className="me-2">
-                        <FaTag className="me-1" />{selectedEntry.version}
-                      </Badge>
-                      <Badge bg="info">
-                        {selectedEntry.entry_type === 'release' ? 'Release' :
-                          selectedEntry.entry_type === 'blog' ? 'Blog' : 'Haber'}
-                      </Badge>
-                    </div>
-                  )}
-
-                  <h5 className="fw-bold mb-3">
-                    {selectedEntry.turkish_title || selectedEntry.original_title}
-                  </h5>
-                  <CeviriEtiketi kayit={selectedEntry} className="mb-3" />
-
-                  <div className="mb-3 article-content p-3 bg-light rounded">
-                    {selectedEntry.turkish_description ? (
-                      selectedEntry.turkish_description.split('\n\n').map((paragraph, idx) => (
-                        <p key={idx} className="mb-2" style={{ lineHeight: '1.7', textAlign: 'justify' }}>
-                          {paragraph}
-                        </p>
-                      ))
-                    ) : (
-                      <p className="text-muted">İçerik bulunmuyor.</p>
-                    )}
-                  </div>
-
-                  <a
-                    href={selectedEntry.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-outline-primary btn-sm"
-                  >
-                    <FaExternalLinkAlt className="me-2" />Orijinal Kaynağa Git
-                  </a>
-                </div>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Loading Modal */}
-      <Modal show={fetching} backdrop="static" keyboard={false} centered>
-        <Modal.Body className="text-center p-5">
-          <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
-          <h5 className="mt-3">DevTools Güncellemeleri Getiriliyor...</h5>
-          <p className="text-muted mb-0">Lütfen bekleyin, bu işlem biraz zaman alabilir.</p>
-        </Modal.Body>
-      </Modal>
+    <>
+      <BolumSayfasi
+        bolum="devtools"
+        baslik="DevTools"
+        kayitlar={entries}
+        yukleniyor={loading}
+        istatistik={stats}
+        dagilim={turDagilimi}
+        cubuk={
+          <BolumCubugu
+            kimlik="devtools"
+            gun={days}
+            gunSecenekleri={GUN_SECENEKLERI}
+            onGunDegis={setDays}
+            kaynaklar={sources}
+            seciliKaynaklar={selectedSources}
+            onKaynakDegis={toggleSource}
+            kaynakSayilari={stats.by_source}
+            yukleniyor={loading}
+            cekiliyor={fetching}
+            onYenile={() => loadEntries()}
+            onRapor={handleExport}
+            onTemizle={handleClearCache}
+            onCek={handleFetchDevTools}
+          />
+        }
+      />
 
       {/* Error Alert */}
       {error && (
@@ -475,7 +234,7 @@ ${items.map(item => {
           {error}
         </Alert>
       )}
-    </Container>
+    </>
   )
 }
 

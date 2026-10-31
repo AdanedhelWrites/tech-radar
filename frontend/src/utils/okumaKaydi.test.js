@@ -149,6 +149,45 @@ describe('haberOkumaKaydi', () => {
     ])
   })
 
+  it('yapisal degisiklik gunlugu okunur paragraflara donusur', () => {
+    const gunluk = (aciklama1, aciklama2) => [
+      '===SECTION: Changelog since v1.35.9===',
+      '===SECTION: Feature===',
+      '---ITEM---',
+      `${aciklama1} \`kubectl\``,
+      'devam satiri.',
+      '<<<PR#143343|@palnabarun|SIG Release and Testing>>>',
+      '---ITEM---',
+      aciklama2,
+      '===SECTION: Bug or Regression===',
+      '---ITEM---',
+      'Fixed a bug.',
+      '<<<PR#142023|@troychiu|SIG Apps, SIG Node>>>',
+    ].join('\n')
+    const k = haberOkumaKaydi(haber({
+      source: 'GitHub Releases',
+      original_description: gunluk('Kubernetes is now built with Go 1.26.10', 'No PR line.'),
+      turkish_description: gunluk('Kubernetes artık Go 1.26.10 ile derleniyor', 'PR satırı yok.'),
+    }), 'kubernetes')
+    // Ogesiz bolum basligi atlanir; isaretler (===, ---ITEM---, <<<PR>>>) metinde kalmaz
+    expect(k.govdeTr.split('\n\n')).toEqual([
+      'Feature (2)',
+      '• Kubernetes artık Go 1.26.10 ile derleniyor `kubectl` devam satiri. (#143343 · @palnabarun · SIG Release and Testing)',
+      '• PR satırı yok.',
+      'Bug or Regression (1)',
+      '• Fixed a bug. (#142023 · @troychiu · SIG Apps, SIG Node)',
+    ])
+    expect(k.govdeOrijinal.split('\n\n')[1]).toBe(
+      '• Kubernetes is now built with Go 1.26.10 `kubectl` devam satiri. (#143343 · @palnabarun · SIG Release and Testing)',
+    )
+  })
+
+  it('isaretsiz ya da ogesiz gunluk metne dokunulmaz', () => {
+    expect(haberOkumaKaydi(haber({ turkish_description: 'Düz\n\nmetin.' }), 'kubernetes').govdeTr).toBe('Düz\n\nmetin.')
+    const bos = '===SECTION: Changelog since v1.35.9==='
+    expect(haberOkumaKaydi(haber({ turkish_description: bos }), 'kubernetes').govdeTr).toBe(bos)
+  })
+
   it('devtools kayit turu ve surum bilgi rozeti olur, bos surum atlanir', () => {
     expect(haberOkumaKaydi(haber({ entry_type: 'release', version: '2.1.0' }), 'devtools').rozetler).toEqual([
       { metin: '2.1.0', tur: 'bilgi' },

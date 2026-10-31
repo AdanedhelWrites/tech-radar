@@ -300,7 +300,7 @@ body {
   color: var(--yuksek-metin);
 }
 
-/* Uzun Turkce metin okuma alani. Yaslama (justify) yok; lang="tr" ile hece bolme. */
+/* Uzun Turkce metin okuma alani. Iki yana yaslama yok (sola hizali); lang="tr" ile hece bolme. */
 .okuma-metni {
   max-width: 62ch;
   font-size: 15.5px;
@@ -1258,6 +1258,22 @@ body {
 
   .siddet-secici {
     flex-wrap: wrap;
+  }
+}
+
+/* Haber satiri (bolum/BolumSayfasi.jsx): CVE satirinin skor kutusuz hali; kaynagin onunde
+   Gundem'deki bolum rengi noktasi */
+.haber-satiri {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+@media (max-width: 575.98px) {
+  .haber-satiri {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .haber-satiri .satir-sag {
+    grid-column: 1;
   }
 }
 
