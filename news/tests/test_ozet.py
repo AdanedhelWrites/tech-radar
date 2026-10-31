@@ -116,6 +116,18 @@ class OzetUcuTests(V1TestCase):
         self.assertEqual(skorlar, sorted(skorlar, reverse=True))
         self.assertEqual(g['unscored_count'], 1)
 
+    def test_chart_esit_skorda_yeni_once_sonra_cve_kimligi(self):
+        eski = _cve(8.0, saat_once=5)
+        yeni_b = _cve(8.0, saat_once=1)
+        yeni_a = _cve(8.0, saat_once=1)
+        CVEEntry.objects.filter(pk=yeni_a.pk).update(created_at=CVEEntry.objects.get(pk=yeni_b.pk).created_at)
+        yuksek = _cve(9.0, saat_once=9)
+
+        idler = [p['cve_id'] for p in self.client.get('/api/ozet/').json()['chart']]
+
+        kucuk, buyuk = sorted([yeni_a.cve_id, yeni_b.cve_id])
+        self.assertEqual(idler, [yuksek.cve_id, kucuk, buyuk, eski.cve_id])
+
     def test_since_sayar_ve_gecersizi_yok_sayar(self):
         _cve(5.0, saat_once=3)
         _cve(5.0, saat_once=0.5)

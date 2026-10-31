@@ -61,7 +61,7 @@ def ozet_hesapla(simdi=None) -> dict:
                  .annotate(kev_sirasi=Case(When(kev_yeni, then=0), default=1, output_field=IntegerField()))
                  .order_by(F('cvss_score').desc(nulls_last=True), 'kev_sirasi', '-created_at')[:ONCELIK_LIMITI])
 
-    grafik = list(son_hafta.filter(cvss_score__gte=GRAFIK_ESIK).order_by('-cvss_score')
+    grafik = list(son_hafta.filter(cvss_score__gte=GRAFIK_ESIK).order_by('-cvss_score', '-created_at', 'cve_id')
                   .values('cve_id', 'cvss_score')[:GRAFIK_LIMITI])
     skorsuz = son_hafta.filter(Q(cvss_score__isnull=True) | Q(cvss_score__lt=GRAFIK_ESIK)).count()
 

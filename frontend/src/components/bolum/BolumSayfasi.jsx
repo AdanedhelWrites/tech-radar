@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Form, Spinner, Dropdown } from 'react-bootstrap'
 import { FaDownload, FaSync, FaTrash, FaFileExport, FaFilter } from 'react-icons/fa'
 import useSeciliKayit from '../../hooks/useSeciliKayit'
-import { haberOkumaKaydi, haberRozetleri } from '../../utils/okumaKaydi'
+import { haberOkumaKaydi, haberRozetleri, cevrilmediMi } from '../../utils/okumaKaydi'
 import { goreliZaman } from '../../utils/zaman'
 import CeviriEtiketi from '../CeviriEtiketi'
 import OkumaPaneli from '../okuma/OkumaPaneli'
@@ -20,7 +20,7 @@ const metin = (d) => (typeof d === 'string' ? d : '')
 // kopyasidir (needs_translation, saglayici yok); "Cevrilmedi" rozeti yalniz bos baslikta cikmamali.
 function HaberSatiri({ kayit, bolum, onSec }) {
   const trBaslik = metin(kayit.turkish_title)
-  const cevrilmedi = !trBaslik || (kayit.needs_translation && !kayit.translation_provider)
+  const cevrilmedi = cevrilmediMi(kayit)
   const rozetler = haberRozetleri(kayit)
   return (
     <button type="button" className="oncelikli-satir haber-satiri" onClick={() => onSec(kayit)}>

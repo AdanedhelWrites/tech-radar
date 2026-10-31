@@ -1,4 +1,4 @@
-import { haberOkumaKaydi } from '../../utils/okumaKaydi'
+import { haberOkumaKaydi, cevrilmediMi } from '../../utils/okumaKaydi'
 import { goreliZaman } from '../../utils/zaman'
 
 // Gundem sutunu (spec 2026-10-31 G3, §6): bes bolumun son kayitlari, created_at azalan tek liste.
@@ -26,7 +26,7 @@ export default function Gundem({ ogeler, hata, onSec }) {
             <li key={`${bolum}-${kayit.id}`}>
               <button type="button" className="gundem-ogesi" onClick={() => onSec(haberOkumaKaydi(kayit, bolum))}>
                 <span className={`gundem-nokta bolum-${bolum}`} aria-hidden="true" />
-                <span className="gundem-baslik">{kayit.turkish_title || kayit.original_title}</span>
+                <span className="gundem-baslik" lang={cevrilmediMi(kayit) ? 'en' : 'tr'}>{kayit.turkish_title || kayit.original_title}</span>
                 <small>{alt}</small>
               </button>
             </li>

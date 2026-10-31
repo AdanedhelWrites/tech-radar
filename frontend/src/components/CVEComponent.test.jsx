@@ -81,6 +81,24 @@ describe('CVEComponent', () => {
     expect(screen.getByTestId('konum')).toHaveTextContent('?kayit=1')
   })
 
+  it('ceviri bekleyen CVE satirinda Cevrilmedi rozeti ve lang=en olur', async () => {
+    const ingilizce = 'CVE-2026-0004 - Remote code execution in widget server'
+    cveApi.getCVEs.mockResolvedValue({ data: { success: true, data: [
+      ...KAYITLAR,
+      cve(4, 'CVE-2026-0004', 8.1, {
+        turkish_title: ingilizce, original_title: ingilizce, needs_translation: true, translation_provider: null,
+      }),
+    ] } })
+    sayfa()
+    const baslik = await screen.findByText('Remote code execution in widget server')
+    const satir = baslik.closest('button')
+    expect(within(satir).getByText('Çevrilmedi: orijinal metin')).toBeInTheDocument()
+    expect(baslik.closest('[lang]')).toHaveAttribute('lang', 'en')
+    const cevrili = screen.getByText('Başlık 2').closest('button')
+    expect(within(cevrili).queryByText('Çevrilmedi: orijinal metin')).toBeNull()
+    expect(screen.getByText('Başlık 2').closest('[lang]')).toHaveAttribute('lang', 'tr')
+  })
+
   it('siddet filtresi sayaci gunceller', async () => {
     sayfa()
     expect(await screen.findByText('3 CVE gösteriliyor')).toBeInTheDocument()

@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { Offcanvas } from 'react-bootstrap'
 import CeviriEtiketi from '../CeviriEtiketi'
 import { okumaIcerigi } from '../../utils/okuma'
+import { ceviriBekliyor } from '../../utils/okumaKaydi'
 import { skorSinifi } from '../../utils/cve'
 
 // Alti bolumun ve Genel Bakis'in ortak okuma paneli (spec 2026-10-31 G5). Girdi OkumaKaydi
@@ -27,6 +28,7 @@ function PanelIcerigi({ kayit, baslikId }) {
   const orijinalId = useId()
   const icerik = okumaIcerigi(kayit)
   const { tamamenCevrilmedi } = icerik
+  const baslikEn = tamamenCevrilmedi || ceviriBekliyor(kayit.ham)
   const orijinalDugmesi = !tamamenCevrilmedi && icerik.orijinal.length > 0
   // Saglayicisiz ve hic cevrilmemis kayitta CeviriEtiketi'nin "Cevrilmedi" rozeti uyariyi tekrar ederdi
   const ceviriRozeti = !(tamamenCevrilmedi && !kayit.ham?.translation_provider)
@@ -42,7 +44,7 @@ function PanelIcerigi({ kayit, baslikId }) {
         <div className="okuma-kafa-ic">
           <div className="okuma-baslik-alani">
             {kimlik && <div className="okuma-kimlik">{kimlik}</div>}
-            <Offcanvas.Title as="h2" id={baslikId} className="okuma-baslik">{kayit.baslik}</Offcanvas.Title>
+            <Offcanvas.Title as="h2" id={baslikId} className="okuma-baslik" lang={baslikEn ? 'en' : 'tr'}>{kayit.baslik}</Offcanvas.Title>
             {altBilgi && <div className="okuma-alt-bilgi">{altBilgi}</div>}
           </div>
           {kayit.skor != null && (

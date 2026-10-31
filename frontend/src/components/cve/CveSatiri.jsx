@@ -1,5 +1,6 @@
 import { skorSinifi, cveListeBasligi } from '../../utils/cve'
-import { cveOkumaKaydi } from '../../utils/okumaKaydi'
+import CeviriEtiketi from '../CeviriEtiketi'
+import { cveOkumaKaydi, cevrilmediMi } from '../../utils/okumaKaydi'
 import { goreliZaman } from '../../utils/zaman'
 
 // CVE liste satiri: Genel Bakis'taki oncelikli liste ve Zafiyetler sayfasi ayni satiri kullanir
@@ -24,6 +25,7 @@ function SkorKutusu({ skor }) {
 
 export default function CveSatiri({ cve, sonZiyaret, onSec }) {
   const okuma = cveOkumaKaydi(cve)
+  const cevrilmedi = cevrilmediMi(cve)
   // Kisa aciklama: KEV oneki atilmis govdenin ilk paragrafi (Turkce yoksa orijinal)
   const ozetMetni = (okuma.govdeTr || okuma.govdeOrijinal).split(/\n\s*\n/)[0].trim()
   // KEV, okuma panelindeki rozetle ayni kurala gore: CISA KEV kaynagi ya da KEV eklenme tarihi
@@ -37,18 +39,19 @@ export default function CveSatiri({ cve, sonZiyaret, onSec }) {
     <button type="button" className="oncelikli-satir" onClick={() => onSec(cve)}>
       <SkorKutusu skor={cve.cvss_score} />
       <span className="satir-govde">
-        <span className="satir-baslik">
+        <span className="satir-baslik" lang={cevrilmedi ? 'en' : 'tr'}>
           <span className="cve-kimlik">{cve.cve_id}</span>
           {cveListeBasligi(cve)}
         </span>
         {ozetMetni && (
           <span className="satir-ozet" lang={okuma.govdeTr ? 'tr' : 'en'}>{ozetMetni}</span>
         )}
-        {(kev || yeni || cweler.length > 0) && (
+        {(kev || yeni || cweler.length > 0 || cevrilmedi || cve.translation_provider) && (
           <span className="satir-rozetler">
             {kev && <span className="rozet kev">CISA KEV</span>}
             {yeni && <span className="rozet yeni">Yeni</span>}
             {cweler.map(c => <span key={c} className="rozet ur">{c}</span>)}
+            <CeviriEtiketi kayit={cve} className="" />
           </span>
         )}
       </span>

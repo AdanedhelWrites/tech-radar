@@ -21,6 +21,13 @@ export const KAYIT_TURU = { release: 'Sürüm', blog: 'Blog', news: 'Haber' }
 
 const metin = (d) => (typeof d === 'string' ? d : '')
 
+// Saglayicisi bos ve ceviri bekleyen kaydin metni orijinaldir (CeviriEtiketi "Cevrilmedi" kurali).
+export const ceviriBekliyor = (kayit) => !!(kayit?.needs_translation && !kayit?.translation_provider)
+
+// Liste satiri kurali (HaberSatiri, CveSatiri, Gundem): bos Turkce baslik ya da ceviri bekleyen kayit.
+// Bu durumda baslik Ingilizcedir: lang="en" ve "Cevrilmedi" rozeti.
+export const cevrilmediMi = (kayit) => !metin(kayit?.turkish_title) || ceviriBekliyor(kayit)
+
 // Kubernetes GitHub Releases govdesi yapisal degisiklik gunlugudur (news/k8s_scraper):
 // "===SECTION: Ad===", "---ITEM---", aciklama satirlari, "<<<PR#123|@yazar|SIG ...>>>".
 // Okuma paneli duz paragraf gosterir; gunluk "Ad (n)" basligi ve "• aciklama (#123 · @yazar · SIG)"

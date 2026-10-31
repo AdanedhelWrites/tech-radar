@@ -7,6 +7,9 @@ describe('paragraflar', () => {
   it('bos satirla boler, trim eder, bosları atar', () => {
     expect(paragraflar('  A.\n\n\n\n  B.  \n\n')).toEqual(['A.', 'B.'])
   })
+  it('CRLF govdeyi de paragraflara boler', () => {
+    expect(paragraflar('A.\r\n\r\nB.\r\n \r\nC.')).toEqual(['A.', 'B.', 'C.'])
+  })
   it('bos ve eksik metin bos liste olur', () => {
     expect(paragraflar('')).toEqual([])
     expect(paragraflar(null)).toEqual([])

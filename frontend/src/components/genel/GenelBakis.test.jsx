@@ -81,7 +81,7 @@ describe('GenelBakis', () => {
     sayfa()
     expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
     expect(screen.getByText(/değerlendirme bekliyor/)).toBeInTheDocument()
-    expect(screen.getByText(/2 tanesi son 7 günde CISA KEV kataloğuna eklendi, aktif istismar doğrulanmış\./)).toBeInTheDocument()
+    expect(screen.getByText(/Son 7 günde 2 zafiyet CISA KEV kataloğuna eklendi; aktif istismar doğrulanmış\./)).toBeInTheDocument()
     expect(screen.getByText('Zafiyet Durumu · Son 24 Saat')).toBeInTheDocument()
   })
 

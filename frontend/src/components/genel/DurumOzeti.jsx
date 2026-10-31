@@ -7,7 +7,7 @@ const altCumle = (ozet, kritik) => {
   const cumleler = []
   if (kritik > 0) {
     const kev = sayi(ozet.kev_count)
-    if (kev > 0) cumleler.push(`${kev} tanesi son 7 günde CISA KEV kataloğuna eklendi, aktif istismar doğrulanmış.`)
+    if (kev > 0) cumleler.push(`Son 7 günde ${kev} zafiyet CISA KEV kataloğuna eklendi; aktif istismar doğrulanmış.`)
   } else {
     cumleler.push(`Son 7 günde ${sayi(ozet.high_count)} yüksek önem dereceli zafiyet kaydedildi.`)
   }

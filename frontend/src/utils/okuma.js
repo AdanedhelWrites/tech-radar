@@ -11,7 +11,7 @@ const gecerliTarih = (s) => {
 }
 
 export const paragraflar = (metin) =>
-  (metin || '').split('\n\n').map(p => p.trim()).filter(Boolean)
+  (metin || '').split(/\r?\n\s*\r?\n/).map(p => p.trim()).filter(Boolean)
 
 export const kevOnekiAyir = (metin) => {
   const m = metin || ''
