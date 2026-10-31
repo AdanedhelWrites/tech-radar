@@ -10,7 +10,7 @@ vi.mock('./components/KubernetesComponent', () => ({ default: () => null }))
 vi.mock('./components/SREComponent', () => ({ default: () => null }))
 vi.mock('./components/DevToolsComponent', () => ({ default: () => null }))
 vi.mock('./components/AINewsComponent', () => ({ default: () => null }))
-vi.mock('./components/SaglikSeridi', () => ({ default: () => null }))
+vi.mock('./components/genel/GenelBakis', () => ({ default: () => null }))
 
 const MENU = [
   ['Genel Bakış', '/'],

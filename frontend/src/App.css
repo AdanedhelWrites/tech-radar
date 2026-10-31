@@ -34,10 +34,6 @@
   --bs-btn-disabled-color: #7ea8c4;
   --bs-btn-disabled-border-color: #7ea8c4;
 }
-.text-info {
-  color: #7ea8c4 !important;
-}
-
 .App {
   min-height: 100vh;
   color: var(--metin);
