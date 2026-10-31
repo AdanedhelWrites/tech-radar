@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { kacis, guvenliHref } from './html'
+import { kacis, kacisliParagraf, guvenliHref } from './html'
 
 describe('kacis', () => {
   it('bes HTML karakterini kacislar', () => {
@@ -13,6 +13,23 @@ describe('kacis', () => {
   it('sayi dizeye cevrilir, duz metin degismez', () => {
     expect(kacis(42)).toBe('42')
     expect(kacis('CVE-2026-1234 kritik')).toBe('CVE-2026-1234 kritik')
+  })
+})
+
+describe('kacisliParagraf', () => {
+  it('script ve img onerror kacislanir, satir sonlari <br> olur', () => {
+    const sonuc = kacisliParagraf('<script>alert(1)</script>\nikinci <img src=x onerror="alert(2)">\r\nucuncu')
+    expect(sonuc).toBe(
+      '&lt;script&gt;alert(1)&lt;/script&gt;<br>ikinci &lt;img src=x onerror=&quot;alert(2)&quot;&gt;<br>ucuncu',
+    )
+    expect(sonuc).not.toMatch(/<script|<img/i)
+  })
+  it('govdedeki hazir <br> etiketi de kacislanir', () => {
+    expect(kacisliParagraf('a<br>b')).toBe('a&lt;br&gt;b')
+  })
+  it('null ve undefined bos dize olur', () => {
+    expect(kacisliParagraf(null)).toBe('')
+    expect(kacisliParagraf(undefined)).toBe('')
   })
 })
 

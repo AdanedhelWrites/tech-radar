@@ -5,7 +5,7 @@ import {
   Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
 import useAraliklaYenile from '../hooks/useAraliklaYenile'
-import { kacis, guvenliHref } from '../utils/html'
+import { kacis, kacisliParagraf, guvenliHref } from '../utils/html'
 import { cveListeBasligi } from '../utils/cve'
 import CeviriEtiketi, { ceviriEtiketiHtml } from './CeviriEtiketi'
 import {
@@ -163,7 +163,7 @@ function CVEComponent() {
 <h1>CVE Zafiyet Raporu</h1>
 <p class="meta">${date} tarihinde oluşturuldu &mdash; ${items.length} zafiyet</p>
 ${items.map(item => {
-          const content = (item.turkish_description || item.original_description || '').replace(/\n/g, '<br>')
+          const content = kacisliParagraf(item.turkish_description || item.original_description || '')
           return `<div class="article">
   <span class="cveid">${kacis(item.cve_id || '')}</span>
   <span class="badge" style="background:${severityColor(item.severity)}">${kacis(item.severity || 'Bilinmiyor')}</span>
