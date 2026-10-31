@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ozetApi, newsApi, k8sApi, sreApi, devtoolsApi, aiApi } from '../../services/api'
 import useAraliklaYenile from '../../hooks/useAraliklaYenile'
-import { sonZiyaretOku, sonZiyaretYaz } from '../../utils/sonZiyaret'
+import { sonZiyaretOku, sonZiyaretYaz, ziyaretTabani } from '../../utils/sonZiyaret'
 import { gundemBirlestir } from '../../utils/gundem'
 import { goreliZaman } from '../../utils/zaman'
 import SaglikSeridi from '../SaglikSeridi'
@@ -43,8 +43,9 @@ const saatDakika = (iso) => {
 }
 
 export default function GenelBakis() {
-  // Son ziyaret ilk yuklemede bir kez okunur; periyodik yenileme ayni degeri kullanir, rozetler silinmez
-  const [sonZiyaret] = useState(() => sonZiyaretOku())
+  // Sekme tabani ilk yuklemede bir kez okunur (karar R9): periyodik yenileme de F5 de ayni degeri
+  // kullanir, "Yeni" rozetleri ve "son ziyaretinizden" cumlesi silinmez
+  const [sonZiyaret] = useState(() => ziyaretTabani())
   const [ozet, setOzet] = useState(null)
   const [ozetHata, setOzetHata] = useState(false)
   const [gundem, setGundem] = useState(null)
@@ -130,14 +131,17 @@ export default function GenelBakis() {
         <Gundem ogeler={gundem} hata={gundemHata} onSec={setSecili} />
       </div>
 
-      <footer className="genel-alt">
+      <div className="genel-alt">
         <SaglikSeridi />
         {ozet?.fetch && !ozetHata && (
           <span className="cekim-bilgisi">
-            {`Son güncelleme ${goreliZaman(ozet.fetch.last_success_at)} · Sonraki çekim ${saatDakika(ozet.fetch.next_at)}`}
+            {[
+              ozet.fetch.last_success_at && `Son güncelleme ${goreliZaman(ozet.fetch.last_success_at)}`,
+              `Sonraki çekim ${saatDakika(ozet.fetch.next_at)}`,
+            ].filter(Boolean).join(' · ')}
           </span>
         )}
-      </footer>
+      </div>
 
       <OkumaPaneli kayit={secili} onKapat={kapat} />
     </div>

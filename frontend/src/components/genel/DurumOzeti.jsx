@@ -11,9 +11,10 @@ const altCumle = (ozet, kritik) => {
   } else {
     cumleler.push(`Son 7 günde ${sayi(ozet.high_count)} yüksek önem dereceli zafiyet kaydedildi.`)
   }
-  // Yalniz gecerli bir son ziyaret gonderildiyse sunucu bu alani doner (ilk ziyarette yok)
-  if (Number.isFinite(ozet.new_since_count)) {
-    cumleler.push(`Son ziyaretinizden bu yana ${ozet.new_since_count} yeni kayıt eklendi.`)
+  // Yalniz gecerli bir son ziyaret gonderildiyse sunucu bu alani doner (ilk ziyarette yok).
+  // Sayim yalniz CVE'leri kapsar (karar R10); 0 ise cumle gosterilmez.
+  if (Number.isFinite(ozet.new_since_count) && ozet.new_since_count > 0) {
+    cumleler.push(`Son ziyaretinizden bu yana ${ozet.new_since_count} yeni zafiyet kaydı eklendi.`)
   }
   return cumleler.join(' ')
 }

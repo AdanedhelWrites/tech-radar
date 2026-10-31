@@ -67,6 +67,7 @@ describe('GenelBakis', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    sessionStorage.clear()
     ozetApi.getOzet.mockResolvedValue({ data: ozet() })
     newsApi.getNews.mockImplementation(() => liste([haber(1, 'Fidye yazılımı grubu yeni site açtı', 3)]))
     k8sApi.getK8s.mockImplementation(() => liste([haber(2, 'Kubernetes beta sürüm notları', 5)]))
@@ -112,7 +113,7 @@ describe('GenelBakis', () => {
       priority: [cve(), cve({ id: 12, cve_id: 'CVE-2026-0999', created_at: saatOnce(30) })],
     }) })
     sayfa()
-    expect(await screen.findByText(/Son ziyaretinizden bu yana 4 yeni kayıt eklendi\./)).toBeInTheDocument()
+    expect(await screen.findByText(/Son ziyaretinizden bu yana 4 yeni zafiyet kaydı eklendi\./)).toBeInTheDocument()
     expect(ozetApi.getOzet).toHaveBeenCalledWith(sonZiyaret)
     // Yalniz son ziyaretten sonra gelen kayit "Yeni" alir
     expect(screen.getAllByText('Yeni')).toHaveLength(1)
@@ -129,6 +130,68 @@ describe('GenelBakis', () => {
 
     window.dispatchEvent(new Event('pagehide'))
     expect(localStorage.getItem(ANAHTAR)).toBe(enYeni)
+  })
+
+  it('F5 (pagehide + yeniden yukleme) Yeni rozetini ve son ziyaret cumlesini silmez', async () => {
+    const sonZiyaret = saatOnce(10)
+    localStorage.setItem(ANAHTAR, sonZiyaret)
+    ozetApi.getOzet.mockResolvedValue({ data: ozet({ new_since_count: 4 }) })
+    const { unmount } = sayfa()
+    expect(await screen.findByText('Yeni')).toBeInTheDocument()
+
+    window.dispatchEvent(new Event('pagehide'))
+    expect(localStorage.getItem(ANAHTAR)).not.toBe(sonZiyaret)
+    unmount()
+
+    ozetApi.getOzet.mockClear()
+    sayfa()
+    expect(await screen.findByText('Yeni')).toBeInTheDocument()
+    expect(screen.getByText(/Son ziyaretinizden bu yana 4 yeni zafiyet kaydı eklendi\./)).toBeInTheDocument()
+    expect(ozetApi.getOzet).toHaveBeenCalledWith(sonZiyaret)
+  })
+
+  it('ilk ziyarette yeniden yuklemede de rozet ve cumle yok', async () => {
+    const { unmount } = sayfa()
+    expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
+    unmount()
+    sayfa()
+    expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
+    expect(ozetApi.getOzet.mock.calls.every(([since]) => since === undefined)).toBe(true)
+    expect(screen.queryByText(/Son ziyaretinizden/)).toBeNull()
+    expect(screen.queryByText('Yeni')).toBeNull()
+  })
+
+  it('visibilitychange hidden son ziyareti yazar', async () => {
+    const enYeni = saatOnce(1)
+    ozetApi.getOzet.mockResolvedValue({ data: ozet({ priority: [cve({ created_at: enYeni })] }) })
+    sayfa()
+    expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
+    expect(await screen.findByText('Fidye yazılımı grubu yeni site açtı')).toBeInTheDocument()
+    // Tarayicidaki gibi hidden da true: useAraliklaYenile gizli sekmede yenileme yapmaz
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    try {
+      document.dispatchEvent(new Event('visibilitychange'))
+    } finally {
+      delete document.visibilityState
+      delete document.hidden
+    }
+    expect(localStorage.getItem(ANAHTAR)).toBe(enYeni)
+  })
+
+  it('yeni kayit yoksa son ziyaret cumlesi gosterilmez', async () => {
+    localStorage.setItem(ANAHTAR, saatOnce(1))
+    ozetApi.getOzet.mockResolvedValue({ data: ozet({ new_since_count: 0 }) })
+    sayfa()
+    expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
+    expect(screen.queryByText(/Son ziyaretinizden/)).toBeNull()
+  })
+
+  it('son basarili cekim yoksa "Son güncelleme" yazmaz', async () => {
+    ozetApi.getOzet.mockResolvedValue({ data: ozet({ fetch: { last_success_at: null, next_at: new Date().toISOString() } }) })
+    sayfa()
+    expect(await screen.findByText(/Sonraki çekim \d{2}:\d{2}/)).toBeInTheDocument()
+    expect(screen.queryByText(/Son güncelleme/)).toBeNull()
   })
 
   it('kaynak sessizse kutu uyari gosterir', async () => {
