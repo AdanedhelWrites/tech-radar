@@ -85,6 +85,24 @@ describe('BolumSayfasi', () => {
     expect(screen.getAllByText('Çevrilmedi: orijinal metin')).toHaveLength(1)
   })
 
+  it('basligi orijinalin kopyasi olan cevrilmemis kayitta da rozet ve lang en', () => {
+    // Uretimdeki yaygin durum: basarisiz ceviri turkish_title'a Ingilizce basligi kopyalar
+    const kopya = haber(4, {
+      original_title: 'Copied English headline',
+      turkish_title: 'Copied English headline',
+      needs_translation: true,
+      translation_provider: null,
+    })
+    sayfa({ kayitlar: [haber(1), kopya] })
+    const baslik = screen.getByText('Copied English headline')
+    expect(baslik).toHaveAttribute('lang', 'en')
+    expect(within(baslik.closest('button')).getByText('Çevrilmedi: orijinal metin')).toBeInTheDocument()
+    // Cevrilmis satir Turkce kalir ve saglayici rozetini gosterir
+    const cevrilmis = screen.getByText('Türkçe başlık 1')
+    expect(cevrilmis).toHaveAttribute('lang', 'tr')
+    expect(within(cevrilmis.closest('button')).getByText('Çeviri: Gemini')).toBeInTheDocument()
+  })
+
   it('news bolumunde tarih date alanindan okunur', async () => {
     sayfa({}, '/news?kayit=1')
     const panel = await screen.findByRole('dialog')

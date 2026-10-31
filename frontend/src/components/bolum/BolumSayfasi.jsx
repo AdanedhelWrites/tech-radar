@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Form, Spinner, Dropdown } from 'react-bootstrap'
 import { FaDownload, FaSync, FaTrash, FaFileExport, FaFilter } from 'react-icons/fa'
 import useSeciliKayit from '../../hooks/useSeciliKayit'
-import { haberOkumaKaydi } from '../../utils/okumaKaydi'
+import { haberOkumaKaydi, haberRozetleri } from '../../utils/okumaKaydi'
 import { goreliZaman } from '../../utils/zaman'
 import CeviriEtiketi from '../CeviriEtiketi'
 import OkumaPaneli from '../okuma/OkumaPaneli'
@@ -15,20 +15,23 @@ import OkumaPaneli from '../okuma/OkumaPaneli'
 const sayi = (n) => Number(n || 0).toLocaleString('tr-TR')
 const metin = (d) => (typeof d === 'string' ? d : '')
 
-// Liste satiri: Turkce baslik (yoksa orijinal + ceviri rozeti), bilgi rozetleri, kaynak, goreli zaman
+// Liste satiri: Turkce baslik (yoksa orijinal), bilgi rozetleri, ceviri rozeti, kaynak, goreli zaman.
+// CeviriEtiketi her satirda (bulgu 6, 2026-10-21): basarisiz ceviride turkish_title Ingilizce basligin
+// kopyasidir (needs_translation, saglayici yok); "Cevrilmedi" rozeti yalniz bos baslikta cikmamali.
 function HaberSatiri({ kayit, bolum, onSec }) {
   const trBaslik = metin(kayit.turkish_title)
-  const { rozetler } = haberOkumaKaydi(kayit, bolum)
+  const cevrilmedi = !trBaslik || (kayit.needs_translation && !kayit.translation_provider)
+  const rozetler = haberRozetleri(kayit)
   return (
     <button type="button" className="oncelikli-satir haber-satiri" onClick={() => onSec(kayit)}>
       <span className="satir-govde">
-        <span className="satir-baslik" lang={trBaslik ? 'tr' : 'en'}>
+        <span className="satir-baslik" lang={cevrilmedi ? 'en' : 'tr'}>
           {trBaslik || metin(kayit.original_title)}
         </span>
-        {(rozetler.length > 0 || !trBaslik) && (
+        {(rozetler.length > 0 || cevrilmedi || kayit.translation_provider) && (
           <span className="satir-rozetler">
             {rozetler.map((r, i) => <span key={i} className={`rozet ${r.tur}`}>{r.metin}</span>)}
-            {!trBaslik && <CeviriEtiketi kayit={kayit} className="" />}
+            <CeviriEtiketi kayit={kayit} className="" />
           </span>
         )}
       </span>

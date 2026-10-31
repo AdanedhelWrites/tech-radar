@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cveOkumaKaydi, haberOkumaKaydi } from './okumaKaydi'
+import { cveOkumaKaydi, haberOkumaKaydi, haberRozetleri } from './okumaKaydi'
 
 const KEV_ORIJINAL = 'Added to the CISA KEV catalog on 2026-10-20; required action due 2026-11-10. A command injection vulnerability allows remote code execution.'
 const REFERANSLAR = Array.from({ length: 7 }, (_, i) => `https://ornek.test/ref/${i}`)
@@ -147,6 +147,18 @@ describe('haberOkumaKaydi', () => {
       { metin: 'Güvenlik', tur: 'bilgi' },
       { metin: 'v1.34.1', tur: 'bilgi' },
     ])
+  })
+
+  it('haberRozetleri yalniz bilgi rozetlerini uretir, panel kaydiyla ayni', () => {
+    const k8s = haber({ category: 'ecosystem', version: 'v1.36.0' })
+    expect(haberRozetleri(k8s)).toEqual([
+      { metin: 'Ekosistem', tur: 'bilgi' },
+      { metin: 'v1.36.0', tur: 'bilgi' },
+    ])
+    expect(haberRozetleri(k8s)).toEqual(haberOkumaKaydi(k8s, 'kubernetes').rozetler)
+    expect(haberRozetleri(haber({ category: 'yeni-kategori' }))).toEqual([{ metin: 'yeni-kategori', tur: 'bilgi' }])
+    expect(haberRozetleri(haber())).toEqual([])
+    expect(haberRozetleri(null)).toEqual([])
   })
 
   it('yapisal degisiklik gunlugu okunur paragraflara donusur', () => {

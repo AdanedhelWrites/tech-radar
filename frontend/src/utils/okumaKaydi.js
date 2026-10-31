@@ -109,11 +109,18 @@ export const cveOkumaKaydi = (cve) => {
   }
 }
 
-export const haberOkumaKaydi = (kayit, bolum) => {
+// Bolume ozgu bilgi rozetleri (Kubernetes kategori/surum, DevTools surum/tur). Liste satiri her
+// yenilemede yalniz bunu cagirir; govde donusumu (degisiklik gunlugu) yalniz panelde calisir.
+export const haberRozetleri = (kayit) => {
   const rozetler = []
   if (kayit?.category) rozetler.push({ metin: KATEGORI[kayit.category] || kayit.category, tur: 'bilgi' })
   if (kayit?.version) rozetler.push({ metin: kayit.version, tur: 'bilgi' })
   if (kayit?.entry_type) rozetler.push({ metin: KAYIT_TURU[kayit.entry_type] || kayit.entry_type, tur: 'bilgi' })
+  return rozetler
+}
+
+export const haberOkumaKaydi = (kayit, bolum) => {
+  const rozetler = haberRozetleri(kayit)
 
   return {
     ...kayitIskeleti(kayit),
