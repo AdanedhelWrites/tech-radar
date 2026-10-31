@@ -1,7 +1,7 @@
 # Arayüz Yenileme: Zafiyet Odaklı Genel Bakış ve Okuma Paneli — Tasarım
 
 > Tarih: 2026-10-31. Kaynak: brainstorming oturumu (görsel taslaklar `CyberNews/.superpowers/brainstorm/192-1793462254/content/`:
-> `c-profesyonel-v2.html` ana sayfa, `okuma-gorunumu.html` okuma paneli; repo dışı). Durum: onaylandı (2026-10-31).
+> `c-profesyonel-v2.html` ana sayfa, `okuma-gorunumu.html` okuma paneli; repo dışı). Durum: uygulandı (2026-10-31, dal feat/arayuz-yenileme).
 
 ## 1. Amaç ve neden
 
