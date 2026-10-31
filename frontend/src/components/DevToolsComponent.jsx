@@ -5,7 +5,7 @@ import {
   Badge, Spinner, Alert, Modal
 } from 'react-bootstrap'
 import useAraliklaYenile from '../hooks/useAraliklaYenile'
-import { kacis, guvenliHref } from '../utils/html'
+import { kacis, kacisliParagraf, guvenliHref } from '../utils/html'
 import CeviriEtiketi from './CeviriEtiketi'
 import {
   FaDownload, FaSync, FaTrash, FaFileExport,
@@ -165,7 +165,7 @@ function DevToolsComponent() {
 <h1>DevTools Güncellemeleri Raporu</h1>
 <p class="meta">${date} tarihinde oluşturuldu &mdash; ${items.length} güncelleme</p>
 ${items.map(item => {
-          const content = (item.turkish_description || item.original_description || '').replace(/\n/g, '<br>')
+          const content = kacisliParagraf(item.turkish_description || item.original_description || '')
           const versionBadge = item.version ? `<span class="version">${kacis(item.version)}</span>` : ''
           return `<div class="article">
   <span class="source">${kacis(item.source || '')}</span>${versionBadge}<span class="date">${kacis(item.published_date || '')}</span>
