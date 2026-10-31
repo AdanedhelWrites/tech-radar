@@ -41,6 +41,7 @@
   --yuksek-gradyan: linear-gradient(135deg, var(--yuksek), var(--yuksek-2));
   --yuksek-metin: #ffc27a;
   --yuksek-zemin: rgba(255, 179, 93, .16);
+  --yuksek-zemin-hafif: rgba(255, 179, 93, .07); /* okuma panelinde cevrilemeyen paragraf */
   --yuksek-uzeri: #2a1a00; /* sari-turuncu zemin uzerindeki koyu metin */
 
   --orta: var(--vurgu);
@@ -308,6 +309,223 @@ body {
 
 .okuma-metni p:last-child {
   margin-bottom: 0;
+}
+
+/* ==================== OKUMA PANELI ==================== */
+
+/* Sagdan acilan genis panel (components/okuma/OkumaPaneli.jsx, react-bootstrap Offcanvas) */
+.offcanvas.okuma-paneli {
+  --bs-offcanvas-width: min(860px, 100vw);
+  --bs-offcanvas-padding-x: 30px;
+  --bs-offcanvas-padding-y: 22px;
+  --bs-offcanvas-bg: var(--yuzey-yukseltilmis);
+  --bs-offcanvas-color: var(--metin);
+  --bs-offcanvas-border-color: var(--cam-kenar);
+}
+
+.okuma-paneli .okuma-kafa {
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 10px;
+}
+
+.okuma-kafa-ic {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.okuma-baslik-alani {
+  min-width: 0;
+}
+
+.okuma-kimlik {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--metin-ikincil);
+}
+
+.okuma-paneli .okuma-baslik {
+  margin: 4px 0 6px;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.okuma-alt-bilgi {
+  font-size: 12.5px;
+  color: var(--metin-soluk);
+}
+
+.okuma-paneli .skor-kutusu {
+  flex: none;
+}
+
+.okuma-paneli .okuma-govde {
+  padding-top: 6px;
+}
+
+.okuma-rozetler {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.okuma-rozetler:empty {
+  display: none;
+}
+
+.okuma-rozetler .rozet + .rozet {
+  margin-left: 0;
+}
+
+/* CeviriEtiketi (Bootstrap Badge) rozet satirinda hap bicimini alir; renkleri bilesende kalir */
+.okuma-rozetler .badge {
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.okuma-kev {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--kritik-metin);
+}
+
+.okuma-uyari {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: 62ch;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border-radius: var(--yaricap-kutu);
+  background: var(--yuksek-zemin-hafif);
+  color: var(--yuksek-metin);
+  font-size: 13px;
+}
+
+.okuma-dugme {
+  margin-bottom: 18px;
+  padding: 5px 14px;
+  border: 1px solid var(--cam-kenar);
+  border-radius: var(--yaricap-kutu);
+  background: var(--cam);
+  color: var(--metin-ikincil);
+  font-size: 12.5px;
+  transition: background-color var(--gecis), border-color var(--gecis);
+}
+
+.okuma-dugme:hover,
+.okuma-dugme[aria-expanded=true] {
+  background: var(--vurgu-zemin);
+  border-color: rgba(122, 162, 255, .35);
+}
+
+.okuma-dugme:focus-visible,
+.okuma-paneli a:focus-visible {
+  outline: 2px solid var(--vurgu);
+  outline-offset: 2px;
+}
+
+.okuma-bos {
+  color: var(--metin-soluk);
+}
+
+/* Turkce metinde Ingilizce kalan paragraf (sezgisel tahmin): metin gizlenmez, turuncu cizgiyle isaretlenir */
+.okuma-metni p.cevrilmedi {
+  margin-left: -12px;
+  padding: 8px 12px 8px 9px;
+  border-left: 3px solid var(--yuksek-metin);
+  border-radius: 0 6px 6px 0;
+  background: var(--yuksek-zemin-hafif);
+}
+
+.cevrilmedi-not {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  color: var(--yuksek-metin);
+}
+
+.okuma-orijinal {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ayrac);
+}
+
+.okuma-metni.orijinal {
+  color: var(--metin-soluk);
+}
+
+.okuma-alt {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ayrac);
+  font-size: 13px;
+}
+
+.okuma-ek-alanlar {
+  margin: 0 0 16px;
+}
+
+.okuma-ek-alanlar > div {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.okuma-ek-alanlar dt {
+  font-weight: 600;
+  color: var(--metin-soluk);
+}
+
+.okuma-ek-alanlar dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.okuma-referanslar {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.okuma-referanslar li {
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+.okuma-kaynak-linki {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.okuma-kaynak-linki:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 575.98px) {
+  .offcanvas.okuma-paneli {
+    --bs-offcanvas-padding-x: 16px;
+    --bs-offcanvas-padding-y: 16px;
+  }
+
+  .okuma-ek-alanlar > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
 }
 
 /* ==================== HAREKET AZALTMA ==================== */
