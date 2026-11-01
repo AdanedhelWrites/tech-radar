@@ -189,9 +189,15 @@ describe('haberOkumaKaydi', () => {
       'Bug or Regression (1)',
       '• Fixed a bug. (#142023 · @troychiu · SIG Apps, SIG Node)',
     ])
+    expect(k.prAdresi).toBe('https://github.com/kubernetes/kubernetes/pull/')
     expect(k.govdeOrijinal.split('\n\n')[1]).toBe(
       '• Kubernetes is now built with Go 1.26.10 `kubectl` devam satiri. (#143343 · @palnabarun · SIG Release and Testing)',
     )
+  })
+
+  it('PR adresi yalniz kubernetes bolumunde verilir', () => {
+    expect(haberOkumaKaydi(haber(), 'sre').prAdresi).toBeNull()
+    expect(cveOkumaKaydi(kevCve()).prAdresi).toBeNull()
   })
 
   it('isaretsiz ya da ogesiz gunluk metne dokunulmaz', () => {

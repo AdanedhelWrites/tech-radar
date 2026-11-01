@@ -525,6 +525,16 @@ body {
   text-decoration: underline;
 }
 
+.okuma-pr {
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.okuma-pr:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 575.98px) {
   .offcanvas.okuma-paneli {
     --bs-offcanvas-padding-x: 16px;
