@@ -31,6 +31,23 @@ export const cevrilmemisMi = (trParagraf, orijinalParagraflar) => {
   return bulunan.size >= 2
 }
 
+// Degisiklik gunlugu paragrafindaki "#123 · @yazar" PR etiketini baglanti icin ayirir (utils/okumaKaydi).
+// Yazar etiketi izlemeyen "#12" gibi numaralar duz metin kalir.
+const PR_ETIKETI = /#(\d+)(?= · @)/g
+
+export const prParcalari = (metin) => {
+  const m = metin || ''
+  const parcalar = []
+  let son = 0
+  for (const e of m.matchAll(PR_ETIKETI)) {
+    if (e.index > son) parcalar.push({ metin: m.slice(son, e.index) })
+    parcalar.push({ pr: e[1] })
+    son = e.index + e[0].length
+  }
+  if (son < m.length) parcalar.push({ metin: m.slice(son) })
+  return parcalar
+}
+
 export const okumaIcerigi = ({ govdeTr, govdeOrijinal } = {}) => {
   const orijinal = paragraflar(govdeOrijinal)
   const tr = paragraflar(govdeTr)
