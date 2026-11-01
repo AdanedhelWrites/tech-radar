@@ -47,6 +47,8 @@ class CVEEntry(models.Model):
     cvss_score = models.FloatField(null=True, blank=True, verbose_name='CVSS Skoru')
     published_date = models.DateField(verbose_name='Yayinlanma Tarihi')
     modified_date = models.DateField(null=True, blank=True, verbose_name='Guncelleme Tarihi')
+    # CISA KEV katalogna eklenme tarihi; yalniz KEV kaydinda dolu (NVD yolu ezmez, bkz. fetch_cve_task)
+    kev_added_date = models.DateField(null=True, blank=True, db_index=True, verbose_name='KEV Eklenme Tarihi')
     link = models.URLField(max_length=500, verbose_name='Link')
     cwe_ids = models.JSONField(default=list, blank=True, verbose_name='CWE IDleri')
     references = models.JSONField(default=list, blank=True, verbose_name='Referanslar')

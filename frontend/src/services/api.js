@@ -76,4 +76,9 @@ export const saglikApi = {
   getSaglik: () => api.get('/saglik/'),
 }
 
+// Genel Bakis zafiyet ozeti (2026-10-31). since: son ziyaret (ISO); verilirse yanit new_since_count tasir.
+export const ozetApi = {
+  getOzet: (since) => api.get('/ozet/', { params: since ? { since } : {} }),
+}
+
 export default api

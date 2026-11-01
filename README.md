@@ -9,7 +9,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Uygulama surumu** | `appVersion` 2026.10.3 (CalVer; imaj etiketi) |
 | **Helm chart** | 2.2.1 (SemVer; etiket `chart-2.2.1`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 506 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 22 Vitest testi (`frontend/src/`) |
+| **Testler** | 603 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 148 Vitest testi, 17 dosya (`frontend/src/`) |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -79,9 +79,12 @@ Ayni kod uc bicimde calisir:
 - **Teknik terim korumasi** — 130+ terim (Kubernetes, Docker, Elasticsearch, CVE, CVSS, vb.) ceviri sirasinda bozulmaz
 - **Turkce imla post-processing** — Cumle basi buyuk harf, noktalama duzeltme, URL/surum koruma
 - **Parca tabanli ceviri** — Uzun makaleler cumle sinirlarindan 4500 karakterlik parcalara bolunerek cevrilir
-- **Karanlik mod** — Koyu tonlarda arayuz (steel blue `#5b86a7` vurgu rengi)
+- **Genel Bakis** — Ana sayfa (`/`) zafiyet odaklidir: "Zafiyet Durumu · Son 24 Saat" basligi altinda kritik (24 sa), yuksek (7 gun) ve CISA KEV (7 gun) kutulari, son ziyaretten beri yeni kayit cumlesi, CVSS dagilim grafigi, "Oncelikli Zafiyetler" listesi, "Gundem" ve bir sonraki cekim saati; ozet sayilari yalniz `GET /api/ozet/`'ten, Gundem diger bes bolumun liste uclarindan gelir
+- **Ortak okuma paneli** — Tum bolumler ayni panelde acilir: metin varsayilan olarak Turkce okunur, "Orijinali goster" ile ingilizce asil metin acilir; cevrilmemis kayit orijinal metinle ve "Cevrilmedi: orijinal metin" uyarisiyla gosterilir, cevrilemeyen paragraflar isaretlenir; CVE kayitlarinda CVSS, KEV satiri ve kaynak baglantilari yer alir
+- **Paylasilabilir baglanti** — Panel acikken adres `?kayit=<id>` alir (ornek `/news?kayit=123`); adres kopyalanip acilinca ayni kayit okunur, geri tusu paneli kapatir, silinmis/bilinmeyen kimlik paneli kapali birakir
+- **Karanlik tema** — Yalnizca koyu tema (`<html data-bs-theme="dark">`); tema dugmesi yoktur. Vurgu `#7aa2ff` → `#b98bff`, kritik `#ff5d8f`, yuksek `#ffb35d`; sistem yazi tipleri, harici font/CDN yok (CSP degismez), `prefers-reduced-motion` icin animasyonlar durur ([tasarim](docs/superpowers/specs/2026-10-31-arayuz-yenileme-design.md))
 - **DevTools takibi** — Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle, LiteLLM, LangGraph, Langfuse, GitLab, Keycloak release guncellemeleri
-- **CISA KEV** — Aktif somurulen zafiyetler (Known Exploited Vulnerabilities) CVE bolumunde ayri kaynak; NVD API'sinin `hasKev` filtresiyle, eklenme tarihi ve federal son tarih bilgisiyle
+- **CISA KEV** — Aktif somurulen zafiyetler (Known Exploited Vulnerabilities) CVE bolumunde ayri kaynak; NVD API'sinin `hasKev` filtresiyle, eklenme tarihi ve federal son tarih bilgisiyle. Eklenme tarihi `CVEEntry.kev_added_date` alaninda (migration 0016) tutulur; NVD yolu bir KEV kaydini yeniden yazsa da bu tarihi ezmez; Genel Bakis'in KEV kutusu bu alana gore sayar
 - **Tarih filtresi** — 1-30 gun (haberler) / 1-90 gun (CVE, Kubernetes, SRE, Yapay Zeka) / 1-120 gun (DevTools) slider ile filtreleme (`news/serializers.py` sinirlari)
 - **Yeniden denemeli cekim** — Gecici 429/5xx ve baglanti hatalarinda 2 ek deneme, ussel bekleme, `Retry-After`'a uyum (`news/base_scraper.oturum_kur`); onceden tek bir 503 kaynagi o tur bos birakiyordu
 - **CVSS siddet filtresi** — Kritik / Yuksek / Orta / Dusuk (CVE sayfasi)
@@ -188,7 +191,7 @@ Ayni kod uc bicimde calisir:
 | Katman | Teknolojiler |
 |--------|-------------|
 | **Backend** | Python 3.11, Django 5.2, Django REST Framework 3.18, drf-spectacular (OpenAPI 3), django-csp, Celery 5.6 + django-celery-beat, Gunicorn 22, Whitenoise |
-| **Frontend** | React 18, Vite 6, React Bootstrap 2.9, React Router DOM 7, Axios, react-hot-toast; Node 22 |
+| **Frontend** | React 18, Vite 6, React Bootstrap 2.9, React Router DOM 7, Axios, react-hot-toast; Node 22; yalniz koyu tema (sistem yazi tipleri, `src/styles/tema.css`) |
 | **Veri** | PostgreSQL 16 (compose ve K8s; SQLite yalniz `DEBUG=True` ile hostta), Redis 7 (cache + Celery broker, django-redis) |
 | **Scraping** | BeautifulSoup4, lxml, Requests |
 | **Ceviri** | Cekim aninda yerel LibreTranslate 1.9.6 (aninda Turkce, rozetli); retranslate 2 saatte bir bekleyen ve LibreTranslate kayitlarini Gemini API (gemini-3.5-flash-lite, ucretsiz katman, kayit basina tek istek) ile yukseltir + merkezi post-processing |
@@ -297,7 +300,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-506 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+603 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -312,7 +315,7 @@ scripts/pg_test.sh --sqlite test news.tests.test_cursor
 
 Frontend'de ESLint (flat config, `frontend/eslint.config.js`; `npm run lint`) CI'da build'den once kosar: `@eslint/js` onerilenleri, `react-hooks/rules-of-hooks` (hata) ve `exhaustive-deps` (uyari). Bolum sayfalarindaki 5 sn'lik liste yenileme `hooks/useAraliklaYenile` ile sekme arka plandayken durur.
 
-Frontend birim testleri Vitest + Testing Library ile `frontend/src/**/*.test.{js,jsx}` altindadir (`npm test`); CI'da lint ile build arasinda kosar. 22 test; ilk kapsam: HTML kacisi (`utils/html.js`), goreli zaman (`utils/zaman`), aralikli yenileme hook'u, ceviri rozeti, saglik seridi (`SaglikSeridi`).
+Frontend birim testleri Vitest + Testing Library ile `frontend/src/**/*.test.{js,jsx}` altindadir (`npm test`); CI'da lint ile build arasinda kosar. 148 test, 17 dosya; kapsam: HTML kacisi (`utils/html.js`), goreli zaman (`utils/zaman`), aralikli yenileme hook'u, ceviri rozeti, saglik seridi (`SaglikSeridi`), Genel Bakis (`genel/`), ortak okuma paneli (`okuma/`, `utils/okuma*.js`), `?kayit=` baglantisi (`useSeciliKayit`), bolum sayfalari (`bolum/`), CVE listesi ve son ziyaret (`utils/sonZiyaret.js`). Worker baslatma zaman asimi gorulurse (Windows bind mount'ta yavas kurulum) `npm test -- --maxWorkers=2` ile kosun.
 
 CI (`Backend (Django testleri)`) testleri PostgreSQL 16 servisiyle, `DEBUG=False` ve gercek bir `SECRET_KEY` ile kosar; migration'larin eksiksiz oldugu (`makemigrations --check`) ayni iste dogrulanir. Yeni bir test yazarken kodu gecici olarak bozup testin kirmiziya dondugunu gorun; mock'lanmis saglayici testlerinde "yesil ama hicbir seyi sinamiyor" tuzagi kolaydir.
 
@@ -392,6 +395,7 @@ Her bolum (news, cve, k8s, sre, devtools, ai) ayni endpoint yapisini kullanir:
 | GET | `/api/{bolum}/stats/` | Istatistikleri getir |
 | GET | `/api/{bolum}/export/` | HTML rapor olarak disa aktar |
 | GET | `/api/saglik/` | Bolum basina son basarili cekim, son durum, ceviri bekleyen/vazgecilen, sessiz kaynaklar (anonim, 60 sn cache) |
+| GET | `/api/ozet/` | Genel Bakis ozeti: `critical_count` (CVSS >= 9.0, son 24 sa), `high_count` (7.0-8.9, son 7 gun), `kev_count` (`kev_added_date` son 7 gun), `priority` (en fazla 5 oncelikli CVE), `chart` (CVSS noktalari), `unscored_count`, `sources{total,silent}`, `fetch{last_success_at,next_at}`; `?since=<ISO tarih>` ile ek olarak `new_since_count` (anonim, 60 sn cache; `new_since_count` cache'e girmez) |
 
 **Bolum isimleri:** `news` (Siber Guvenlik, fetch endpoint: `/api/fetch/`), `cve`, `k8s`, `sre`, `devtools`, `ai`
 
@@ -586,7 +590,7 @@ cybersecurity_news/
 │   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
 │   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
-│   ├── tests/                  # 506 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
+│   ├── tests/                  # 603 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
 │   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
 │   ├── cve_scraper.py          # 5 CVE kaynagi scraper'i
@@ -615,8 +619,9 @@ cybersecurity_news/
 │
 ├── frontend/                   # React SPA
 │   ├── src/
-│   │   ├── App.jsx             # Router, Navbar, Karanlik Mod
-│   │   ├── App.css             # Tema stilleri
+│   │   ├── App.jsx             # Router, Navbar (yalniz koyu tema), Genel Bakis rotasi
+│   │   ├── App.css             # Duzen stilleri
+│   │   ├── styles/tema.css     # Koyu tema token'lari ve bilesen stilleri
 │   │   ├── components/
 │   │   │   ├── NewsComponent.jsx       # Siber guvenlik sayfasi
 │   │   │   ├── CVEComponent.jsx        # CVE sayfasi
@@ -624,7 +629,12 @@ cybersecurity_news/
 │   │   │   ├── SREComponent.jsx        # SRE sayfasi
 │   │   │   ├── DevToolsComponent.jsx   # DevTools sayfasi
 │   │   │   ├── AINewsComponent.jsx     # Yapay Zeka sayfasi
-│   │   │   └── CeviriEtiketi.jsx       # Ceviri saglayici rozeti
+│   │   │   ├── CeviriEtiketi.jsx       # Ceviri saglayici rozeti
+│   │   │   ├── genel/                  # Genel Bakis: durum kutulari, CVSS grafigi, oncelikli liste, gundem
+│   │   │   ├── bolum/BolumSayfasi.jsx  # Bolum sayfalari icin ortak liste + panel iskeleti
+│   │   │   ├── cve/CveSatiri.jsx       # CVE liste satiri
+│   │   │   └── okuma/OkumaPaneli.jsx   # Ortak okuma paneli (Turkce varsayilan, orijinal istege bagli)
+│   │   ├── hooks/useSeciliKayit.js     # ?kayit= derin baglantisi
 │   │   └── services/
 │   │       └── api.js          # Axios API servisleri
 │   ├── Dockerfile              # Production build: Node 22 + Nginx 1.31 (non-root)
@@ -908,7 +918,7 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 
 | Is akisi | Tetik | Mod | Ne yapar |
 |---|---|---|---|
-| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 506 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (22 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
+| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 603 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (148 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
 | `Dependency Review` | PR | **Kapi** | HIGH/CRITICAL zafiyetli bagimlilik getiren PR'i durdurur |
 | `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
 | `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |
@@ -939,6 +949,9 @@ curl -s -H "Authorization: Token $CYBERNEWS_TOKEN" http://localhost:8000/api/v1/
 
 # Ana sayfa saglik seridinin kaynagi: bolum basina sessiz kaynaklar (tokensiz, 60 sn cache)
 curl -s localhost:8000/api/saglik/ | jq '.sections[] | .silent_sources'
+
+# Genel Bakis kutularinin kaynagi (tokensiz, 60 sn cache)
+curl -s localhost:8000/api/ozet/ | jq '{critical_count, high_count, kev_count, fetch}'
 
 # Loglar
 docker compose logs -f --tail=100 teknoloji-worker      # cekim ve ceviri

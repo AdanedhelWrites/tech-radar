@@ -4,6 +4,8 @@ from . import views
 urlpatterns = [
     # Ana sayfa saglik seridi (anonim, dar, 60 sn cache; 2026-10-14)
     path('api/saglik/', views.get_saglik, name='get_saglik'),
+    # Ana sayfa Zafiyet Durumu ozeti (anonim, 60 sn cache; 2026-10-31)
+    path('api/ozet/', views.get_ozet, name='get_ozet'),
 
     # Haber API endpoints
     path('api/news/', views.get_news, name='get_news'),
