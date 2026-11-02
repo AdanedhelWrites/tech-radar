@@ -71,7 +71,7 @@ _CAPA_DESENLERI = (
     re.compile(r'\bv\d+\.\d+(?!\.?\d)', re.IGNORECASE),          # v1.31
 )
 _URL = re.compile(r'https?://\S+', re.IGNORECASE)
-_URL_SONU = '.,;:!?)]}>\'"'
+_URL_SONU = '.,;:!?)]}>\'"`'
 
 # Proje kurali "kod ASCII Turkce" bu metne UYGULANMAZ: talimat modele gider ve model yazimini taklit
 # eder. 2026-10-16'ya kadar diakritiksiz yazilmisti; Gemini cevirilerinin yarisi (CVE'de %53) Turkce
@@ -396,18 +396,42 @@ def _capalar(metin: str) -> Set[str]:
     return capalar
 
 
+def _gecis_araliklari(metin: str, capalar: Set[str]) -> list:
+    """Capalarin metindeki tum gecislerinin [bas, son) araliklari."""
+    araliklar = []
+    for capa in capalar:
+        bas = metin.find(capa)
+        while bas != -1:
+            araliklar.append((bas, bas + len(capa)))
+            bas = metin.find(capa, bas + 1)
+    return araliklar
+
+
+def _acikta_geciyor(metin: str, capa: str, maskeli: list) -> bool:
+    """capa metinde, tamami maskeli bir araligin icinde kalmayan bir gecisle var mi."""
+    bas = metin.find(capa)
+    while bas != -1:
+        son = bas + len(capa)
+        if not any(m_bas <= bas and son <= m_son for m_bas, m_son in maskeli):
+            return True
+        bas = metin.find(capa, bas + 1)
+    return False
+
+
 def _capa_sorunu(capalar: Dict[str, Set[str]], kimlik: str, ceviri: str) -> Optional[str]:
     """Paket icinde kimlik karismasi: ceviri baska kaydin capasini tasiyor ya da (>=2 capali kayitta)
     kendi capalarinin hicbirini tasimiyor. Ayni bicimli yer degisimini _alan_sorunu yakalayamaz.
     Duz alt dize testi: Turkce ek kesmeden sonra gelir ('2.4.1'den')."""
     kendi = capalar[kimlik]
     metin = ceviri.upper()
+    kendi_araliklari = _gecis_araliklari(metin, kendi)
     for diger, onlarin in capalar.items():
         if diger == kimlik:
             continue
         for capa in onlarin - kendi:
-            # Kendi capasinin parcasiysa (1.2.3 / 1.2.3.4, kisa / uzun URL) karisma sayilmaz
-            if capa in metin and not any(capa in k for k in kendi):
+            # Yalniz kendi capasinin icinde kalan gecis (1.2.3.4 icindeki 1.2.3) karisma sayilmaz;
+            # kendi capasini asan gecis (kendi 1.2.3, metinde 1.2.3.4) sayilir
+            if _acikta_geciyor(metin, capa, kendi_araliklari):
                 return f'capa karisti ({diger} kaydinin capasi)'
     if len(kendi) >= 2 and not any(capa in metin for capa in kendi):
         return 'capalar kayip'

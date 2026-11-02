@@ -682,6 +682,7 @@ class GeminiPaketCapaTests(GeminiTestMixin, SimpleTestCase):
             ('Details (see https://example.com/advisory/1).', {'HTTPS://EXAMPLE.COM/ADVISORY/1'}),
             ("Kaynak: 'https://example.com/a?b=1';", {'HTTPS://EXAMPLE.COM/A?B=1'}),
             ('call `parse_header()` now', {'`PARSE_HEADER()`'}),
+            ('bkz. `https://x/a`', {'`HTTPS://X/A`', 'HTTPS://X/A'}),
             ("2.4.1'den önceki sürümler", {'2.4.1'}),
             ('v1.31 and v1.31.0.', {'V1.31', 'V1.31.0'}),
             ('Kubernetes v1.31.0 yayında', {'V1.31.0'}),
@@ -693,16 +694,36 @@ class GeminiPaketCapaTests(GeminiTestMixin, SimpleTestCase):
                 self.assertEqual(gemini._capalar(metin), beklenen)
 
     def test_kendi_capasinin_parcasi_karisma_sayilmaz(self):
-        # k1'in 1.2.3'u, k0'in kendi 1.2.3.4'unun parcasi: k0 reddedilmez
-        kayitlar = {
-            'k0': {'title': 'Router firmware 1.2.3.4 fixes the authentication bypass'},
-            'k1': {'title': 'Library 1.2.3 fixes a memory leak in the parser'},
-        }
-        cevap = {
-            'k0': {'title': 'Yönlendirici yazılımı 1.2.3.4 kimlik doğrulama atlatmasını gideriyor'},
-            'k1': {'title': 'Kütüphane 1.2.3 ayrıştırıcıdaki bellek sızıntısını gideriyor'},
-        }
-        self._post(_yanit(govde=cevap))
-        sonuc = gemini.paket_cevir(kayitlar)
-        self.assertEqual(sonuc.ceviriler, cevap)
+        # k1'in 1.2.3'u yalniz k0'in kendi 1.2.3.4'unun icinde geciyor: k0 reddedilmez
+        self._post(_yanit(govde=self.ICERIK_CEVAP))
+        sonuc = gemini.paket_cevir(self.ICERIK_KAYIT)
+        self.assertEqual(sonuc.ceviriler, self.ICERIK_CEVAP)
         self.assertEqual(sonuc.reddedilen, set())
+
+    # Tek capali kayitlar, capalardan biri digerinin onegi (lost-anchor kurali >=2 ister)
+    ICERIK_KAYIT = {
+        'k0': {'title': 'Router firmware 1.2.3.4 fixes the authentication bypass'},
+        'k1': {'title': 'Router firmware 1.2.3 fixes the authentication bypass'},
+    }
+    ICERIK_CEVAP = {
+        'k0': {'title': 'Yönlendirici yazılımı 1.2.3.4 kimlik doğrulama atlatmasını gideriyor'},
+        'k1': {'title': 'Yönlendirici yazılımı 1.2.3 kimlik doğrulama atlatmasını gideriyor'},
+    }
+
+    def test_onek_capali_yer_degisimi_iki_yonde_reddedilir(self):
+        for kisa, uzun in (('1.2.3', '1.2.3.4'), ('v1.31.1', 'v1.31.10'), ('CVE-2026-1234', 'CVE-2026-12345')):
+            with self.subTest(kisa=kisa, uzun=uzun):
+                gemini._gate = tu._LocalGate()
+                kayitlar = {k: {'title': v['title'].replace('1.2.3.4', uzun).replace('1.2.3 ', kisa + ' ')}
+                            for k, v in self.ICERIK_KAYIT.items()}
+                cevap = {k: {'title': v['title'].replace('1.2.3.4', uzun).replace('1.2.3 ', kisa + ' ')}
+                         for k, v in self.ICERIK_CEVAP.items()}
+                self.assertIn(uzun, kayitlar['k0']['title'])
+                self.assertIn(kisa + ' ', kayitlar['k1']['title'])
+                self._post(_yanit(govde=cevap))
+                dogru = gemini.paket_cevir(kayitlar)
+                self.assertEqual(dogru.reddedilen, set(), 'yer degisimi yokken kabul edilmeli')
+                self._post(_yanit(govde={'k0': cevap['k1'], 'k1': cevap['k0']}))
+                sonuc = gemini.paket_cevir(kayitlar)
+                self.assertEqual(sonuc.reddedilen, {'k0', 'k1'})
+                self.assertEqual(sonuc.ceviriler, {})
