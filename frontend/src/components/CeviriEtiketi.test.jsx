@@ -18,6 +18,18 @@ describe('CeviriEtiketi', () => {
     render(<CeviriEtiketi kayit={{ translation_provider: 'gemini' }} />)
     expect(screen.getByText('Çeviri: Gemini')).toBeInTheDocument()
   })
+  it('OpenRouter ve DeepL kayitlari Gemini gibi gri bilgi rozeti alir (PR-C)', () => {
+    render(<CeviriEtiketi kayit={{ translation_provider: 'openrouter' }} />)
+    const openrouter = screen.getByText('Çeviri: OpenRouter')
+    expect(openrouter).toHaveClass('bg-secondary')
+    expect(openrouter.getAttribute('title')).toBe('OpenRouter ücretsiz modeliyle çevrildi.')
+    render(<CeviriEtiketi kayit={{ translation_provider: 'deepl' }} />)
+    const deepl = screen.getByText('Çeviri: DeepL')
+    expect(deepl).toHaveClass('bg-secondary')
+    expect(deepl.getAttribute('title')).toBe('DeepL API Free ile çevrildi.')
+    expect(ceviriEtiketiHtml({ translation_provider: 'openrouter' })).toContain('Çeviri: OpenRouter')
+    expect(ceviriEtiketiHtml({ translation_provider: 'deepl' })).toContain('background:#6c757d')
+  })
   it('saglayicisiz ve ceviri beklemeyen kayit rozet almaz; kayit yoksa cokmez', () => {
     const { container } = render(<CeviriEtiketi kayit={{ translation_provider: '', needs_translation: false }} />)
     expect(container).toBeEmptyDOMElement()

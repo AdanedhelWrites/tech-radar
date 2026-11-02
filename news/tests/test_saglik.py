@@ -224,3 +224,48 @@ class CeviriButcesiTests(_GeminiButceOrtami, V1TestCase):
 
         self.assertEqual(ozet, {'used': 0, 'limit': 450, 'period': 'day',
                                 'available': False, 'cooldown': False})
+
+
+class YedekButceleriTests(_GeminiButceOrtami, V1TestCase):
+    """PR-C (G7): translation_budget ayarli yedekleri de listeler; ayarsiz yedek ve anahtar degeri yanita girmez."""
+
+    def setUp(self):
+        super().setUp()
+        from news import kayit_cevirmenleri as kc
+        self.kc = kc
+        for cevirmen in kc.YEDEKLER:
+            for hedef, deger in (('_gate', tu._LocalGate()), ('_butce', gemini._LocalButce())):
+                yama = mock.patch.object(cevirmen, hedef, deger)
+                yama.start()
+                self.addCleanup(yama.stop)
+
+    def _butce(self):
+        cache.delete('saglik_ozeti')
+        return self.client.get('/api/saglik/').json()['translation_budget']
+
+    def test_anahtarsiz_yalniz_gemini(self):
+        self.assertEqual(set(self._butce()), {'gemini'})
+
+    def test_ayarli_yedekler_listelenir_anahtar_sizmaz(self):
+        self.kc.OPENROUTER._sayac().artir(self.kc.OPENROUTER._donem_anahtari())
+        with self.settings(GEMINI_API_KEY='gizli-gemini-degeri', OPENROUTER_API_KEY='gizli-or-degeri',
+                           DEEPL_API_KEY='gizli-deepl-degeri'), \
+                mock.patch.object(self.kc.GEMINI2, 'model', 'gemini-yedek-model'), \
+                mock.patch.object(self.kc.OPENROUTER, 'model', 'ornek/model:free'):
+            butce = self._butce()
+            ham = self.client.get('/api/saglik/').content.decode()
+
+        self.assertEqual(set(butce), {'gemini', 'gemini2', 'openrouter', 'deepl'})
+        self.assertEqual(butce['openrouter']['used'], 1)
+        self.assertEqual(butce['deepl']['period'], 'month')
+        for ozet in butce.values():
+            self.assertEqual(set(ozet), {'used', 'limit', 'period', 'available', 'cooldown'})
+        for gizli in ('gizli-gemini-degeri', 'gizli-or-degeri', 'gizli-deepl-degeri', 'gemini-yedek-model'):
+            self.assertNotIn(gizli, ham)
+
+    def test_modeli_bos_yedek_listelenmez(self):
+        """Anahtar dolu ama model bos (GEMINI_FALLBACK_MODEL / OPENROUTER_MODEL): ayarsiz sayilir."""
+        with self.settings(GEMINI_API_KEY='gizli', OPENROUTER_API_KEY='gizli', DEEPL_API_KEY=''), \
+                mock.patch.object(self.kc.GEMINI2, 'model', ''), \
+                mock.patch.object(self.kc.OPENROUTER, 'model', ''):
+            self.assertEqual(set(self._butce()), {'gemini'})

@@ -583,6 +583,14 @@ class KayitCevirmeni:
         except Exception:
             return False
 
+    def ayarli(self) -> bool:
+        """Anahtar dolu ve ayar duzeyi on kosul tamam mi (model adi vb.); sayac/devre kesiciye bakmaz.
+        /api/saglik/ yalniz ayarli yedegi listeler. ASLA firlatmaz."""
+        try:
+            return bool(self._anahtar()) and self._kullanilabilir()
+        except Exception:
+            return False
+
     def butce_ozeti(self) -> dict:
         """Anonim /api/saglik/ icin ozet; ASLA firlatmaz ve anahtar/kimlik bilgisi icermez.
 

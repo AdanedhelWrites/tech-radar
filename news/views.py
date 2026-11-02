@@ -722,14 +722,19 @@ def get_saglik(request):
     """
     from django.utils.timezone import now
 
-    from . import gemini
+    from . import gemini, kayit_cevirmenleri
     from .fetch_runs import bolum_ozetleri, ceviri_kuyrugu_ozeti
 
     govde = cache.get('saglik_ozeti')
     if govde is None:
+        # Birincil Gemini hep; yedek (gemini2/openrouter/deepl, sayac oneki) yalniz ayarliysa: anahtar
+        # (ve gerekiyorsa model) dolu. Ozetler anahtar degeri tasimaz (G7, PR-C).
+        butce = {'gemini': gemini.butce_ozeti()}
+        butce.update({cevirmen.onek: cevirmen.butce_ozeti()
+                      for cevirmen in kayit_cevirmenleri.YEDEKLER if cevirmen.ayarli()})
         govde = {'generated_at': now().isoformat(), 'sections': bolum_ozetleri(),
                  'translation_queue': ceviri_kuyrugu_ozeti(),
-                 'translation_budget': {'gemini': gemini.butce_ozeti()}}
+                 'translation_budget': butce}
         cache.set('saglik_ozeti', govde, SAGLIK_CACHE_SURESI)
     return Response(govde)
 

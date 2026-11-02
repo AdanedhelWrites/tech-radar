@@ -119,6 +119,40 @@ describe('SaglikSeridi ceviri kuyrugu', () => {
     expect(rozet).toHaveClass('rozet', 'uyari')
   })
 
+  it('yedek saglayici yalniz kullanildiysa (used > 0) gorunur (PR-C)', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler(), translation_queue: kuyruk(),
+      translation_budget: {
+        gemini: butce({ used: 450, available: false }),
+        gemini2: butce({ used: 0 }),
+        openrouter: butce({ used: 12, limit: 50 }),
+        deepl: butce({ used: 3400, limit: 450000, period: 'month', cooldown: true }),
+      } } })
+
+    render(<SaglikSeridi />)
+
+    expect(await screen.findByText('Gemini')).toBeInTheDocument()
+    expect(screen.getByText(/450\/450/)).toBeInTheDocument()
+    expect(screen.queryByText('Gemini 2')).not.toBeInTheDocument()
+    expect(screen.getByText('OpenRouter')).toBeInTheDocument()
+    expect(screen.getByText(/12\/50/)).toBeInTheDocument()
+    expect(screen.getByTitle('OpenRouter günlük istek bütçesi')).toBeInTheDocument()
+    expect(screen.getByText('DeepL')).toBeInTheDocument()
+    expect(screen.getByTitle('DeepL aylık karakter bütçesi')).toBeInTheDocument()
+    expect(screen.getAllByText('beklemede')).toHaveLength(1)
+  })
+
+  it('eksik bicimli butce girdisi "undefined" yazmaz, atlanir', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler(), translation_queue: kuyruk(),
+      translation_budget: { gemini: { used: 5 }, openrouter: { limit: 50 }, deepl: null } } })
+
+    const { container } = render(<SaglikSeridi />)
+
+    expect(await screen.findByText('Çeviri kuyruğu')).toBeInTheDocument()
+    expect(container.textContent).not.toContain('undefined')
+    expect(screen.queryByText('Gemini')).not.toBeInTheDocument()
+    expect(screen.queryByText('OpenRouter')).not.toBeInTheDocument()
+  })
+
   it('translation_budget yoksa Gemini ogesi hic gorunmez', async () => {
     saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler(), translation_queue: kuyruk() } })
 
