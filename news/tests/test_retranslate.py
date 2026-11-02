@@ -4,10 +4,11 @@ LibreTranslate ve Gemini sahte, Redis gercek (benzersiz onek), veritabani gercek
 Hicbir Celery isi kuyruga atilmaz; fonksiyon dogrudan cagrilir.
 """
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from io import StringIO
 from unittest import mock
 
+from celery.schedules import crontab
 from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
@@ -65,7 +66,9 @@ class RetranslateTestBase(TranslationGateMixin, TestCase):
 
     def gemini_ayarla_varsayilan(self):
         """Gemini kapali: mevcut zincir testleri etkilenmez. Gemini testleri kendi ayarini yapar."""
-        for hedef, deger in (('hazir', lambda: False), ('butce_var', lambda: True), ('kaydi_cevir', lambda alanlar, bolum=None: None)):
+        # _butce: tur payi (G4) gunluk sayaci okur; her test bos bir surec ici sayacla baslar.
+        for hedef, deger in (('hazir', lambda: False), ('butce_var', lambda: True),
+                             ('kaydi_cevir', lambda alanlar, bolum=None: None), ('_butce', gemini._LocalButce())):
             yama = mock.patch.object(gemini, hedef, deger)
             yama.start()
             self.addCleanup(yama.stop)
@@ -74,10 +77,10 @@ class RetranslateTestBase(TranslationGateMixin, TestCase):
         for anahtar in self.redis.scan_iter(f'{self.prefix}:*'):
             self.redis.delete(anahtar)
 
-    def _calistir(self, batch=8, upgrade_batch=5):
+    def _calistir(self, batch=8, upgrade_batch=5, tur=None):
         from news.retranslate import retranslate_pending
         return retranslate_pending(redis_client=self.redis, prefix=self.prefix,
-                                   batch=batch, upgrade_batch=upgrade_batch)
+                                   batch=batch, upgrade_batch=upgrade_batch, tur=tur)
 
     def _ai(self, baslik, govde, slug):
         return AINewsEntry.objects.create(
@@ -389,11 +392,13 @@ class RetranslateGoreviTests(SimpleTestCase):
             self.assertEqual(tasks.retranslate_pending_task(), {'translated': 3})
         sahte.assert_called_once_with()
 
-    def test_beat_takvimi_tek_saatlerde_bes_gece(self):
-        giris = settings.CELERY_BEAT_SCHEDULE['retranslate-pending-every-2h']
+    def test_beat_takvimi_saatlik_cekim_saatleri_haric(self):
+        """Spec 2026-11-02 G4: saatlik tur, cekim saatleri (00/06/12/18) haric; gunde 20 tur."""
+        self.assertNotIn('retranslate-pending-every-2h', settings.CELERY_BEAT_SCHEDULE)
+        giris = settings.CELERY_BEAT_SCHEDULE['retranslate-pending-hourly']
         self.assertEqual(giris['task'], 'news.tasks.retranslate_pending_task')
         self.assertEqual(giris['schedule'].minute, {5})
-        self.assertEqual(giris['schedule'].hour, set(range(1, 24, 2)))
+        self.assertEqual(giris['schedule'].hour, set(range(24)) - {0, 6, 12, 18})
 
     def test_cekim_saatleriyle_cakismaz(self):
         """Fetch task'lari 00/06/12/18'de calisir; retranslate o saatlere dusmemeli."""
@@ -402,7 +407,7 @@ class RetranslateGoreviTests(SimpleTestCase):
             if giris['task'].startswith('news.tasks.fetch_'):
                 cekim_saatleri |= giris['schedule'].hour
         self.assertEqual(cekim_saatleri, {0, 6, 12, 18})
-        retranslate_saatleri = settings.CELERY_BEAT_SCHEDULE['retranslate-pending-every-2h']['schedule'].hour
+        retranslate_saatleri = settings.CELERY_BEAT_SCHEDULE['retranslate-pending-hourly']['schedule'].hour
         self.assertEqual(cekim_saatleri & retranslate_saatleri, set())
 
 
@@ -460,14 +465,17 @@ class BozukCevirileriIsaretleTests(TestCase):
 class GeminiSahteMixin:
     """gemini modulunu ag erisimi olmadan taklit eder."""
 
-    def gemini_ayarla(self, cevap=None, hazir=True, butce=True):
+    def gemini_ayarla(self, cevap=None, hazir=True, butce=True, istek_say=False):
         """cevap: alanlar sozlugunu alan fonksiyon, sabit sozluk ya da None (cevrilemedi).
-        hazir: sabit bool ya da parametresiz bir fonksiyon (cagri sirasinda degisebilir)."""
+        hazir: sabit bool ya da parametresiz bir fonksiyon (cagri sirasinda degisebilir).
+        istek_say: her cagri gercek kaydi_cevir gibi gunluk sayaci artirir (tur payi testleri)."""
         self.gemini_cagrilar = []
         hazir_fn = hazir if callable(hazir) else (lambda: hazir)
 
         def kaydi_cevir(alanlar, bolum=None):
             self.gemini_cagrilar.append(dict(alanlar))
+            if istek_say:
+                gemini._get_butce().artir(gemini.butce_anahtari())
             return cevap(alanlar) if callable(cevap) else cevap
 
         for hedef, deger in (('hazir', lambda: hazir_fn() and butce), ('butce_var', lambda: butce),
@@ -996,6 +1004,192 @@ class OnemSinifiTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBa
         self.assertEqual(kayit.translation_provider, 'libretranslate')
 
 
+class KalanTurSayisiTests(SimpleTestCase):
+    """Spec 2026-11-02 G4: gunun kalan tur sayisi Beat takviminden (Istanbul) Pasifik gece yarisina kadar sayilir."""
+
+    def _say(self, *args, **kwargs):
+        from news import retranslate
+        return retranslate.kalan_tur_sayisi(datetime(*args, tzinfo=gemini.PASIFIK, **kwargs))
+
+    def test_kalan_tur_sayisi_gun_basinda_20(self):
+        # 2026-11-10 PST (UTC-8): Pasifik 00:10 = Istanbul 11:10; Pasifik gece yarisi = Istanbul 11:00.
+        # simdi - 30 dk = 10:40, sonraki ilk an 11:05 (simdiki tur, dahil). Elle sayilan :05 anlari:
+        #   11, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23  -> 11
+        #   (ertesi gun) 01, 02, 03, 04, 05, 07, 08, 09, 10  -> 9   (11:05 yeni Pasifik gunune duser)
+        self.assertEqual(self._say(2026, 11, 10, 0, 10), 20)
+
+    def test_kalan_tur_sayisi_yaz_saatinde_de_20(self):
+        # 2026-07-10 PDT (UTC-7): Pasifik 00:10 = Istanbul 10:10; gun sonu Istanbul 10:00 (ertesi gun).
+        #   10 (simdiki tur, 09:40 sonrasi), 11, 13-17, 19-23  -> 12
+        #   (ertesi gun) 01-05, 07, 08, 09  -> 8
+        self.assertEqual(self._say(2026, 7, 10, 0, 10), 20)
+
+    def test_kalan_tur_sayisi_gun_ortasinda(self):
+        # 2026-11-10 Pasifik 12:00 = Istanbul 23:00. 22:30 sonrasi: 23 -> 1; ertesi gun 01-05, 07-10 -> 9.
+        self.assertEqual(self._say(2026, 11, 10, 12, 0), 10)
+
+    def test_kalan_tur_en_az_bir(self):
+        # Pasifik 23:45 = Istanbul 10:45. 10:15 sonrasi ilk an 11:05, o da yeni Pasifik gunu: sayi 0 -> 1.
+        self.assertEqual(self._say(2026, 11, 10, 23, 45), 1)
+
+    def test_kalan_tur_sayisi_takvimden_okunur(self):
+        """Sayi takvimin hour/minute kumelerinden gelir, sabit kodlanmaz."""
+        takvim = dict(settings.CELERY_BEAT_SCHEDULE)
+        takvim['retranslate-pending-hourly'] = {
+            'task': 'news.tasks.retranslate_pending_task', 'schedule': crontab(minute='5,35', hour='*')}
+        with override_settings(CELERY_BEAT_SCHEDULE=takvim):
+            # Pasifik 00:10 = Istanbul 11:10; 10:40 sonrasi 11:05'ten ertesi gun 10:35'e: 24 saat x 2
+            self.assertEqual(self._say(2026, 11, 10, 0, 10), 48)
+
+
+class TurPayiHesabiTests(SimpleTestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.simdi = datetime(2026, 11, 10, 3, 0, tzinfo=gemini.PASIFIK)
+
+    def _pay(self, kullanim, kalan_tur):
+        from news import retranslate
+        with mock.patch.object(gemini, 'butce_kullanimi', return_value=kullanim), \
+                mock.patch.object(retranslate, 'kalan_tur_sayisi', return_value=kalan_tur) as sayac:
+            pay = retranslate.tur_payi(self.simdi)
+        sayac.assert_called_once_with(self.simdi)
+        return pay
+
+    def test_tur_payi_kalan_butceyi_bolustirir(self):
+        self.assertEqual(self._pay(250, 10), 20)   # ceil(200 / 10)
+        self.assertEqual(self._pay(241, 10), 21)   # ceil(209 / 10): yukari yuvarlanir
+        self.assertEqual(self._pay(0, 20), 23)     # ceil(450 / 20)
+        self.assertEqual(self._pay(440, 1), 10)    # gunun son turu kalanin tamamini alir
+
+    def test_tur_payi_butce_bittiyse_sifir(self):
+        self.assertEqual(self._pay(450, 5), 0)
+        self.assertEqual(self._pay(460, 5), 0, 'Pay negatife inmemeli')
+
+    def test_tur_kalan_harcamayi_duser_ve_sifirin_altina_inmez(self):
+        from news import retranslate
+        tur = retranslate._Tur(pay=5, baslangic=100)
+        with mock.patch.object(gemini, 'butce_kullanimi', return_value=103):
+            self.assertEqual(tur.kalan(), 2)
+        with mock.patch.object(gemini, 'butce_kullanimi', return_value=110):
+            self.assertEqual(tur.kalan(), 0)
+
+
+class TurPayiTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBase):
+    """Spec 2026-11-02 G4: tur payi bitince Gemini istegi atilmaz; bekleyen zincirle surer, yukseltme durur."""
+
+    def setUp(self):
+        super().setUp()
+        self.libre = self.saglayicilari_ayarla(SahteSaglayici('libretranslate', _libre))[0]
+
+    def _tur(self, pay):
+        from news import retranslate
+        return retranslate._Tur(pay=pay, baslangic=gemini.butce_kullanimi())
+
+    def test_tur_payi_bitince_gemini_cagrilmaz(self):
+        self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        kayitlar = [_libre_kaydi(f'pay-{i}', baslik=f'Story number {i + 1} published') for i in range(3)]
+
+        sonuc = self._calistir(tur=self._tur(1))
+
+        self.assertEqual(len(self.gemini_cagrilar), 1)
+        self.assertEqual(sonuc['upgraded'], 1)
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_tur_payi')
+        self.assertFalse(sonuc['stopped'])
+        self.assertEqual(sonuc['gemini_tur_payi'], 1)
+        saglayicilar = []
+        for kayit in kayitlar:
+            kayit.refresh_from_db()
+            saglayicilar.append(kayit.translation_provider)
+            self.assertEqual(kayit.translation_attempts, 0, 'Pay bitmesi icerik hatasi degildir')
+        self.assertEqual(sorted(saglayicilar), ['gemini', 'libretranslate', 'libretranslate'])
+
+    def test_tur_payi_bitince_bekleyen_zincirle_cevrilir(self):
+        self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'pay0')
+
+        sonuc = self._calistir(tur=self._tur(0))
+
+        kayit.refresh_from_db()
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertFalse(kayit.needs_translation)
+        self.assertEqual(kayit.translation_provider, 'libretranslate')
+        self.assertTrue(kayit.turkish_title.startswith('LIBRE'))
+        self.assertEqual(sonuc['by_provider'], {'gemini': 0, 'libretranslate': 1})
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_tur_payi')
+        self.assertFalse(sonuc['stopped'])
+
+    def test_tur_payi_bitince_zincir_kapaliysa_icerik_hatasi_sayilmaz(self):
+        """Pay bitti, zincir kapali, Gemini hazir: istek atilmadi; kaydin sucu degil, sayac artmaz."""
+        self.libre.hazir = False
+        self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        kayit = self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'pay0z')
+
+        sonuc = self._calistir(tur=self._tur(0))
+
+        kayit.refresh_from_db()
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertTrue(kayit.needs_translation)
+        self.assertEqual(kayit.translation_attempts, 0)
+        self.assertEqual(sonuc['failed'], 0)
+
+    def test_oncelik_kati_cve_once(self):
+        self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        cveler = [_cve_kaydi(f'810{i}', cvss=9.8) for i in range(2)]
+        ai_kayitlari = [_libre_kaydi(f'onc-{i}', baslik=f'Story number {i + 1} published') for i in range(2)]
+
+        sonuc = self._calistir(tur=self._tur(2))
+
+        for kayit in cveler:
+            kayit.refresh_from_db()
+            self.assertEqual(kayit.translation_provider, 'gemini')
+        for kayit in ai_kayitlari:
+            kayit.refresh_from_db()
+            self.assertEqual(kayit.translation_provider, 'libretranslate')
+        self.assertEqual(len(self.gemini_cagrilar), 2)
+        self.assertEqual(sonuc['sections']['cve']['upgraded'], 2)
+        self.assertEqual(sonuc['sections']['ai']['upgraded'], 0)
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_tur_payi')
+
+    def test_gunluk_butce_tur_payina_baskin(self):
+        """Ikisi birden gecerliyse sebep 'gemini_budget'."""
+        self.gemini_ayarla(_gemini_cevirisi, butce=False, istek_say=True)
+        _libre_kaydi('baskin')
+
+        sonuc = self._calistir(tur=self._tur(0))
+
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_budget')
+
+    def test_pay_turun_kendi_harcamasini_sayar(self):
+        """Kalan = pay - (simdiki kullanim - baslangic): turdan once harcanmis istekler payi yemez."""
+        self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        for _ in range(7):
+            gemini._get_butce().artir(gemini.butce_anahtari())
+        for i in range(3):
+            _libre_kaydi(f'oncesi-{i}', baslik=f'Story number {i + 1} published')
+
+        sonuc = self._calistir(tur=self._tur(2))
+
+        self.assertEqual(len(self.gemini_cagrilar), 2)
+        self.assertEqual(sonuc['upgraded'], 2)
+
+    def test_tur_verilmezse_tur_payindan_kurulur(self):
+        from news import retranslate
+        self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        for i in range(3):
+            _libre_kaydi(f'vars-{i}', baslik=f'Story number {i + 1} published')
+
+        with mock.patch.object(retranslate, 'tur_payi', return_value=2) as tur_payi:
+            sonuc = self._calistir()
+
+        tur_payi.assert_called_once()
+        simdi = tur_payi.call_args.args[0]
+        self.assertIsNotNone(simdi.tzinfo, 'tur_payi zaman dilimli bir an almali (timezone.now())')
+        self.assertEqual(sonuc['gemini_tur_payi'], 2)
+        self.assertEqual(len(self.gemini_cagrilar), 2)
+
+
 class GeminiAdayiTests(SimpleTestCase):
     """_gemini_adayi_mi: CVE icin CVSS >= 7.0 ya da KEV; diger bolumlerde her kayit."""
 
@@ -1173,7 +1367,7 @@ class SilinenKayitTests(TransactionTestCase):
         ikinci = self._cve('9705')
         birinci = self._cve('9704')
 
-        def sahte_cevir(ad, kayit):
+        def sahte_cevir(ad, kayit, tur=None):
             if kayit.pk == birinci.pk:
                 CVEEntry.objects.filter(pk=birinci.pk).delete()  # eszamanli temizleme
             return {'turkish_description': 'Gemini cevirisi.'}

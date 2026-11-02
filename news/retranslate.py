@@ -19,6 +19,12 @@ butce) asama baslamaz ya da durur; sayac artmaz, kalanlar sonraki tura kalir.
 Eski 'google' etiketli kayitlar yukseltilmez.
 `stopped_reason='gemini_budget'` iken `stopped` False olabilir: LibreTranslate zinciri surer.
 
+Tur payi (spec 2026-11-02 G4): gunluk Gemini butcesi gunun kalan Beat turlarina yayilir; bir tur
+en fazla ceil(kalan_butce / kalan_tur_sayisi) istek harcar (_Tur). Pay bitince yukseltme durur
+(stopped_reason='gemini_tur_payi'; gunluk butce de bittiyse 'gemini_budget' onceliklidir), bekleyen
+asamasi zincirle (LibreTranslate) surer. Pay bitmesi "Gemini hazir degil" sayilmaz (G6): kayit
+icerik hatasi sayilmaz, sonraki turu bekler.
+
 Onem sinifi (G1): CVE'lerde yalniz CVSS >= CVE_GEMINI_ESIGI ya da KEV'deki kayitlar
 Gemini adayidir, iki asamada da; digerleri LibreTranslate cevirisiyle kalir.
 
@@ -29,11 +35,14 @@ Yazma kurallari:
 """
 import os
 import time
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Dict, Optional
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import DatabaseError, OperationalError
 from django.db.models import F, Q
+from django.utils import timezone
 
 from . import gemini
 from . import translation_utils as tu
@@ -68,6 +77,78 @@ RETRANSLATE_TIME_BUDGET = int(os.environ.get(
 
 def _sure_doldu(bitis) -> bool:
     return bitis is not None and time.monotonic() >= bitis
+
+
+# Spec 2026-11-02 G4: Gemini gunluk butcesi bu Beat girdisinin turlarina yayilir (cybernews/settings.py).
+RETRANSLATE_BEAT_ANAHTARI = 'retranslate-pending-hourly'
+# Tur Beat anindan gec baslayabilir (kuyruk, onceki is): bu kadar geriye kadarki an simdiki turdur.
+SIMDIKI_TUR_TOLERANSI = timedelta(minutes=30)
+
+
+def kalan_tur_sayisi(simdi: datetime) -> int:
+    """Simdiden sonraki Pasifik gece yarisina (Gemini gun donumu) kadar Beat'in retranslate turu
+    calistiracagi an sayisi. Simdiki tur dahildir: simdi - 30 dk sonrasindaki ilk an.
+
+    Takvimin hour/minute kumeleri okunur (gun/ay alanlari '*' varsayilir); saat dilimi Beat'inki,
+    CELERY_TIMEZONE (Istanbul). En az 1: gunun son turu kalan butcenin tamamini alir, pay sonsuza kacmaz.
+    """
+    takvim = settings.CELERY_BEAT_SCHEDULE[RETRANSLATE_BEAT_ANAHTARI]['schedule']
+    yerel = ZoneInfo(settings.CELERY_TIMEZONE)
+    pasifik_gunu = simdi.astimezone(gemini.PASIFIK).date()
+    gun_sonu = datetime.combine(pasifik_gunu + timedelta(days=1), datetime.min.time(), tzinfo=gemini.PASIFIK)
+    alt = simdi - SIMDIKI_TUR_TOLERANSI
+    # UTC'de saat saat yurunur, her saat yerel duvar saatine cevrilir (yaz saati gecisi saat atlatmaz)
+    an = alt.astimezone(dt_timezone.utc).replace(minute=0, second=0, microsecond=0)
+    sayi = 0
+    while an < gun_sonu:
+        yerel_an = an.astimezone(yerel)
+        if yerel_an.hour in takvim.hour:
+            for dakika in takvim.minute:
+                aday = yerel_an.replace(minute=dakika, second=0, microsecond=0)
+                if alt < aday < gun_sonu:
+                    sayi += 1
+        an += timedelta(hours=1)
+    return max(1, sayi)
+
+
+def tur_payi(simdi: datetime) -> int:
+    """Bu turun Gemini istek payi: ceil(kalan gunluk butce / gunun kalan tur sayisi), en az 0.
+    Kullanilmayan pay sonraki turlara kalir: kalan butce her turda yeniden hesaplanir."""
+    kalan_butce = max(0, gemini.butce_tavani() - gemini.butce_kullanimi())
+    return -(-kalan_butce // kalan_tur_sayisi(simdi))
+
+
+class _Tur:
+    """Bir retranslate turunun Gemini payi (G4). Harcama, turun basindaki gunluk sayaca gore olculur."""
+
+    def __init__(self, pay: int, baslangic: int):
+        self.pay = pay
+        self.baslangic = baslangic
+
+    def kalan(self) -> int:
+        try:
+            return max(0, self.pay - (gemini.butce_kullanimi() - self.baslangic))
+        except Exception as hata:  # sayac okunamiyorsa Gemini'ye gidilmez (hazir() de False doner)
+            log.warning(f"  [Retranslate] Gemini sayaci okunamadi, tur payi 0 sayiliyor: {hata}")
+            return 0
+
+
+def _turu_kur() -> '_Tur':
+    try:
+        return _Tur(pay=tur_payi(timezone.now()), baslangic=gemini.butce_kullanimi())
+    except Exception as hata:  # sayac okunamazsa tur Gemini'siz (zincirle) surer, dusmez
+        log.warning(f"  [Retranslate] Tur payi hesaplanamadi, pay 0: {hata}")
+        return _Tur(pay=0, baslangic=0)
+
+
+def _payi_var(tur: Optional[_Tur]) -> bool:
+    """tur None: pay siniri yok (yalniz dogrudan cagrilar/testler; retranslate_pending hep tur kurar)."""
+    return tur is None or tur.kalan() > 0
+
+
+def _gemini_kullanilabilir(tur: Optional[_Tur]) -> bool:
+    """Gemini hazir ve turun payi var mi. Pay bitmesi "hazir degil" sayilmaz (G6); ayri sebep yazilir."""
+    return gemini.hazir() and _payi_var(tur)
 
 
 def _basarisiz_say(kayit) -> None:
@@ -137,12 +218,13 @@ def _gemini_adayi_mi(ad: str, kayit) -> bool:
     return (kayit.cvss_score or 0) >= CVE_GEMINI_ESIGI or kayit.kev_added_date is not None
 
 
-def _gemini_ile_cevir(ad: str, kayit) -> Optional[Dict[str, str]]:
-    """Kaydi Gemini ile cevirir; DB alan adlariyla sozluk ya da None (aday degil / hazir degil / cevrilemedi)."""
+def _gemini_ile_cevir(ad: str, kayit, tur: Optional[_Tur] = None) -> Optional[Dict[str, str]]:
+    """Kaydi Gemini ile cevirir; DB alan adlariyla sozluk ya da None
+    (aday degil / hazir degil / tur payi bitti / cevrilemedi)."""
     if not _gemini_adayi_mi(ad, kayit):
         return None  # onem sinifi disi: istek atilmaz
     alanlar = _gemini_alanlari(ad, kayit)
-    if not alanlar or not gemini.hazir():
+    if not alanlar or not _gemini_kullanilabilir(tur):
         return None
     sonuc = gemini.kaydi_cevir(alanlar, ad)
     if sonuc is None:
@@ -218,8 +300,8 @@ def _yaz(kayit, alanlar, saglayici) -> bool:
     return True
 
 
-def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc, bitis=None):
-    """Asama 1. Donus: (cevrilen, basarisiz, durdu)."""
+def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc, bitis=None, tur=None):
+    """Asama 1. Donus: (cevrilen, basarisiz, durdu). Tur payi bitince kayitlar zincirle cevrilir."""
     anahtar = f'{prefix}:cursor:{ad}'
     sorgu = (model.objects.filter(needs_translation=True, translation_attempts__lt=RETRANSLATE_MAX_ATTEMPTS)
              .order_by('updated_at', 'id'))
@@ -236,7 +318,8 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc, bitis=Non
             break
         deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
 
-        gemini_alanlar = _gemini_ile_cevir(ad, kayit)
+        payi_vardi = _payi_var(tur)  # istek oncesi: pay bittiyse istek atilmadi, red sayilmaz
+        gemini_alanlar = _gemini_ile_cevir(ad, kayit, tur)
         if gemini_alanlar is not None:
             if _yaz(kayit, gemini_alanlar, 'gemini'):
                 cevrilen += 1
@@ -245,9 +328,10 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc, bitis=Non
             continue
 
         if gemini_alanlar is None and not tu.herhangi_saglayici_hazir():
-            if gemini.hazir() and _gemini_adayi_mi(ad, kayit) and _gemini_alanlari(ad, kayit):
+            if payi_vardi and gemini.hazir() and _gemini_adayi_mi(ad, kayit) and _gemini_alanlari(ad, kayit):
                 # Gemini hazirdi ama icerigi reddetti; zincir kapali: icerik hatasi say, imlec gecsin.
-                # Aday olmayan kayit (orta CVE) icin hicbir saglayici yoktur: asagida durulur.
+                # Aday olmayan kayit (orta CVE) ya da tur payi bitmis Gemini icin bu turda saglayici
+                # yoktur: asagida durulur, imlec ilerlemez, sayac artmaz.
                 basarisiz += 1
                 _basarisiz_say(kayit)
                 redis_client.set(anahtar, deneme_oncesi)
@@ -292,30 +376,36 @@ def _yukseltme_adaylari(ad, model, sinir) -> list:
     return list(sorgu.order_by('-created_at', '-id')[:sinir])
 
 
-def _butce_sebebini_yaz(sonuc) -> None:
-    """Gemini durduysa ve sebep gunluk butceyse turun stopped_reason'ina yazar."""
+def _gemini_sebebini_yaz(sonuc, tur=None) -> None:
+    """Gemini durduysa sebebi turun stopped_reason'ina yazar: gunluk butce onceliklidir; tur payi
+    yalniz baska sebep yazilmamissa yazilir. Yalniz devre kesici aciksa sebep yazilmaz."""
     if not gemini.butce_var():
         sonuc['stopped_reason'] = 'gemini_budget'
+    elif not _payi_var(tur) and sonuc.get('stopped_reason') is None:
+        sonuc['stopped_reason'] = 'gemini_tur_payi'
 
 
-def _yukselt(ad, model, sinir, sonuc, bitis=None):
-    """Asama 2. Yalnizca Gemini, imlecsiz. Donus: (yukseltilen, basarisiz)."""
-    if not gemini.hazir():
-        _butce_sebebini_yaz(sonuc)
+def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
+    """Asama 2. Yalnizca Gemini, imlecsiz. Donus: (yukseltilen, basarisiz). Tur payi bitince durur."""
+    if not _gemini_kullanilabilir(tur):
+        _gemini_sebebini_yaz(sonuc, tur)
         return 0, 0
 
     yukseltilen = basarisiz = 0
     for kayit in _yukseltme_adaylari(ad, model, sinir):
         if _sure_doldu(bitis):
             break
-        if not gemini.hazir():
-            _butce_sebebini_yaz(sonuc)  # butce/devre kesici asama ortasinda: kalanlar sonraki tura
+        if not _gemini_kullanilabilir(tur):
+            # butce/devre kesici/tur payi asama ortasinda: kalanlar sonraki tura
+            _gemini_sebebini_yaz(sonuc, tur)
             break
-        alanlar = _gemini_ile_cevir(ad, kayit)
+        alanlar = _gemini_ile_cevir(ad, kayit, tur)
         if alanlar is None:
+            # Pay donguye girerken vardi; burada yalniz hazir() bakilir. Payin son istegi icerik
+            # reddi olduysa o da sayilmali; pay bitmesi bir sonraki adimda yakalanir.
             if not gemini.hazir():
                 # Istek duzeyi hata (429/5xx/ag/401/403/404) ya da butce: kaydin sucu degil, sayac artmaz
-                _butce_sebebini_yaz(sonuc)
+                _gemini_sebebini_yaz(sonuc, tur)
                 break
             # Gemini hazirken reddetti (dogrulama / cok uzun / k8s isaret kaybi / 400): icerik hatasi.
             # Sayilmazsa "en yeni N aday" sorgusu ayni kaydi her tur yeniden dener (G5).
@@ -328,13 +418,17 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None):
 
 
 def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
-                        batch: int = None, upgrade_batch: int = None, sure_butcesi: int = None) -> Dict:
+                        batch: int = None, upgrade_batch: int = None, sure_butcesi: int = None,
+                        tur: Optional[_Tur] = None) -> Dict:
+    """tur None ise pay simdiki andan kurulur (tur_payi); testler sabit pay verir."""
     redis_client = redis_client or _canli_redis()
     sure_butcesi = RETRANSLATE_TIME_BUDGET if sure_butcesi is None else sure_butcesi
     bitis = time.monotonic() + sure_butcesi
     batch = RETRANSLATE_BATCH if batch is None else batch
     upgrade_batch = RETRANSLATE_UPGRADE_BATCH if upgrade_batch is None else upgrade_batch
+    tur = _turu_kur() if tur is None else tur
     sonuc = {'translated': 0, 'failed': 0, 'upgraded': 0, 'stopped': False, 'stopped_reason': None,
+             'gemini_tur_payi': tur.pay,
              'by_provider': {'gemini': 0, 'libretranslate': 0}, 'sections': {}}
 
     for ad, model, cevir in BOLUMLER:
@@ -347,8 +441,10 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
             sonuc['stopped_reason'] = 'no_provider'
             break
 
-        cevrilen, basarisiz, durdu = _bekleyenler(ad, model, cevir, redis_client, prefix, batch, sonuc, bitis)
-        yukseltilen, yukseltme_basarisiz = (0, 0) if durdu else _yukselt(ad, model, upgrade_batch, sonuc, bitis)
+        cevrilen, basarisiz, durdu = _bekleyenler(ad, model, cevir, redis_client, prefix, batch, sonuc,
+                                                  bitis, tur)
+        yukseltilen, yukseltme_basarisiz = ((0, 0) if durdu
+                                            else _yukselt(ad, model, upgrade_batch, sonuc, bitis, tur))
         basarisiz += yukseltme_basarisiz  # iki asamanin icerik hatalari tek 'failed' sayacinda
 
         if cevrilen or yukseltilen:

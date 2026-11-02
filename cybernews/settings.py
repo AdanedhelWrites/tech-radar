@@ -278,7 +278,7 @@ CELERY_WORKER_CONCURRENCY = int(os.environ.get('CELERY_WORKER_CONCURRENCY', '2')
 CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.environ.get('CELERY_WORKER_MAX_TASKS_PER_CHILD', '50'))
 
 # Celery Beat — tum bolumler 6 saatte bir otomatik cekilir.
-# Ceviri bekleyen kayitlar 2 saatte bir (tek saatlerde) yeniden cevrilir.
+# Ceviri bekleyen kayitlar saatte bir (cekim saatleri haric) yeniden cevrilir.
 # Bolumler worker ve ceviri yukunu dagitmak icin 10 dk arayla kaydirilir.
 # skip_existing=True: sadece yeni kayitlar cevrilir (ceviri saglayicisinin kotasi korunur).
 # Gun araligi task varsayilanidir (manuel "Getir" ile ayni davranis).
@@ -315,11 +315,12 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute=50, hour='*/6'),
         'kwargs': {'skip_existing': True},
     },
-    # Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir. Tek saatlerde
-    # calisir: fetch task'lari 00/06/12/18'de calistigi icin hic cakismaz.
-    'retranslate-pending-every-2h': {
+    # Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir ve Gemini ile yukseltir.
+    # Saatlik, ama cekim saatleri (00/06/12/18) atlanir: gunde 20 tur (spec 2026-11-02 G4).
+    # Gemini gunluk butcesi bu turlara yayilir; retranslate.kalan_tur_sayisi bu girdiyi okur.
+    'retranslate-pending-hourly': {
         'task': 'news.tasks.retranslate_pending_task',
-        'schedule': crontab(minute=5, hour='1-23/2'),
+        'schedule': crontab(minute=5, hour='1-5,7-11,13-17,19-23'),
     },
 }
 
