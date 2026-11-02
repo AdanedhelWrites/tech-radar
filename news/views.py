@@ -730,3 +730,39 @@ def get_saglik(request):
                  'translation_queue': ceviri_kuyrugu_ozeti()}
         cache.set('saglik_ozeti', govde, SAGLIK_CACHE_SURESI)
     return Response(govde)
+
+
+OZET_CACHE_SURESI = 60
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_ozet(request):
+    """Ana sayfa Zafiyet Durumu ozeti (2026-10-31): pencereli CVE sayilari, oncelik listesi, grafik noktalari.
+
+    Tokensizdir (arayuz anonim). `since` disindaki govde 60 sn cache'lenir; `new_since_count`
+    her istekte ayri bir count() ile hesaplanir, cache govdesine yazilmaz. Gecersiz `since` yok sayilir.
+    """
+    from django.utils.dateparse import parse_datetime
+    from django.utils.timezone import is_naive, make_aware
+    from datetime import timezone as dt_timezone
+
+    from .ozet import ozet_hesapla, yeni_kayit_sayisi
+
+    govde = cache.get('ozet_govdesi')
+    if govde is None:
+        govde = ozet_hesapla()
+        cache.set('ozet_govdesi', govde, OZET_CACHE_SURESI)
+
+    since = None
+    ham = request.query_params.get('since')
+    if ham:
+        try:
+            since = parse_datetime(ham)
+        except ValueError:
+            since = None
+    if since is None:
+        return Response(govde)
+    if is_naive(since):
+        since = make_aware(since, dt_timezone.utc)
+    return Response({**govde, 'new_since_count': yeni_kayit_sayisi(since)})

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Badge } from 'react-bootstrap'
 import { saglikApi } from '../services/api'
 import useAraliklaYenile from '../hooks/useAraliklaYenile'
 import { goreliZaman } from '../utils/zaman'
@@ -33,11 +32,11 @@ export default function SaglikSeridi() {
   useEffect(() => { yukle() }, [yukle])
   useAraliklaYenile(yukle, YENILEME_MS)
 
-  if (hata) return <div className="text-muted small mb-4">Sağlık bilgisi alınamadı.</div>
+  if (hata) return <div className="saglik-hata">Sağlık bilgisi alınamadı.</div>
   if (!veri) return null
 
   return (
-    <div className="d-flex flex-wrap justify-content-center gap-2 mb-4" data-testid="saglik-seridi">
+    <div className="saglik-seridi" data-testid="saglik-seridi">
       {Object.entries(BOLUM_ETIKETLERI).map(([ad, etiket]) => {
         const b = veri[ad] || {}
         const sessiz = b.silent_sources || []
@@ -46,28 +45,28 @@ export default function SaglikSeridi() {
         const bayat = !veriYok && Date.now() - Date.parse(b.last_success_at) > BAYAT_SAAT * 3600 * 1000
         const baslik = sessiz.length ? `Sessiz: ${sessiz.join(', ')}` : 'Tüm kaynaklar veri döndürüyor'
         return (
-          <span key={ad} className="border rounded px-2 py-1 small" title={baslik}>
+          <span key={ad} className="saglik-ogesi" title={baslik}>
             <strong>{etiket}</strong>{' '}
-            <span className="text-muted">{goreliZaman(b.last_success_at)}</span>{' '}
+            <span className="saglik-zaman">{goreliZaman(b.last_success_at)}</span>{' '}
             {sorun
-              ? <Badge bg="danger">{sessiz.length ? `${sessiz.length} sessiz` : 'son tur hatalı'}</Badge>
+              ? <span className="rozet hata">{sessiz.length ? `${sessiz.length} sessiz` : 'son tur hatalı'}</span>
               : veriYok || bayat
-                ? <Badge bg="warning" text="dark">{veriYok ? 'veri yok' : 'bayat'}</Badge>
-                : <Badge bg="success">ok</Badge>}
+                ? <span className="rozet uyari">{veriYok ? 'veri yok' : 'bayat'}</span>
+                : <span className="rozet ok">ok</span>}
           </span>
         )
       })}
       {kuyruk && (
         // Bulgu 6 (2026-10-16): retranslate 3 gun takili kaldi, serit her bolumu "ok" gosterdi.
         // stalled: bekleyen var ve son 3 tur (~6 sa) hic kayit cevirmedi (news/fetch_runs.py).
-        <span className="border rounded px-2 py-1 small" title={`Bekleyen çeviri: ${kuyruk.pending}`}>
+        <span className="saglik-ogesi" title={`Bekleyen çeviri: ${kuyruk.pending}`}>
           <strong>Çeviri kuyruğu</strong>{' '}
-          <span className="text-muted">{goreliZaman(kuyruk.last_success_at)}</span>{' '}
+          <span className="saglik-zaman">{goreliZaman(kuyruk.last_success_at)}</span>{' '}
           {kuyruk.stalled
-            ? <Badge bg="danger">ilerlemiyor</Badge>
+            ? <span className="rozet hata">ilerlemiyor</span>
             : kuyruk.pending > 0
-              ? <Badge bg="secondary">{kuyruk.pending} bekliyor</Badge>
-              : <Badge bg="success">ok</Badge>}
+              ? <span className="rozet bilgi">{kuyruk.pending} bekliyor</span>
+              : <span className="rozet ok">ok</span>}
         </span>
       )}
     </div>

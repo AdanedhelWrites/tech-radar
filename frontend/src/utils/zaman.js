@@ -6,5 +6,6 @@ export const goreliZaman = (iso, simdi = Date.now()) => {
   if (fark < 60) return 'az önce'
   if (fark < 3600) return `${Math.floor(fark / 60)} dk önce`
   if (fark < 86400) return `${Math.floor(fark / 3600)} sa önce`
+  if (fark < 172800) return 'dün'
   return `${Math.floor(fark / 86400)} gün önce`
 }
