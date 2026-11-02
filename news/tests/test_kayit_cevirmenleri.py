@@ -1,6 +1,8 @@
 """Yedek kayit cevirmenleri (spec 2026-11-02-ceviri-yayma G6): Gemini ikinci model, OpenRouter
 ucretsiz model, DeepL API Free. Ag erisimi yok: HTTP mock'lanir, kapi/sayac surec icidir."""
+import importlib.util
 import json
+import os
 import re
 import uuid
 from datetime import date, datetime, timezone
@@ -162,15 +164,29 @@ class ZincirTests(SimpleTestCase):
         self.assertEqual(kc.GEMINI2.tavan(), kc.GEMINI_FALLBACK_DAILY_BUDGET)
         self.assertEqual(kc.GEMINI2.model, kc.GEMINI_FALLBACK_MODEL)
 
+    @staticmethod
+    def _taze_modul():
+        """Modulun ayri bir kopyasini, yedek ayarlari ortamdan silinmis halde yukler (kapsayicinin .env'i
+        GEMINI_FALLBACK_MODEL / OPENROUTER_MODEL verse de varsayilanlar olculur). sys.modules'a dokunmaz."""
+        with mock.patch.dict(os.environ):
+            for ad in [ad for ad in os.environ if ad.startswith(('GEMINI_FALLBACK_', 'OPENROUTER_', 'DEEPL_'))]:
+                del os.environ[ad]
+            spec = importlib.util.find_spec('news.kayit_cevirmenleri')
+            modul = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(modul)
+        return modul
+
     def test_varsayilanlar(self):
-        self.assertEqual(kc.GEMINI_FALLBACK_MODEL, '')
-        self.assertEqual(kc.GEMINI_FALLBACK_DAILY_BUDGET, 450)
-        self.assertEqual(kc.OPENROUTER_MODEL, '')
-        self.assertEqual(kc.OPENROUTER_DAILY_BUDGET, 50)
-        self.assertEqual(kc.OPENROUTER_MIN_INTERVAL, 4.0)
-        self.assertEqual(kc.DEEPL_MONTHLY_CHARS, 450000)
-        self.assertEqual([c.name for c in kc.ZINCIR], ['gemini', 'openrouter', 'deepl'])
-        self.assertIs(kc.ZINCIR[0], gemini.BIRINCIL)
+        taze = self._taze_modul()
+        self.assertEqual(taze.GEMINI_FALLBACK_MODEL, '')
+        self.assertEqual(taze.GEMINI_FALLBACK_DAILY_BUDGET, 450)
+        self.assertEqual(taze.OPENROUTER_MODEL, '')
+        self.assertEqual(taze.OPENROUTER_DAILY_BUDGET, 50)
+        self.assertEqual(taze.OPENROUTER_MIN_INTERVAL, 4.0)
+        self.assertEqual(taze.DEEPL_MONTHLY_CHARS, 450000)
+        self.assertEqual([c.name for c in taze.ZINCIR], ['gemini', 'openrouter', 'deepl'])
+        self.assertIs(taze.ZINCIR[0], gemini.BIRINCIL)
+        self.assertIsNot(taze.OPENROUTER, kc.OPENROUTER, 'Canli modul orneklerine dokunulmaz')
 
     def test_testlerde_yedek_anahtarlar_bos_ve_durum_surec_ici(self):
         self.assertEqual(settings.OPENROUTER_API_KEY, '')
@@ -262,6 +278,21 @@ class OpenRouterTests(CevirmenTestMixin, SimpleTestCase):
         self.assertFalse(bos.hazir())
         self.assertIsNone(bos.kaydi_cevir(ALANLAR))
         post.assert_not_called()
+
+    def test_openrouter_anahtar_var_model_bossa_surec_basina_bir_uyari(self):
+        bos = _yerel(kc.OpenRouterCevirmen(model='', tavan=50, aralik=0.0))
+        with self.assertLogs('news.kayit_cevirmenleri', level='WARNING') as kayit:
+            self.assertFalse(bos.hazir())
+            self.assertFalse(bos.hazir())
+            self.assertFalse(bos.ayarli())
+        uyarilar = [s for s in kayit.output if 'OPENROUTER_MODEL' in s]
+        self.assertEqual(len(uyarilar), 1, 'Uyari surec basina bir kez')
+        self.assertNotIn(ANAHTARLAR['OPENROUTER_API_KEY'], '\n'.join(kayit.output))
+
+    def test_openrouter_anahtar_ve_model_bossa_uyari_yok(self):
+        bos = _yerel(kc.OpenRouterCevirmen(model='', tavan=50, aralik=0.0))
+        with override_settings(OPENROUTER_API_KEY=''), self.assertNoLogs('news.kayit_cevirmenleri', level='WARNING'):
+            self.assertFalse(bos.hazir())
 
     def test_openrouter_paket_istek_sekli(self):
         post = self._post(self._cevap())
@@ -440,6 +471,24 @@ class DeepLTests(CevirmenTestMixin, SimpleTestCase):
                         for metin in json['text']]
             return _deepl_yanit(metinler, koru=False)
         return post
+
+    def test_deepl_free_disi_anahtar_hazir_degil_surec_basina_bir_uyari(self):
+        """DeepL Free anahtarlari ':fx' ile biter; sonekisiz (Pro) anahtar ucret cikmasin diye kullanilmaz."""
+        post = self._post(_deepl_yanit([CEVIRI['title'], CEVIRI['description']]))
+        pro_anahtar = 'test-deepl-pro-anahtari'
+        with override_settings(DEEPL_API_KEY=pro_anahtar):
+            deepl = _yerel(kc.DeepLCevirmen(tavan=450000, aralik=0.0))
+            with self.assertLogs('news.kayit_cevirmenleri', level='WARNING') as kayit:
+                self.assertFalse(deepl.hazir())
+                self.assertFalse(deepl.hazir())
+                self.assertFalse(deepl.ayarli())
+                self.assertIsNone(deepl.kaydi_cevir(ALANLAR))
+                self.assertTrue(deepl.paket_cevir(KAYITLAR).istek_hatasi)
+                self.assertFalse(deepl.butce_ozeti()['available'])
+        self.assertEqual(len([s for s in kayit.output if ':fx' in s]), 1, 'Uyari surec basina bir kez')
+        self.assertNotIn(pro_anahtar, '\n'.join(kayit.output), 'Anahtar loga yazilmaz')
+        post.assert_not_called()
+        self.assertTrue(self.deepl.hazir(), "':fx' sonekli anahtar hazir")
 
     def test_deepl_istek_sekli(self):
         post = self._post(_deepl_yanit([CEVIRI['title'], CEVIRI['description']]))

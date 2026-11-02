@@ -36,8 +36,11 @@ Yedek zincir (spec 2026-11-02 G6, PR-C): yukaridaki "Gemini" kayit cevirmenidir 
 Gemini gercekten kullanilamazken (gunluk butce / devre kesici / anahtar yok) iki asamada da sirayla ilk
 hazir yedek (kayit_cevirmenleri.YEDEKLER: Gemini ikinci model, OpenRouter, DeepL) kullanilir; tur payi
 bitmesi yedegi tetiklemez. Yedekler tur payina tabi degildir, kendi sayac/devre kesicileriyle sinirlidir.
-Istek duzeyi hata secilen cevirmeni kapatirsa ayni paket/kayit siradakiyle yeniden denenir (sayac artmaz);
-bir cevirmenin reddettigi kayit ayni turda baska cevirmene gitmez. Yazilan translation_provider secilenin
+Istek duzeyi hata secilen cevirmeni kapatirsa ayni paket/kayit siradakiyle yeniden denenir (sayac artmaz).
+Bir yedegin ciktisi dogrulamadan gecmezse kayit ayni turda onu denememis siradaki hazir yedege gider; yalniz
+boyle yedek kalmadiginda bir kez icerik hatasi sayilir (ardisik seriye de yalniz bu son red girer; bekleyende
+LibreTranslate yine son caredir). Birincilin reddi hemen sayilir: birincil hazirken yedek kullanilmaz.
+Yazilan translation_provider secilenin
 name'idir ('gemini' / 'openrouter' / 'deepl'); yukseltme adayi yalniz 'libretranslate' kayitlardir, yedek
 cevirileri sonradan yukseltilmez. Yedek anahtarlari bos kurulumda davranis PR-B ile aynidir.
 
@@ -173,7 +176,12 @@ def _hazir(cevirmen) -> bool:
     return gemini.hazir() if cevirmen is gemini.BIRINCIL else cevirmen.hazir()
 
 
-def _cevirmen_sec(tur: Optional[_Tur], asama: str):
+def _icinde(cevirmen, cevirmenler) -> bool:
+    # Kimlikle: Gemini ikinci modelin adi da 'gemini'dir
+    return any(cevirmen is diger for diger in cevirmenler)
+
+
+def _cevirmen_sec(tur: Optional[_Tur], asama: str, haric=()):
     """Bu istegin kayit cevirmeni (spec 2026-11-02 G6) ya da None. asama: 'bekleyen' / 'yukseltme'; kural
     ikisinde de aynidir (bekleyende None: LibreTranslate zinciri, yukseltmede: asama durur).
 
@@ -181,13 +189,14 @@ def _cevirmen_sec(tur: Optional[_Tur], asama: str):
     devre kesici acik / anahtar yok) YEDEKLER sirasiyla ilk hazir yedek. Birincil hazir ama tur payi bittiyse
     None: pay bitmesi "hazir degil" sayilmaz, kayit sonraki turu bekler (yedekler Gemini'nin sonraki turlarda
     alacagi kayitlari kalici olarak kapmasin). Yedekler tur payina tabi degildir; yalniz kendi sayac ve devre
-    kesicileriyle sinirlidir (pay birincilin gunluk sayacindan olculur, yedek istekleri onu artirmaz)."""
+    kesicileriyle sinirlidir (pay birincilin gunluk sayacindan olculur, yedek istekleri onu artirmaz).
+    haric: bu kaydi bu turda zaten denemis cevirmenler; secilmezler (birincil hazirken yedege yine gidilmez)."""
     if asama not in ('bekleyen', 'yukseltme'):
         raise ValueError(f'bilinmeyen asama: {asama}')
     if gemini.hazir():
-        return gemini.BIRINCIL if _payi_var(tur) else None
+        return gemini.BIRINCIL if _payi_var(tur) and not _icinde(gemini.BIRINCIL, haric) else None
     for cevirmen in kayit_cevirmenleri.YEDEKLER:
-        if cevirmen.hazir():
+        if not _icinde(cevirmen, haric) and cevirmen.hazir():
             return cevirmen
     return None
 
@@ -303,28 +312,33 @@ def _tekil_cevir(cevirmen, ad: str, alanlar: Dict[str, str]) -> Optional[Dict[st
 def _bekleyen_cevirisi(ad: str, kayit, tur: Optional[_Tur] = None):
     """Bekleyen kaydi kayit cevirmeniyle (birincil ya da yedek, _cevirmen_sec) cevirir.
 
-    Donus (alanlar, sorulan): alanlar DB alan adlariyla ya da None; sorulan son istek atilan cevirmen ya da
-    None (aday degil / alan yok / hazir cevirmen yok / tur payi bitti: istek atilmadi). alanlar None iken
-    sorulan hala hazirsa icerigi o reddetti: kayit ayni turda baska cevirmene gitmez. Istek duzeyi hata
-    cevirmeni kapattiysa (devre kesici / butce) siradaki secilir ve ayni kayit yeniden denenir; her
-    cevirmen bir kayit icin en cok bir kez sorulur."""
+    Donus (alanlar, sorulan): alanlar DB alan adlariyla ya da None; sorulan cevirmen ya da None (aday degil /
+    alan yok / hazir cevirmen yok / tur payi bitti: istek atilmadi). Basarida sorulan ceviren cevirmendir.
+    alanlar None iken sorulan, icerigi son reddeden cevirmendir (hala hazir: cagiran icerik hatasi sayar ya
+    da LibreTranslate'e gecer); red yoksa son istek atilan (istek duzeyi hatayla kapandi: hazir degil).
+    G6: bir yedegin reddettigi kayit ayni turda onu denememis siradaki hazir yedege gider; birincilin reddi
+    son sozdur (birincil hazirken yedek kullanilmaz). Istek duzeyi hata cevirmeni kapattiysa (devre kesici /
+    butce) siradaki secilir ve ayni kayit yeniden denenir. Her cevirmen bir kayit icin en cok bir kez sorulur."""
     if not _gemini_adayi_mi(ad, kayit):
         return None, None  # onem sinifi disi (G1): hicbir cevirmene istek atilmaz
     alanlar = _gemini_alanlari(ad, kayit)
     if not alanlar:
         return None, None
-    sorulan, sorulanlar = None, []
+    sorulanlar, reddeden = [], None
     while True:
-        cevirmen = _cevirmen_sec(tur, 'bekleyen')
-        if cevirmen is None or any(cevirmen is onceki for onceki in sorulanlar):
-            return None, sorulan
-        sorulan = cevirmen
+        cevirmen = _cevirmen_sec(tur, 'bekleyen', sorulanlar)
+        if cevirmen is None:
+            return None, (reddeden if reddeden is not None else (sorulanlar[-1] if sorulanlar else None))
         sorulanlar.append(cevirmen)
         ceviri = _tekil_cevir(cevirmen, ad, alanlar)
-        # Bilinen sapma (zararsiz): icerik reddi cevirmenin son birimini harcayip onu kapattiysa (tavan tam
-        # o istekte doldu) istek duzeyi hata gibi gorunur ve kayit ayni turda siradaki cevirmene gider.
-        if ceviri is not None or _hazir(cevirmen):
+        if ceviri is not None:
             return ceviri, cevirmen
+        # Bilinen sapma (zararsiz): birincilin icerik reddi son birimini harcayip onu kapattiysa (tavan tam o
+        # istekte doldu) istek duzeyi hata gibi gorunur ve kayit ayni turda yedege gider.
+        if _hazir(cevirmen):
+            if cevirmen is gemini.BIRINCIL:
+                return None, cevirmen
+            reddeden = cevirmen  # yedek reddi: siradaki denenmemis hazir yedek
 
 
 def _gemini_ile_cevir(ad: str, kayit, tur: Optional[_Tur] = None) -> Optional[Dict[str, str]]:
@@ -541,7 +555,8 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
     tamami bozuksa (SAFETY vb. / cozulemeyen JSON) ya da Gemini hazirken istek kayda ozgu reddedildiyse
     (4xx, butce geri alindi) paket ikiye bolunup ayni turda yeniden denenir: sucun hangi kayitta
     oldugu bilinmez, tek bir kayit komsularini yakmasin. Tek kayitta da olmuyorsa o kaydin icerik
-    hatasidir. Paketli K8s cevirisi de isaret denetiminden gecer."""
+    hatasidir. Paketli K8s cevirisi de isaret denetiminden gecer. Icerik hatasini bir yedek verdiyse
+    (G6) kayit sayilmadan siradaki denenmemis hazir yedege gider; sayim yalniz son redde (denetim: haric)."""
     if _cevirmen_sec(tur, 'yukseltme') is None:
         _gemini_sebebini_yaz(sonuc, tur)
         return 0, 0
@@ -559,6 +574,33 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
         basarisiz += 1
         ardisik += 1
         _basarisiz_say(kayit)
+
+    # Kayit basina bu turda icerigini reddeden yedekler (G6). Yedegin reddettigi kayitlar sayilmadan paket
+    # olarak kuyrugun basina doner ve onlari denememis siradaki hazir yedege gider; boyle yedek kalmadiysa
+    # (secim None) red bir kez sayilir ve ardisik seriye yalniz bu son red girer. Her redde kume buyur:
+    # bir kayit en cok len(YEDEKLER) kez boyle geri doner.
+    denenen: Dict[object, tuple] = {}
+
+    def haric(paket) -> tuple:
+        return tuple(cevirmen for kayit, _ in paket for cevirmen in denenen.get(kayit.pk, ()))
+
+    def son_red(paket):
+        # Seri sinira ulastiysa paketin kalan reddedilenleri sayilmaz (sonraki turda yine aday): sinir paket
+        # icinde de gecerli
+        for kayit, _ in paket:
+            if ardisik < ARDISIK_HATA_SINIRI:
+                reddet(kayit)
+
+    def icerik_reddi(cevirmen, reddedilenler):
+        """Birincilin reddi hemen sayilir (birincil hazirken yedek kullanilmaz). Yedeginki siradakine kalir."""
+        if not reddedilenler:
+            return
+        if cevirmen is gemini.BIRINCIL:
+            son_red(reddedilenler)
+            return
+        for kayit, _ in reddedilenler:
+            denenen[kayit.pk] = denenen.get(kayit.pk, ()) + (cevirmen,)
+        kuyruk.appendleft(list(reddedilenler))
 
     def seri_doldu():
         if ardisik < ARDISIK_HATA_SINIRI:
@@ -596,9 +638,15 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
             break
         if seri_doldu():
             break
-        # Her paketten once secilir (G6): birincil kapaninca yedek, pay bitince None
-        cevirmen = _cevirmen_sec(tur, 'yukseltme')
+        # Her paketten once secilir (G6): birincil kapaninca yedek, pay bitince None; paketi bu turda reddetmis
+        # yedekler secilmez
+        dislanan = haric(kuyruk[0])
+        cevirmen = _cevirmen_sec(tur, 'yukseltme', dislanan)
         if cevirmen is None:
+            if dislanan:
+                # Yedek(ler) reddetti, onu denememis hazir yedek kalmadi: son red, bir kez sayilir
+                son_red(kuyruk.popleft())
+                continue
             # butce/devre kesici/tur payi asama ortasinda, yedek de yok: kalanlar sonraki tura
             _gemini_sebebini_yaz(sonuc, tur)
             break
@@ -612,14 +660,13 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
             elif not _hazir(cevirmen):
                 # Istek duzeyi hata (429/5xx/ag/401/403/404) ya da butce: kaydin sucu degil, sayac artmaz.
                 # Kayit kuyruga geri doner; sonraki secim siradaki yedegi verir ya da asamayi durdurur.
-                # Bilinen sapma (zararsiz): icerik reddi cevirmenin son birimini harcayip onu kapattiysa
-                # (gunluk/aylik tavan tam o istekte doldu) red sayilmaz ve kayit ayni turda siradaki
-                # cevirmene gider; "reddedilen kayit baska cevirmene gitmez" kurali bu durumda esner.
+                # Bilinen sapma (zararsiz): birincilin icerik reddi son birimini harcayip onu kapattiysa
+                # (gunluk tavan tam o istekte doldu) red sayilmaz ve kayit ayni turda yedege gider.
                 if not geri_koy(paket):
                     _gemini_sebebini_yaz(sonuc, tur)
                     break
             else:
-                reddet(kayit)  # dogrulama / isaret kaybi / kayda ozgu 400
+                icerik_reddi(cevirmen, paket)  # dogrulama / isaret kaybi / kayda ozgu 400
             continue
 
         paket_sonucu = _paket_cevir(cevirmen, {f'k{i}': alanlar for i, (_, alanlar) in enumerate(paket)}, ad)
@@ -636,17 +683,21 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
                 kuyruk.appendleft(paket[yari:])
                 kuyruk.appendleft(paket[:yari])
             else:
-                reddet(paket[0][0])
+                icerik_reddi(cevirmen, paket)
             continue
+        reddedilenler = []
         for i, (kayit, alanlar) in enumerate(paket):
             ceviri = paket_sonucu.ceviriler.get(f'k{i}')
             if ceviri is None or not _k8s_yapisi_korunmus(ad, alanlar, ceviri):
-                # reddedilen / yanitta hic olmayan kimlik / k8s isaret kaybi. Seri sinira ulastiysa
-                # paketin kalan reddedilenleri sayilmaz (sonraki turda yine aday): sinir paket icinde de gecerli
-                if ardisik < ARDISIK_HATA_SINIRI:
-                    reddet(kayit)
+                # reddedilen / yanitta hic olmayan kimlik / k8s isaret kaybi. Birincilde yerinde sayilir
+                # (seri, yazimlarla ayni sirada isler); yedekte paketten sonra siradaki yedege gider.
+                if cevirmen is gemini.BIRINCIL:
+                    son_red([(kayit, alanlar)])
+                else:
+                    reddedilenler.append((kayit, alanlar))
             else:
                 yaz(kayit, {_GEMINI_DB_ALANI[alan]: metin for alan, metin in ceviri.items()}, cevirmen.name)
+        icerik_reddi(cevirmen, reddedilenler)
         if seri_doldu():
             break
     return yukseltilen, basarisiz

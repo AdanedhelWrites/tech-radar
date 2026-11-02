@@ -152,6 +152,7 @@ Kurallar:
   (kullanıcının "token verme" kararı her ücretsiz sağlayıcı için geçerli).
 - **Doğrulama** her sağlayıcıya aynen uygulanır: Türkçe harf, yankı, oran, yabancı alfabe ve K8s işaret sayısı.
   Bir sağlayıcının çıktısı doğrulamadan geçmezse zincirde sıradaki denenir.
+  Birincil Gemini'nin kendi reddi ise hemen sayılır, çünkü birincil hazırken yedekler kullanılmaz.
 - LLM sağlayıcıları (Gemini, OpenRouter) aynı sistem talimatını ve paket biçimini kullanır.
 - **DeepL bir LLM değildir.** Ürün adı, CVE numarası ve kod gibi terimler, DeepL'in etiket koruma özelliğiyle
   ya da mevcut XTRM yer tutucularıyla korunur. Hangisi olacağı uygulayıcının kararı (bkz. §7).

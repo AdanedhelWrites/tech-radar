@@ -249,7 +249,7 @@ class YedekButceleriTests(_GeminiButceOrtami, V1TestCase):
     def test_ayarli_yedekler_listelenir_anahtar_sizmaz(self):
         self.kc.OPENROUTER._sayac().artir(self.kc.OPENROUTER._donem_anahtari())
         with self.settings(GEMINI_API_KEY='gizli-gemini-degeri', OPENROUTER_API_KEY='gizli-or-degeri',
-                           DEEPL_API_KEY='gizli-deepl-degeri'), \
+                           DEEPL_API_KEY='gizli-deepl-degeri:fx'), \
                 mock.patch.object(self.kc.GEMINI2, 'model', 'gemini-yedek-model'), \
                 mock.patch.object(self.kc.OPENROUTER, 'model', 'ornek/model:free'):
             butce = self._butce()

@@ -36,6 +36,7 @@ OPENROUTER_COOLDOWN = int(os.environ.get('OPENROUTER_COOLDOWN', '600'))
 UCRETSIZ_SONEK = ':free'
 
 DEEPL_URL = 'https://api-free.deepl.com/v2/translate'
+DEEPL_FREE_SONEK = ':fx'   # DeepL API Free anahtarlarinin soneki
 # DeepL Free ayda 500.000 karakter; 50.000 guvenlik payi
 DEEPL_MONTHLY_CHARS = int(os.environ.get('DEEPL_MONTHLY_CHARS', '450000'))
 DEEPL_MIN_INTERVAL = float(os.environ.get('DEEPL_MIN_INTERVAL', '1'))
@@ -110,12 +111,18 @@ class OpenRouterCevirmen(gemini.KayitCevirmeni):
         super().__init__('openrouter', tavan, aralik)
         self.model = (model or '').strip()
         self._ucretli_uyarildi = False
+        self._modelsiz_uyarildi = False
 
     def _anahtar(self) -> str:
         return _ayar('OPENROUTER_API_KEY')
 
     def _kullanilabilir(self) -> bool:
+        """Anahtar dolu iken sorulur (hazir/ayarli): uyarilar yalniz anahtar girilmis kurulumda cikar."""
         if not self.model:
+            if not self._modelsiz_uyarildi:
+                self._modelsiz_uyarildi = True
+                log.warning("  [OpenRouter] OPENROUTER_API_KEY dolu ama OPENROUTER_MODEL bos; OpenRouter "
+                            "kullanilmiyor.")
             return False
         if not self.model.endswith(UCRETSIZ_SONEK):
             if not self._ucretli_uyarildi:
@@ -222,9 +229,21 @@ class DeepLCevirmen(gemini.KayitCevirmeni):
 
     def __init__(self, tavan: int = DEEPL_MONTHLY_CHARS, aralik: float = DEEPL_MIN_INTERVAL):
         super().__init__('deepl', tavan, aralik)
+        self._free_disi_uyarildi = False
 
     def _anahtar(self) -> str:
         return _ayar('DEEPL_API_KEY')
+
+    def _kullanilabilir(self) -> bool:
+        """DeepL Free anahtarlari ':fx' ile biter. Sonekisiz (Pro) anahtar kullanilmaz: ucret cikmasin, Pro
+        anahtari Free ucunda zaten 403 alir. Anahtar dolu iken sorulur; anahtar loga yazilmaz."""
+        if self._anahtar().endswith(DEEPL_FREE_SONEK):
+            return True
+        if not self._free_disi_uyarildi:
+            self._free_disi_uyarildi = True
+            log.warning(f"  [DeepL] DEEPL_API_KEY '{DEEPL_FREE_SONEK}' ile bitmiyor (DeepL Free anahtari degil); "
+                        "ucret cikmasin diye kullanilmiyor.")
+        return False
 
     def _donem_anahtari(self) -> str:
         return f'budget:{datetime.now(timezone.utc):%Y-%m}'
