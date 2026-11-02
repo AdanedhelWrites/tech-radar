@@ -5,7 +5,7 @@ import useAraliklaYenile from '../hooks/useAraliklaYenile'
 import useSeciliKayit from '../hooks/useSeciliKayit'
 import { kacis, guvenliHref } from '../utils/html'
 import { cveOkumaKaydi } from '../utils/okumaKaydi'
-import { ziyaretTabani } from '../utils/sonZiyaret'
+import useZiyaretTabani from '../hooks/useZiyaretTabani'
 import { goreliZaman } from '../utils/zaman'
 import { ceviriEtiketiHtml } from './CeviriEtiketi'
 import OkumaPaneli from './okuma/OkumaPaneli'
@@ -74,8 +74,8 @@ function CVEComponent() {
     sources.reduce((acc, s) => ({ ...acc, [s.value]: true }), {})
   )
   const [severityFilter, setSeverityFilter] = useState('all')
-  // "Yeni" rozeti tabani: sekme basina sabit (utils/sonZiyaret, karar R9); bu sayfa yazmaz
-  const [sonZiyaret] = useState(() => ziyaretTabani())
+  // "Yeni" rozeti tabani: sekme basina (hooks/useZiyaretTabani, karar R9); bu sayfa yazmaz
+  const sonZiyaret = useZiyaretTabani()
   // Secim id ile cozulur: periyodik yenileme acik paneli kapatmaz, filtre degisince de acik kalir
   const { secili, sec, kapat } = useSeciliKayit(cves)
   const okumaKaydi = useMemo(() => (secili ? cveOkumaKaydi(secili) : null), [secili])

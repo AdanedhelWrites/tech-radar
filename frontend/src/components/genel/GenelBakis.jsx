@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ozetApi, newsApi, k8sApi, sreApi, devtoolsApi, aiApi } from '../../services/api'
 import useAraliklaYenile from '../../hooks/useAraliklaYenile'
-import { sonZiyaretOku, sonZiyaretYaz, ziyaretTabani } from '../../utils/sonZiyaret'
+import { sonZiyaretOku, sonZiyaretYaz } from '../../utils/sonZiyaret'
+import useZiyaretTabani from '../../hooks/useZiyaretTabani'
 import { gundemBirlestir } from '../../utils/gundem'
 import { goreliZaman } from '../../utils/zaman'
 import SaglikSeridi from '../SaglikSeridi'
@@ -43,9 +44,9 @@ const saatDakika = (iso) => {
 }
 
 export default function GenelBakis() {
-  // Sekme tabani ilk yuklemede bir kez okunur (karar R9): periyodik yenileme de F5 de ayni degeri
-  // kullanir, "Yeni" rozetleri ve "son ziyaretinizden" cumlesi silinmez
-  const [sonZiyaret] = useState(() => ziyaretTabani())
+  // Sekme tabani (karar R9): periyodik yenileme de F5 de ayni degeri kullanir, "Yeni" rozetleri ve
+  // "son ziyaretinizden" cumlesi silinmez; omru dolunca sekmeye donuldugunde ilerler
+  const sonZiyaret = useZiyaretTabani()
   const [ozet, setOzet] = useState(null)
   const [ozetHata, setOzetHata] = useState(false)
   const [gundem, setGundem] = useState(null)

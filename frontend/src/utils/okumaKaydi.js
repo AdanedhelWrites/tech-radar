@@ -35,6 +35,8 @@ export const cevrilmediMi = (kayit) => !metin(kayit?.turkish_title) || ceviriBek
 // Turkce ve orijinal ayni bicime cevrildigi icin paragraf sezgisi oge bazinda calisir.
 const GUNLUK_BOLUMU = /^===SECTION:\s*(.+)===$/
 const GUNLUK_PR = /^<<<PR#(\d+)\|@([\w-]+)\|(.+)>>>$/
+// Gunlukteki PR numaralari bu depoya aittir; panel "#123 · @yazar" etiketini baglanti yapar
+const K8S_PR_ADRESI = 'https://github.com/kubernetes/kubernetes/pull/'
 
 const degisiklikGunlugu = (govde) => {
   if (!govde.includes('===SECTION:')) return govde
@@ -84,6 +86,7 @@ const kayitIskeleti = (kayit) => ({
   link: metin(kayit?.link),
   ekAlanlar: [],
   referanslar: [],
+  prAdresi: null,
   ham: kayit || {},
 })
 
@@ -138,5 +141,6 @@ export const haberOkumaKaydi = (kayit, bolum) => {
       : metin(kayit?.turkish_description)),
     govdeOrijinal: degisiklikGunlugu(metin(kayit?.original_description)),
     tarih: metin(bolum === 'news' ? kayit?.date : kayit?.published_date),
+    prAdresi: bolum === 'kubernetes' ? K8S_PR_ADRESI : null,
   }
 }

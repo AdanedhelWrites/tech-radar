@@ -36,6 +36,29 @@ describe('OkumaPaneli', () => {
     expect(screen.queryByText('English body.')).toBeNull()
   })
 
+  it('PR adresi varsa gunluk PR etiketleri baglanti olur, orijinalde de', () => {
+    const govde = (a) => `Feature (1)\n\n• ${a} (#143343 · @palnabarun · SIG Release)`
+    render(<OkumaPaneli kayit={kayit({
+      govdeTr: govde('Go 1.26 ile derleniyor.'),
+      govdeOrijinal: govde('Built with Go 1.26.'),
+      prAdresi: 'https://github.com/kubernetes/kubernetes/pull/',
+    })} onKapat={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Orijinali göster' }))
+    const baglantilar = screen.getAllByRole('link', { name: '#143343' })
+    expect(baglantilar).toHaveLength(2)
+    baglantilar.forEach(b => {
+      expect(b).toHaveAttribute('href', 'https://github.com/kubernetes/kubernetes/pull/143343')
+      expect(b).toHaveAttribute('rel', 'noopener noreferrer')
+    })
+    expect(baglantilar[0].closest('p')).toHaveTextContent('• Go 1.26 ile derleniyor. (#143343 · @palnabarun · SIG Release)')
+  })
+
+  it('PR adresi yoksa ayni etiket duz metin kalir', () => {
+    render(<OkumaPaneli kayit={kayit({ govdeTr: '• Düzeltme yapıldı. (#5 · @ali · SIG Node)' })} onKapat={vi.fn()} />)
+    expect(screen.queryByRole('link', { name: '#5' })).toBeNull()
+    expect(screen.getByText('• Düzeltme yapıldı. (#5 · @ali · SIG Node)')).toBeInTheDocument()
+  })
+
   it('ceviri yoksa orijinal ve uyari gosterilir', () => {
     render(<OkumaPaneli kayit={kayit({ govdeTr: '', govdeOrijinal: 'English body.' })} onKapat={vi.fn()} />)
     expect(screen.getByText('Çevrilmedi: orijinal metin')).toBeInTheDocument()

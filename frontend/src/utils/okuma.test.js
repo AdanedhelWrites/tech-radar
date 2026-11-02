@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { paragraflar, kevOnekiAyir, cevrilmemisMi, okumaIcerigi } from './okuma'
+import { paragraflar, kevOnekiAyir, cevrilmemisMi, okumaIcerigi, prParcalari } from './okuma'
 
 const EN_UZUN = 'The vulnerability allows an attacker to execute arbitrary code on the server.'
 
@@ -57,5 +57,22 @@ describe('okumaIcerigi', () => {
   it('ikisi de bossa bos doner', () => {
     expect(okumaIcerigi({ govdeTr: '', govdeOrijinal: '' })).toEqual({ paragraflar: [], orijinal: [], tamamenCevrilmedi: false })
     expect(okumaIcerigi({})).toEqual({ paragraflar: [], orijinal: [], tamamenCevrilmedi: false })
+  })
+})
+
+describe('prParcalari', () => {
+  it('gunluk PR etiketini metinden ayirir', () => {
+    expect(prParcalari('• Fixed a bug. (#142023 · @troychiu · SIG Apps)')).toEqual([
+      { metin: '• Fixed a bug. (' },
+      { pr: '142023' },
+      { metin: ' · @troychiu · SIG Apps)' },
+    ])
+  })
+  it('yazar etiketi izlemeyen # numarasina dokunmaz', () => {
+    expect(prParcalari('Issue #12 kapandı; bkz #34.')).toEqual([{ metin: 'Issue #12 kapandı; bkz #34.' }])
+  })
+  it('bos metinde bos dizi doner', () => {
+    expect(prParcalari('')).toEqual([])
+    expect(prParcalari(null)).toEqual([])
   })
 })

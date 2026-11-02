@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import { Offcanvas } from 'react-bootstrap'
 import CeviriEtiketi from '../CeviriEtiketi'
-import { okumaIcerigi } from '../../utils/okuma'
+import { okumaIcerigi, prParcalari } from '../../utils/okuma'
 import { ceviriBekliyor } from '../../utils/okumaKaydi'
 import { skorSinifi } from '../../utils/cve'
 
@@ -22,6 +22,13 @@ const guvenliAdres = (adres) => {
 const DisBaglanti = ({ href, children, className }) => (
   <a href={href} target="_blank" rel="noopener noreferrer" className={className}>{children}</a>
 )
+
+// Kubernetes degisiklik gunlugunde (kayit.prAdresi) "#123" PR etiketi baglanti olur; digerlerinde duz metin
+const Paragraf = ({ metin, prAdresi }) => (prAdresi
+  ? prParcalari(metin).map((p, i) => (p.pr
+    ? <DisBaglanti key={i} href={`${prAdresi}${p.pr}`} className="okuma-pr">{`#${p.pr}`}</DisBaglanti>
+    : p.metin))
+  : metin)
 
 function PanelIcerigi({ kayit, baslikId }) {
   const [orijinalAcik, setOrijinalAcik] = useState(false)
@@ -100,10 +107,10 @@ function PanelIcerigi({ kayit, baslikId }) {
             {icerik.paragraflar.map((p, i) => (p.cevrilmedi ? (
               <p key={i} className="cevrilmedi" lang="en">
                 <span className="cevrilmedi-not" lang="tr">Bu paragraf çevrilemedi</span>
-                {p.metin}
+                <Paragraf metin={p.metin} prAdresi={kayit.prAdresi} />
               </p>
             ) : (
-              <p key={i}>{p.metin}</p>
+              <p key={i}><Paragraf metin={p.metin} prAdresi={kayit.prAdresi} /></p>
             )))}
           </div>
         )}
@@ -112,7 +119,7 @@ function PanelIcerigi({ kayit, baslikId }) {
           <section id={orijinalId} className="okuma-orijinal" aria-label="Orijinal metin">
             <div className="etiket-kucuk">Orijinal metin</div>
             <div className="okuma-metni orijinal" lang="en">
-              {icerik.orijinal.map((p, i) => <p key={i}>{p}</p>)}
+              {icerik.orijinal.map((p, i) => <p key={i}><Paragraf metin={p} prAdresi={kayit.prAdresi} /></p>)}
             </div>
           </section>
         )}
