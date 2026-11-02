@@ -1,6 +1,8 @@
 # ADR 0003: Dis Tuketiciler icin `/api/v1/` Entegrasyon Katmani
 
 ## Status
+> **Not (2026-11-02):** Karar 9'daki `retranslate_pending` takvimi (`hour='1-23/2'`, 2 saatte bir) ve `GEMINI_CVE_RESERVE` anilari tarihsel kayittir. Bugun retranslate saatlik calisir (`retranslate-pending-hourly`, dakika 5, saatler 1-5,7-11,13-17,19-23; gunde 20 tur), CVE rezervi kalkti ve CVE'de yalniz CVSS >= 7 ya da KEV Gemini adayidir — bkz. [`superpowers/specs/2026-11-02-ceviri-yayma-design.md`](superpowers/specs/2026-11-02-ceviri-yayma-design.md).
+
 Accepted — 2026-09-12 (A1–A3 uygulandi ve `main`'de: PR #1 A2 `c435550`, PR #2 A3 `eb5f93a`; A1 dogrudan `main`'e alindi). **A4 uygulandi** (2026-09-21, merge `1268ac5`); kapsami [ADR-0006](ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md)'ya tasindi.
 
 **A5 ikiye bolundu (2026-09-21).** **A5a uygulandi:** ornek istemci

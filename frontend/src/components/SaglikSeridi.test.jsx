@@ -96,6 +96,39 @@ describe('SaglikSeridi ceviri kuyrugu', () => {
     expect(screen.getAllByText('ok')).toHaveLength(7)
   })
 
+  const butce = (ek = {}) => ({ used: 57, limit: 450, period: 'day', available: true, cooldown: false, ...ek })
+
+  it('Gemini butcesini "Gemini 57/450" olarak gosterir', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler(), translation_queue: kuyruk(),
+      translation_budget: { gemini: butce() } } })
+
+    render(<SaglikSeridi />)
+
+    expect(await screen.findByText('Gemini')).toBeInTheDocument()
+    expect(screen.getByText(/57\/450/)).toBeInTheDocument()
+    expect(screen.queryByText('beklemede')).not.toBeInTheDocument()
+  })
+
+  it('devre kesici aciksa "beklemede" uyari rozeti gorunur', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler(), translation_queue: kuyruk(),
+      translation_budget: { gemini: butce({ cooldown: true, available: false }) } } })
+
+    render(<SaglikSeridi />)
+
+    const rozet = await screen.findByText('beklemede')
+    expect(rozet).toHaveClass('rozet', 'uyari')
+  })
+
+  it('translation_budget yoksa Gemini ogesi hic gorunmez', async () => {
+    saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler(), translation_queue: kuyruk() } })
+
+    render(<SaglikSeridi />)
+
+    expect(await screen.findByText('Çeviri kuyruğu')).toBeInTheDocument()
+    expect(screen.queryByText('Gemini')).not.toBeInTheDocument()
+    expect(screen.queryByText(/\/450/)).not.toBeInTheDocument()
+  })
+
   it('eski API (translation_queue yok) seridi bozmaz', async () => {
     saglikApi.getSaglik.mockResolvedValue({ data: { sections: bolumler() } })
 

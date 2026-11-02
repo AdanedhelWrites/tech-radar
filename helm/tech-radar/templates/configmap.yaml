@@ -23,7 +23,6 @@ data:
   RETRANSLATE_BATCH: {{ .Values.config.app.retranslateBatch | quote }}
   RETRANSLATE_UPGRADE_BATCH: {{ .Values.config.app.retranslateUpgradeBatch | quote }}
   RETENTION_DAYS: {{ .Values.config.app.retentionDays | quote }}
-  GEMINI_CVE_RESERVE: {{ .Values.config.app.geminiCveReserve | quote }}
   GEMINI_DAILY_BUDGET: {{ .Values.config.app.geminiDailyBudget | quote }}
   GEMINI_MODEL: {{ .Values.config.app.geminiModel | quote }}
   LIBRETRANSLATE_URL: {{ include "tech-radar.libretranslateUrl" . | quote }}

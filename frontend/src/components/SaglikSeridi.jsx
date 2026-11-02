@@ -16,6 +16,7 @@ const BAYAT_SAAT = 12
 export default function SaglikSeridi() {
   const [veri, setVeri] = useState(null)
   const [kuyruk, setKuyruk] = useState(null)
+  const [butce, setButce] = useState(null)
   const [hata, setHata] = useState(false)
 
   const yukle = useCallback(async () => {
@@ -23,6 +24,7 @@ export default function SaglikSeridi() {
       const yanit = await saglikApi.getSaglik()
       setVeri(yanit.data.sections)
       setKuyruk(yanit.data.translation_queue ?? null)
+      setButce(yanit.data.translation_budget?.gemini ?? null)
       setHata(false)
     } catch {
       setHata(true)
@@ -58,7 +60,7 @@ export default function SaglikSeridi() {
       })}
       {kuyruk && (
         // Bulgu 6 (2026-10-16): retranslate 3 gun takili kaldi, serit her bolumu "ok" gosterdi.
-        // stalled: bekleyen var ve son 3 tur (~6 sa) hic kayit cevirmedi (news/fetch_runs.py).
+        // stalled: bekleyen var ve son 6 tur (~6 sa, turlar saatlik) hic kayit cevirmedi (news/fetch_runs.py).
         <span className="saglik-ogesi" title={`Bekleyen çeviri: ${kuyruk.pending}`}>
           <strong>Çeviri kuyruğu</strong>{' '}
           <span className="saglik-zaman">{goreliZaman(kuyruk.last_success_at)}</span>{' '}
@@ -67,6 +69,13 @@ export default function SaglikSeridi() {
             : kuyruk.pending > 0
               ? <span className="rozet bilgi">{kuyruk.pending} bekliyor</span>
               : <span className="rozet ok">ok</span>}
+        </span>
+      )}
+      {butce && (
+        // Gunluk Gemini istek butcesi (2026-11-02); cooldown: devre kesici acik, istek atilmiyor.
+        <span className="saglik-ogesi" title="Gemini günlük istek bütçesi">
+          <strong>Gemini</strong> {butce.used}/{butce.limit}
+          {butce.cooldown && <>{' '}<span className="rozet uyari">beklemede</span></>}
         </span>
       )}
     </div>

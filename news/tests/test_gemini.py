@@ -12,6 +12,11 @@ from news import translation_utils as tu
 from news.tests.base import test_redis_client
 
 ANAHTAR = 'test-anahtar'
+# Google'in gecersiz anahtar yaniti (google.rpc.Status + ErrorInfo); 401 degil 400 doner
+GECERSIZ_ANAHTAR_400 = json.dumps({'error': {
+    'code': 400, 'message': 'API key not valid. Please pass a valid API key.', 'status': 'INVALID_ARGUMENT',
+    'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID',
+                 'domain': 'googleapis.com'}]}})
 
 
 def _yanit(durum=200, govde=None, metin=None, finish='STOP', ham=''):
@@ -110,10 +115,13 @@ class GeminiIstekTests(GeminiTestMixin, SimpleTestCase):
         self.assertIsNone(gemini.kaydi_cevir({'title': '', 'description': ' '}))
         self.assertEqual(post.call_count, 0)
 
-    def test_hicbir_istisna_sizmaz(self):
+    def test_hicbir_istisna_sizmaz_beklenmeyen_hata_devre_kesiciyi_acar(self):
+        """Beklenmeyen hata (kod hatasi) her kayitta tekrarlar: kaydin sucu degil, sistemik sayilir.
+        Devre kesici acilmazsa retranslate her adayi icerik hatasi sayip kuyruktan dusururdu."""
         self._post(side_effect=RuntimeError('beklenmeyen'))
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
-        self.assertFalse(gemini._gate.cooldown_active())
+        self.assertTrue(gemini._gate.cooldown_active())
+        self.assertFalse(gemini.hazir())
 
     def test_aralik_kapisi_cagrilir(self):
         self._post(_yanit(govde=CEVIRI))
@@ -215,12 +223,65 @@ class GeminiHataTests(GeminiTestMixin, SimpleTestCase):
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
         self.assertTrue(gemini._gate.cooldown_active())
 
-    def test_401_devre_kesici_acmaz_butce_geri_alinir(self):
-        self._post(_yanit(durum=401, ham='{"error": {"status": "UNAUTHENTICATED"}}'))
+    def test_401_403_404_devre_kesiciyi_acar_butce_geri_alinir(self):
+        """Anahtar iptal / yetki / yanlis model sistemiktir: kayit sucu degil, devre kesici acilir
+        (yoksa retranslate her adayi icerik hatasi sayip kuyruktan dusururdu). Kota harcanmadi."""
+        for durum in (401, 403, 404):
+            with self.subTest(durum=durum):
+                gemini._gate = tu._LocalGate()
+                self._post(_yanit(durum=durum, ham='{"error": {"status": "UNAUTHENTICATED"}}'))
+                self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+                self.assertTrue(gemini._gate.cooldown_active())
+                self.assertFalse(gemini.hazir())
+                self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_400_devre_kesici_acmaz_butce_geri_alinir(self):
+        """Gecersiz govde kayda ozgu sayilir: devre kesici acilmaz, retranslate icerik hatasi sayar."""
+        self._post(_yanit(durum=400, ham='{"error": {"status": "INVALID_ARGUMENT"}}'))
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
         self.assertFalse(gemini._gate.cooldown_active())
         self.assertEqual(gemini.butce_kullanimi(), 0)
         self.assertTrue(gemini.hazir())
+
+    def test_400_api_key_invalid_sistemiktir(self):
+        """Generative Language API gecersiz/iptal/suresi dolmus anahtari 400 INVALID_ARGUMENT +
+        details[].reason=API_KEY_INVALID ile doner. Kayit sucu sayilirsa butun yukseltme birikimi
+        bir gunde deneme tavanina ulasirdi: devre kesici acilir, butce geri alinir."""
+        self._post(_yanit(durum=400, ham=GECERSIZ_ANAHTAR_400))
+        self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+        self.assertTrue(gemini._gate.cooldown_active())
+        self.assertFalse(gemini.hazir())
+        self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_400_hesap_duzeyi_durumlar_sistemiktir(self):
+        for durum in ('FAILED_PRECONDITION', 'PERMISSION_DENIED', 'UNAUTHENTICATED'):
+            with self.subTest(durum=durum):
+                gemini._gate = tu._LocalGate()
+                self._post(_yanit(durum=400, ham=json.dumps(
+                    {'error': {'code': 400, 'message': 'hesap sorunu', 'status': durum}})))
+                self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+                self.assertTrue(gemini._gate.cooldown_active())
+                self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_400_baska_sebepli_invalid_argument_devre_kesici_acmaz(self):
+        self._post(_yanit(durum=400, ham=json.dumps({'error': {
+            'code': 400, 'status': 'INVALID_ARGUMENT',
+            'details': [{'@type': 'type.googleapis.com/google.rpc.BadRequest', 'reason': 'FIELD_INVALID'}]}})))
+        self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+        self.assertFalse(gemini._gate.cooldown_active())
+        self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_400_bozuk_govde_istisna_atmaz_devre_kesici_acmaz(self):
+        """Hata govdesi JSON olmayabilir ya da beklenmedik sekilde olabilir: ayristirma asla firlatmaz."""
+        for ham in ('<html>Bad Request</html>', '', '[1, 2]', '{"error": "metin"}',
+                    '{"error": {"status": 5, "details": "liste degil"}}',
+                    '{"error": {"details": [null, "x", {"reason": 7}]}}', None):
+            with self.subTest(ham=ham):
+                gemini._gate = tu._LocalGate()
+                self._post(_yanit(durum=400, ham=ham))
+                self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+                self.assertFalse(gemini._gate.cooldown_active())
+                self.assertEqual(gemini.butce_kullanimi(), 0)
 
     def test_safety_finish_reason_reddedilir(self):
         self._post(_yanit(govde=CEVIRI, finish='SAFETY'))
@@ -249,8 +310,8 @@ class GeminiButceTests(GeminiTestMixin, SimpleTestCase):
             post = self._post(_yanit(govde=CEVIRI))
             self.assertEqual(gemini.kaydi_cevir(ALANLAR, 'cve'), CEVIRI)
             self.assertEqual(gemini.kaydi_cevir(ALANLAR, 'cve'), CEVIRI)
-            self.assertFalse(gemini.butce_var('cve'))
-            self.assertFalse(gemini.hazir('cve'))
+            self.assertFalse(gemini.butce_var())
+            self.assertFalse(gemini.hazir())
             self.assertIsNone(gemini.kaydi_cevir(ALANLAR, 'cve'))
         self.assertEqual(post.call_count, 2)
         self.assertEqual(gemini.butce_kullanimi(), 2)
@@ -293,54 +354,31 @@ class RedisButceTests(TestCase):
             self.assertIsInstance(gemini._get_gate(), tu._RedisGate)
 
 
-class ButcePayiTests(GeminiTestMixin, SimpleTestCase):
-    """ADR-0005: CVE tum butceye erisir, diger bolumler rezerve disi payla sinirlidir."""
+class TekTavanTests(GeminiTestMixin, SimpleTestCase):
+    """Spec 2026-11-02 G3: CVE rezervi kalkti; tum bolumler tek gunluk tavani paylasir."""
 
-    def test_cve_tam_butceye_erisir(self):
-        self.assertEqual(gemini.butce_tavani('cve'), gemini.GEMINI_DAILY_BUDGET)
+    def test_tek_tavan_tum_bolumler_icin(self):
+        self.assertEqual(gemini.GEMINI_DAILY_BUDGET, 450)
+        self.assertEqual(gemini.butce_tavani(), 450)
+        self.assertFalse(hasattr(gemini, 'GEMINI_CVE_RESERVE'))
+        self.assertFalse(hasattr(gemini, 'ONCELIKLI_BOLUM'))
 
-    def test_diger_bolumler_rezerve_disi_payla_sinirli(self):
-        beklenen = int(gemini.GEMINI_DAILY_BUDGET * (1 - gemini.GEMINI_CVE_RESERVE))
-        for bolum in ('news', 'kubernetes', 'sre', 'devtools', 'ai'):
-            with self.subTest(bolum=bolum):
-                self.assertEqual(gemini.butce_tavani(bolum), beklenen)
+    def test_bolum_adi_tavani_degistirmez(self):
+        """Bolum yalniz log icindir: CVE disi bir bolum de tavana kadar istek atar."""
+        post = self._post(_yanit(govde=CEVIRI))
+        with mock.patch.object(gemini, 'GEMINI_DAILY_BUDGET', 3):
+            for bolum in ('news', 'ai', 'cve'):
+                self.assertEqual(gemini.kaydi_cevir(ALANLAR, bolum), CEVIRI)
+            self.assertFalse(gemini.butce_var())
+            self.assertFalse(gemini.hazir())
+            self.assertIsNone(gemini.kaydi_cevir(ALANLAR, 'news'))
+        self.assertEqual(post.call_count, 3)
 
-    def test_bolumsuz_cagri_rezerve_disi_tavana_tabi(self):
-        """Guvenli taraf: bolum bilinmiyorsa CVE payi korunur."""
-        self.assertEqual(gemini.butce_tavani(None), gemini.butce_tavani('news'))
-
-    def test_diger_bolum_kendi_tavaninda_durur_cve_devam_eder(self):
-        tavan = gemini.butce_tavani('news')
-        for _ in range(tavan):
-            gemini._butce.artir(gemini.butce_anahtari())
-
-        self.assertFalse(gemini.butce_var('news'))
-        self.assertTrue(gemini.butce_var('cve'))
-        self.assertFalse(gemini.hazir('news'))
-        self.assertTrue(gemini.hazir('cve'))
-
-    def test_tavana_dayanan_bolumde_kaydi_cevir_istek_atmaz(self):
+    def test_tavana_dayaninca_kaydi_cevir_istek_atmaz_ve_sayaci_geri_alir(self):
+        """hazir()/artir() arasindaki yaris: hazir() True dese de artir() tavani asarsa
+        kaydi_cevir istek atmadan azalt() ile sayaci geri almali."""
         post = self._post(_yanit(govde={'title': 'Baslik'}))
-        tavan = gemini.butce_tavani('news')
-        for _ in range(tavan):
-            gemini._butce.artir(gemini.butce_anahtari())
-        onceki = gemini.butce_kullanimi()
-
-        sonuc = gemini.kaydi_cevir({'title': 'A new flaw in the parser'}, 'news')
-
-        self.assertIsNone(sonuc)
-        post.assert_not_called()
-        self.assertEqual(gemini.butce_kullanimi(), onceki, 'Sayac geri alinmaliydi')
-
-    def test_tavana_dayanan_bolumde_kaydi_cevir_sayaci_geri_alir(self):
-        """hazir()/artir() arasindaki yaris: hazir() True sonucu verdiginde bile
-        artir() tavani asarsa kaydi_cevir istek atmadan azalt() ile sayaci geri
-        almali (gemini.py ~231). Bunu tetiklemek icin hazir() sabit True
-        yapilir; boylece butce zaten tavanda olsa da artir() calisir ve
-        geri alma dali (azalt) fiilen calisir."""
-        post = self._post(_yanit(govde={'title': 'Baslik'}))
-        tavan = gemini.butce_tavani('news')
-        for _ in range(tavan):
+        for _ in range(gemini.butce_tavani()):
             gemini._butce.artir(gemini.butce_anahtari())
         onceki = gemini.butce_kullanimi()
 
@@ -351,23 +389,3 @@ class ButcePayiTests(GeminiTestMixin, SimpleTestCase):
         post.assert_not_called()
         self.assertEqual(gemini.butce_kullanimi(), onceki,
                          'Sayac geri alinmaliydi (artir sonrasi azalt calismali)')
-
-    def test_cve_ayni_noktada_calismaya_devam_eder(self):
-        post = self._post(_yanit(govde={'title': 'Ayristiricida yeni bir acik'}))
-        for _ in range(gemini.butce_tavani('news')):
-            gemini._butce.artir(gemini.butce_anahtari())
-
-        sonuc = gemini.kaydi_cevir({'title': 'A new flaw in the parser'}, 'cve')
-
-        self.assertEqual(sonuc, {'title': 'Ayristiricida yeni bir acik'})
-        post.assert_called_once()
-
-    def test_rezerve_sifir_ise_tum_bolumler_tam_butceye_erisir(self):
-        with mock.patch.object(gemini, 'GEMINI_CVE_RESERVE', 0.0):
-            self.assertEqual(gemini.butce_tavani('news'), gemini.GEMINI_DAILY_BUDGET)
-
-    def test_rezerve_bir_ise_cve_disi_bolumler_gemini_kullanamaz(self):
-        with mock.patch.object(gemini, 'GEMINI_CVE_RESERVE', 1.0):
-            self.assertEqual(gemini.butce_tavani('news'), 0)
-            self.assertFalse(gemini.butce_var('news'))
-            self.assertTrue(gemini.butce_var('cve'))

@@ -1,6 +1,8 @@
 # Celery tasks
 import os
+import uuid
 from celery import shared_task
+from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 from datetime import timedelta
@@ -370,16 +372,68 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
         return {'success': False, 'error': f'{type(e).__name__}: {e}'}
 
 
+# Tekil calisma kilidi (spec 2026-11-02 G4): saatlik turlar ust uste binmesin.
+RETRANSLATE_KILIT_ANAHTARI = 'retranslate:kilit'
+
+
+def _retranslate_kilidi_al():
+    """Kilidi almaya calisir. Donus: (redis_istemcisi, jeton, alindi).
+
+    Redis'e ulasilamazsa tur KAYBEDILMEZ: uyarilir, kilitsiz kosulur (alindi=True, istemci None).
+    Kilit alinamadiysa (baska tur tutuyor) alindi=False doner.
+    """
+    from .retranslate import RETRANSLATE_TIME_BUDGET, _canli_redis
+    jeton = uuid.uuid4().hex
+    try:
+        redis_client = _canli_redis()
+        # Omur: tur butcesi + 600 sn pay, ama en fazla sert sinir + 60 sn (tur bundan uzun yasayamaz).
+        # Worker olurse kilit en gec bu surede kendiliginden duser; butce env ile buyutulse de
+        # olu kilit sonraki saatlik turu atlatmaz.
+        omur = min(RETRANSLATE_TIME_BUDGET + 600, settings.CELERY_TASK_TIME_LIMIT + 60)
+        alindi = bool(redis_client.set(RETRANSLATE_KILIT_ANAHTARI, jeton, nx=True, ex=omur))
+    except Exception as e:
+        log.warning(f'  [retranslate] Kilit alinamadi (Redis?), tur kilitsiz kosuluyor: {e}')
+        return None, jeton, True
+    return redis_client, jeton, alindi
+
+
+def _retranslate_kilidini_birak(redis_client, jeton):
+    """Kilidi yalniz sahibiyse siler. get+delete atomik degildir: kilidin tam bu iki cagri arasinda
+    dusup baskasina gecmesi icin TTL'nin (bkz. _retranslate_kilidi_al) bitmesi gerekir; tek worker sureci ve
+    saatlik tur icin bu risk kabul edildi, Lua betigi gereksiz."""
+    if redis_client is None:
+        return
+    try:
+        mevcut = redis_client.get(RETRANSLATE_KILIT_ANAHTARI)
+        if isinstance(mevcut, bytes):
+            mevcut = mevcut.decode()
+        if mevcut == jeton:
+            redis_client.delete(RETRANSLATE_KILIT_ANAHTARI)
+    except Exception as e:
+        log.warning(f'  [retranslate] Kilit birakilamadi (TTL ile dusecek): {e}')
+
+
 @shared_task
 def retranslate_pending_task():
-    """Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir (bkz. news/retranslate.py)."""
+    """Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir (bkz. news/retranslate.py).
+
+    Onceki tur hala kilidi tutuyorsa {'skipped': 'locked'} doner (FetchRun satiri birakilmaz,
+    bkz. fetch_runs.tur_bitti).
+    """
     from .fetch_runs import eski_kayitlari_temizle
     from .retranslate import retranslate_pending
-    sonuc = retranslate_pending()
-    # Saklama temizligi asil isin sonucunu etkilememeli: sinyal katmaniyla ayni
-    # savunmaci kalip (bkz. fetch_runs.py) - burada da task'in donusunu bozmaz.
+    redis_client, jeton, alindi = _retranslate_kilidi_al()
+    if not alindi:
+        log.info('  [retranslate] Onceki tur suruyor, bu tur atlandi')
+        return {'skipped': 'locked'}
     try:
-        eski_kayitlari_temizle()  # 30 gunden eski FetchRun satirlari (spec 3.4)
-    except Exception as e:
-        log.warning(f'  [FetchRun] Eski kayitlar temizlenemedi: {e}')
-    return sonuc
+        sonuc = retranslate_pending()
+        # Saklama temizligi asil isin sonucunu etkilememeli: sinyal katmaniyla ayni
+        # savunmaci kalip (bkz. fetch_runs.py) - burada da task'in donusunu bozmaz.
+        try:
+            eski_kayitlari_temizle()  # 30 gunden eski FetchRun satirlari (spec 3.4)
+        except Exception as e:
+            log.warning(f'  [FetchRun] Eski kayitlar temizlenemedi: {e}')
+        return sonuc
+    finally:
+        _retranslate_kilidini_birak(redis_client, jeton)

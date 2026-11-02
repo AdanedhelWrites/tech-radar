@@ -722,12 +722,14 @@ def get_saglik(request):
     """
     from django.utils.timezone import now
 
+    from . import gemini
     from .fetch_runs import bolum_ozetleri, ceviri_kuyrugu_ozeti
 
     govde = cache.get('saglik_ozeti')
     if govde is None:
         govde = {'generated_at': now().isoformat(), 'sections': bolum_ozetleri(),
-                 'translation_queue': ceviri_kuyrugu_ozeti()}
+                 'translation_queue': ceviri_kuyrugu_ozeti(),
+                 'translation_budget': {'gemini': gemini.butce_ozeti()}}
         cache.set('saglik_ozeti', govde, SAGLIK_CACHE_SURESI)
     return Response(govde)
 

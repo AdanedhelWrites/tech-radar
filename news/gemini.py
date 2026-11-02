@@ -5,6 +5,9 @@ olarak gider, ayni anahtarlarla Turkce doner. Kota korumasi:
   - Redis paylasimli aralik kapisi: istekler arasi en az GEMINI_MIN_INTERVAL sn
   - Gunluk istek butcesi (GEMINI_DAILY_BUDGET): istek ONCESI artar, 4xx'te geri alinir
   - 429 / 5xx / ag hatasi -> GEMINI_COOLDOWN sn devre kesici
+  - 401 / 403 / 404 (anahtar, yetki, model) ve gecersiz anahtar / hesap sorunu bildiren 400
+    (API_KEY_INVALID, FAILED_PRECONDITION...) -> devre kesici, butce geri alinir
+  - Beklenmeyen istisna (kod hatasi) -> devre kesici
 Hicbir istisna disari cikmaz; cevrilemeyen kayit icin None doner.
 XTRM yer tutucu korumasi ve turkish_post_process uygulanmaz: terimler prompt'la korunur.
 """
@@ -28,18 +31,19 @@ PASIFIK = ZoneInfo('America/Los_Angeles')  # Google RPD kotasi bu saat diliminde
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-3.5-flash-lite')
 GEMINI_TIMEOUT = float(os.environ.get('GEMINI_TIMEOUT', '60'))
 GEMINI_MIN_INTERVAL = float(os.environ.get('GEMINI_MIN_INTERVAL', '5'))   # 15 RPM'in altinda kal
-GEMINI_DAILY_BUDGET = int(os.environ.get('GEMINI_DAILY_BUDGET', '400'))   # 500 RPD'nin altinda kal
+# 500 RPD'nin altinda kal (50 guvenlik payi). Tum bolumler tek tavani paylasir: CVE rezervi
+# (ADR-0005) 2026-11-02'de kalkti; oncelik retranslate.BOLUMLER sirasiyla verilir.
+GEMINI_DAILY_BUDGET = int(os.environ.get('GEMINI_DAILY_BUDGET', '450'))
 GEMINI_COOLDOWN = int(os.environ.get('GEMINI_COOLDOWN', '600'))
 # Daha buyuk kayit 60 sn'de bitmiyor ve devre kesiciyi aciyor; LibreTranslate yolunda kalir
 GEMINI_MAX_CHARS = int(os.environ.get('GEMINI_MAX_CHARS', '12000'))
-# ADR-0005: CVE oncelikli bolumdur (tuketicinin asil cektigi veri). Butce
-# darlastiginda CVE ac kalmasin diye gunluk butcenin bir payi ona ayrilir:
-# CVE tum butceye erisir, diger bolumler yalnizca rezerve disi kisma.
-# Sinir disi deger butce korumasini bozar: negatifse diger bolumlerin tavani
-# GEMINI_DAILY_BUDGET'i asar, 1'den buyukse tavan negatife duser ve o bolumler
-# sessizce devre disi kalir; bu yuzden 0..1 araligina sabitleniyor.
-GEMINI_CVE_RESERVE = min(max(float(os.environ.get('GEMINI_CVE_RESERVE', '0.5')), 0.0), 1.0)
-ONCELIKLI_BOLUM = 'cve'
+# Kayittan bagimsiz 4xx: 401 anahtar gecersiz, 403 yetki/proje, 404 model adi yanlis
+SISTEMIK_HTTP = (401, 403, 404)
+# 400 de sistemik olabilir: Generative Language API gecersiz/iptal/suresi dolmus anahtari
+# 400 INVALID_ARGUMENT + details[].reason=API_KEY_INVALID ile, bazi hesap sorunlarini
+# 400 FAILED_PRECONDITION ile doner. Kayit sucu sayilsa birikim bir gunde deneme tavanina ulasirdi.
+SISTEMIK_DURUM = frozenset({'FAILED_PRECONDITION', 'PERMISSION_DENIED', 'UNAUTHENTICATED'})
+SISTEMIK_SEBEP = frozenset({'API_KEY_INVALID'})
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 MAX_RATIO = 3.0
 ECHO_MIN_WORDS = 4
@@ -157,34 +161,62 @@ def butce_kullanimi() -> int:
     return _get_butce().oku(butce_anahtari())
 
 
-def butce_tavani(bolum: Optional[str] = None) -> int:
-    """Bolumun kullanabilecegi gunluk istek tavani.
-
-    Sayac paylasilir; oncelikli bolum tum butceye erisir, digerleri rezerve
-    disi kisimla sinirlidir. Boylece oncelikli bolume en az
-    GEMINI_DAILY_BUDGET * GEMINI_CVE_RESERVE kadar cagri garanti edilir.
-    Bolum verilmediyse guvenli taraf secilir (rezerve korunur).
-    """
-    if bolum == ONCELIKLI_BOLUM:
-        return GEMINI_DAILY_BUDGET
-    return int(GEMINI_DAILY_BUDGET * (1 - GEMINI_CVE_RESERVE))
+def butce_tavani() -> int:
+    """Gunluk istek tavani; sayac tum bolumler ve worker'lar arasinda paylasilir."""
+    return GEMINI_DAILY_BUDGET
 
 
-def butce_var(bolum: Optional[str] = None) -> bool:
-    return butce_kullanimi() < butce_tavani(bolum)
+def butce_var() -> bool:
+    return butce_kullanimi() < butce_tavani()
 
 
-def hazir(bolum: Optional[str] = None) -> bool:
-    """Anahtar dolu, devre kesici kapali ve bolumun butcesi var mi. Redis erisilemezse False."""
+def hazir() -> bool:
+    """Anahtar dolu, devre kesici kapali ve gunluk butce var mi. Redis erisilemezse False."""
     try:
-        return bool(_anahtar()) and not _get_gate().cooldown_active() and butce_var(bolum)
+        return bool(_anahtar()) and not _get_gate().cooldown_active() and butce_var()
     except Exception:
         return False
+
+
+def butce_ozeti() -> dict:
+    """Anonim /api/saglik/ icin butce ozeti; ASLA firlatmaz ve anahtar/kimlik bilgisi icermez.
+
+    Redis erisilemezse used=0, available=False, cooldown=False doner (serit "bilinmiyor"u
+    sessizce gosterir, saglik ucu 500 vermez).
+    """
+    ozet = {'used': 0, 'limit': butce_tavani(), 'period': 'day', 'available': False, 'cooldown': False}
+    try:
+        ozet['used'] = butce_kullanimi()
+        ozet['cooldown'] = bool(_get_gate().cooldown_active())
+        ozet['available'] = hazir()
+    except Exception:
+        return {'used': 0, 'limit': butce_tavani(), 'period': 'day', 'available': False, 'cooldown': False}
+    return ozet
 
 
 def _devre_kesici(sebep: str) -> None:
     log.warning(f"  [Gemini] erisilemiyor ({sebep}); {GEMINI_COOLDOWN} sn atlanacak.")
     _get_gate().start_cooldown(GEMINI_COOLDOWN)
+
+
+def _sistemik_hata(yanit) -> Optional[str]:
+    """200 disi yanit kayittan bagimsiz mi (anahtar/yetki/hesap/model). Sebep metni ya da None.
+
+    Govde JSON olmayabilir ya da beklenmedik sekilde olabilir; ASLA firlatmaz."""
+    if yanit.status_code in SISTEMIK_HTTP:
+        return f'HTTP {yanit.status_code}'
+    try:
+        hata = json.loads(yanit.text).get('error')
+        durum = hata.get('status')
+        if isinstance(durum, str) and durum in SISTEMIK_DURUM:
+            return f'HTTP {yanit.status_code} {durum}'
+        for ayrinti in hata.get('details') or ():
+            sebep = ayrinti.get('reason') if isinstance(ayrinti, dict) else None
+            if isinstance(sebep, str) and sebep in SISTEMIK_SEBEP:
+                return f'HTTP {yanit.status_code} {sebep}'
+    except Exception:  # JSON degil / dict degil / details liste degil: kayda ozgu sayilir
+        return None
+    return None
 
 
 def _kelime_sayisi(metin: str) -> int:
@@ -243,16 +275,18 @@ def _yaniti_coz(yanit) -> Optional[dict]:
 
 
 def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optional[Dict[str, str]]:
-    """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi)."""
+    """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi).
+
+    bolum yalniz log metni icindir; tavan tum bolumler icin aynidir."""
     alanlar = {ad: metin for ad, metin in alanlar.items() if isinstance(metin, str) and metin.strip()}
-    if not alanlar or not hazir(bolum):
+    if not alanlar or not hazir():
         return None
 
     butce, anahtar = _get_butce(), butce_anahtari()
-    if butce.artir(anahtar) > butce_tavani(bolum):
+    if butce.artir(anahtar) > butce_tavani():
         butce.azalt(anahtar)
-        log.warning(f"  [Gemini] {bolum or 'genel'} bolumu gunluk butce payini doldurdu "
-              f"({butce_tavani(bolum)}/{GEMINI_DAILY_BUDGET}).")
+        log.warning(f"  [Gemini] gunluk butce doldu ({butce_tavani()}); "
+                    f"{bolum or 'genel'} kaydi cevrilmedi.")
         return None
 
     _get_gate().wait_for_slot(GEMINI_MIN_INTERVAL)
@@ -267,16 +301,25 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
         _devre_kesici(type(hata).__name__)
         return None
     except Exception as hata:  # beklenmeyen hata retranslate'i durdurmasin
+        # Kod hatasi her kayitta tekrarlar: kaydin sucu sayilmasin, devre kesici acilsin
         log.warning(f"  [Gemini] beklenmeyen hata: {type(hata).__name__}")
+        _devre_kesici(type(hata).__name__)
         return None
 
     if yanit.status_code == 429 or yanit.status_code >= 500:
         _devre_kesici(f'HTTP {yanit.status_code}')
         return None
     if yanit.status_code != 200:
-        # Istek sorunu (anahtar, gecersiz govde): kota harcanmadi, devre kesici acilmaz
-        butce.azalt(anahtar)
-        log.info(f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {yanit.text[:200]}")
+        butce.azalt(anahtar)  # 4xx: kota harcanmadi
+        sistemik = _sistemik_hata(yanit)
+        if sistemik:
+            # Anahtar iptal / yetki yok / hesap / model yok: her istek ayni yaniti alir. Devre kesici
+            # acilmazsa hazir() True kalir ve retranslate her adayi icerik hatasi sayip
+            # RETRANSLATE_MAX_ATTEMPTS turda tum yukseltme adaylarini kuyruktan dusururdu.
+            _devre_kesici(sistemik)
+            return None
+        # Kayda ozgu istek sorunu (400 gecersiz govde vb.): devre kesici acilmaz
+        log.info(f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {str(yanit.text)[:200]}")
         return None
 
     cikti = _yaniti_coz(yanit)

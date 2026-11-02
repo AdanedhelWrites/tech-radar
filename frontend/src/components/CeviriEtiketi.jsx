@@ -7,7 +7,7 @@ const ROZETLER = {
   libretranslate: {
     metin: 'Makine çevirisi: LibreTranslate',
     bg: 'warning', text: 'dark', arka: '#ffc107', on: '#212529',
-    aciklama: 'Yerel LibreTranslate ile çevrildi; anlam hatası olabilir, orijinal metne bakın. En geç 2 saat içinde Gemini ile iyileştirilir.',
+    aciklama: 'Yerel LibreTranslate ile çevrildi; anlam hatası olabilir, orijinal metne bakın. Haberler ile kritik ve yüksek zafiyetler gün içinde Gemini ile iyileştirilir.',
   },
   gemini: {
     metin: 'Çeviri: Gemini',
