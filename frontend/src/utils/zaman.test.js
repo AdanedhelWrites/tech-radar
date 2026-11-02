@@ -10,6 +10,11 @@ describe('goreliZaman', () => {
     expect(goreliZaman('2026-10-14T06:00:00Z', T)).toBe('6 sa önce')
     expect(goreliZaman('2026-10-11T12:00:00Z', T)).toBe('3 gün önce')
   })
+  it('24-48 saat dun, sonrasi gun', () => {
+    expect(goreliZaman('2026-10-13T12:00:00Z', T)).toBe('dün')
+    expect(goreliZaman('2026-10-13T00:00:01Z', T)).toBe('dün')
+    expect(goreliZaman('2026-10-12T12:00:00Z', T)).toBe('2 gün önce')
+  })
   it('bos, bozuk ve gelecek deger tire olur', () => {
     expect(goreliZaman(null, T)).toBe('-')
     expect(goreliZaman(undefined, T)).toBe('-')
