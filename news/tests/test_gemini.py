@@ -494,26 +494,32 @@ class GeminiPaketTests(GeminiTestMixin, SimpleTestCase):
         sonuc = gemini.paket_cevir(KAYITLAR)
         self.assertTrue(sonuc.kesildi)
         self.assertFalse(sonuc.istek_hatasi)
+        self.assertFalse(sonuc.yanit_bozuk)
         self.assertEqual(sonuc.ceviriler, {})
         self.assertEqual(sonuc.reddedilen, set())
         self.assertFalse(gemini._gate.cooldown_active())
         self.assertEqual(gemini.butce_kullanimi(), 1)
 
-    def test_safety_tum_paketi_icerik_hatasi_sayar(self):
-        self._post(_yanit(govde=PAKET_CEVIRI, finish='SAFETY'))
-        sonuc = gemini.paket_cevir(KAYITLAR)
-        self.assertEqual(sonuc.reddedilen, set(KAYITLAR))
-        self.assertEqual(sonuc.ceviriler, {})
-        self.assertFalse(sonuc.istek_hatasi)
-        self.assertFalse(sonuc.kesildi)
-        self.assertFalse(gemini._gate.cooldown_active())
+    def test_safety_yanit_bozuk_hicbir_kaydi_reddetmez(self):
+        """Sucun hangi kayitta oldugu bilinmez: kimse reddedilmez, cagiran boler (B2 fix 1)."""
+        for sebep in ('SAFETY', 'RECITATION', 'OTHER'):
+            with self.subTest(sebep=sebep):
+                self._post(_yanit(govde=PAKET_CEVIRI, finish=sebep))
+                sonuc = gemini.paket_cevir(KAYITLAR)
+                self.assertTrue(sonuc.yanit_bozuk)
+                self.assertEqual(sonuc.reddedilen, set())
+                self.assertEqual(sonuc.ceviriler, {})
+                self.assertFalse(sonuc.istek_hatasi)
+                self.assertFalse(sonuc.kesildi)
+                self.assertFalse(gemini._gate.cooldown_active())
 
-    def test_bozuk_ya_da_nesne_olmayan_json_tum_paketi_reddeder(self):
+    def test_bozuk_ya_da_nesne_olmayan_json_yanit_bozuk(self):
         for metin in ('{"k0": yarim', '["liste"]'):
             with self.subTest(metin=metin):
                 self._post(_yanit(metin=metin))
                 sonuc = gemini.paket_cevir(KAYITLAR)
-                self.assertEqual(sonuc.reddedilen, set(KAYITLAR))
+                self.assertTrue(sonuc.yanit_bozuk)
+                self.assertEqual(sonuc.reddedilen, set())
                 self.assertEqual(sonuc.ceviriler, {})
                 self.assertFalse(sonuc.istek_hatasi)
                 self.assertFalse(sonuc.kesildi)

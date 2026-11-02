@@ -462,13 +462,16 @@ class PaketSonucu:
     istek_hatasi: istek gitmedi (hazir degil / butce) ya da istek duzeyinde basarisiz oldu (ag, 429,
       5xx, 200 disi yanit); hicbir kaydin sucu degil.
     kesildi: yanit MAX_TOKENS ile yarim kaldi; paket boyu sorunudur (cagiran bolup yeniden dener).
-    Bu ikisinden biri True ise ceviriler ve reddedilen bostur. Ikisi de False ise her girdi kimligi
-    ya ceviriler'de ya reddedilen'dedir (icerik hatasi: dogrulama, eksik kimlik, capa karismasi,
-    cozulemeyen yanit)."""
+    yanit_bozuk: yanitin tamami kullanilamaz (SAFETY/RECITATION vb. tamamlanmamis, cozulemeyen ya da
+      nesne olmayan JSON); sucun hangi kayitta oldugu bilinmez (cagiran bolup yeniden dener, tek
+      kayitta o kaydin icerik hatasidir).
+    Bu ucunden biri True ise ceviriler ve reddedilen bostur. Hepsi False ise her girdi kimligi
+    ya ceviriler'de ya reddedilen'dedir (icerik hatasi: dogrulama, eksik kimlik, capa karismasi)."""
     ceviriler: Dict[str, Dict[str, str]] = field(default_factory=dict)
     reddedilen: Set[str] = field(default_factory=set)
     istek_hatasi: bool = False
     kesildi: bool = False
+    yanit_bozuk: bool = False
 
 
 def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None) -> PaketSonucu:
@@ -481,7 +484,8 @@ def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None
     (_capa_sorunu): cevirisi baska kaydin CVE/GHSA/URL/kod/surum capasini tasiyan ya da >=2 capali
     olup hicbirini tasimayan kayit reddedilir; capasiz kayitlar etkilenmez.
     finishReason MAX_TOKENS -> kesildi; diger tamamlanmamis
-    (SAFETY vb.) ya da cozulemeyen yanit -> tum kayitlar reddedilir. Hicbir istisna disari cikmaz."""
+    (SAFETY vb.) ya da cozulemeyen yanit -> yanit_bozuk (tek bir kayit tum paketi yakmasin; cagiran
+    boler). Hicbir istisna disari cikmaz."""
     gonderilecek, bos = {}, set()
     for kimlik, alanlar in kayitlar.items():
         dolu = _dolu_alanlar(alanlar)
@@ -502,7 +506,7 @@ def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None
     if sebep == 'MAX_TOKENS':
         return PaketSonucu(kesildi=True)
     if cikti is None:
-        return PaketSonucu(reddedilen=bos | set(gonderilecek))
+        return PaketSonucu(yanit_bozuk=True)
 
     sonuc = PaketSonucu(reddedilen=bos)
     for kimlik, alanlar in gonderilecek.items():

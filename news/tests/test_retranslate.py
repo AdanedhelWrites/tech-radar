@@ -1503,6 +1503,69 @@ class PaketliYukseltmeTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslate
         for kayit in map(self._kayit, kayitlar):
             self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('libretranslate', 1))
 
+    def test_yanit_bozuk_paket_bolunur_yalniz_suclu_sayilir(self):
+        """Bir kayit tum yaniti bozuyor (SAFETY): paket bolunur, yalniz suclu deneme sayar (B2 fix 1)."""
+        suclu = 'Story number 2 published'  # en yeni once sirada k2
+
+        def paket(kayitlar):
+            if any(alanlar['title'] == suclu for alanlar in kayitlar.values()):
+                return gemini.PaketSonucu(yanit_bozuk=True)
+            return _ceviri_paketi(kayitlar)
+
+        self.gemini_ayarla(paket=paket)
+        kayitlar = self._ai_adaylari(4)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(self.paket_cagrilar[0]['k2']['title'], suclu)
+        self.assertEqual([len(p) for p in self.paket_cagrilar], [4, 2, 2, 1, 1])
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (3, 1))
+        for kayit in map(self._kayit, kayitlar):
+            if kayit.original_title == suclu:
+                self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('libretranslate', 1))
+            else:
+                self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('gemini', 0))
+
+    def test_hep_bozuk_yanitta_seri_bolumu_durdurur(self):
+        self.gemini_ayarla(paket=lambda kayitlar: gemini.PaketSonucu(yanit_bozuk=True))
+        self._ai_adaylari(7)
+
+        sonuc = self._calistir(upgrade_batch=7)
+
+        # 7 -> 4+3 -> 2+2 -> 1+1 ...: 5. tek kayit reddinde durur (11 istek); 2 kayit sayilmaz
+        self.assertEqual(len(self.paket_cagrilar), 11)
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (0, 5))
+        self.assertEqual(sonuc['sections']['ai']['stopped_reason'], 'ardisik_icerik_hatasi')
+        denemeler = sorted(AINewsEntry.objects.values_list('translation_attempts', flat=True))
+        self.assertEqual(denemeler, [0, 0, 1, 1, 1, 1, 1])
+
+    def test_paketli_k8s_isaret_kaybi_icerik_hatasi(self):
+        """GitHub Releases disi K8s kaydi paketlenir ama isaret denetiminden yine gecer (B2 fix 2)."""
+        govde = 'Release notes:\n---ITEM---\nAdds a flag.'
+
+        def cevap(alanlar):
+            ceviri = _gemini_cevirisi(alanlar)
+            if 'description' in ceviri:
+                ceviri['description'] = ceviri['description'].replace('---ITEM---', '')
+            return ceviri
+
+        self.gemini_ayarla(cevap)
+        kayit = KubernetesEntry.objects.create(
+            source='Kubernetes Blog', category='release', version='', original_title='Kubernetes notes',
+            turkish_title='LIBRE Kubernetes notes', original_description=govde,
+            turkish_description='LIBRE ' + govde, link='https://ornek.test/k8s/paket-isaret',
+            published_date=date(2026, 9, 12), needs_translation=False, translation_provider='libretranslate')
+        eski = kayit.turkish_description
+
+        sonuc = self._calistir()
+
+        self.assertEqual(self.tekil_cagrilar, [])
+        self.assertEqual(len(self.paket_cagrilar), 1)
+        kayit = self._kayit(kayit)
+        self.assertEqual(sonuc['sections']['kubernetes']['upgraded'], 0)
+        self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('libretranslate', 1))
+        self.assertEqual(kayit.turkish_description, eski)
+
     def test_k8s_yapisal_changelog_paketlenmez(self):
         self.gemini_ayarla(_gemini_cevirisi)
         yapisal_govde = '===SECTION: Features===\n---ITEM---\nAdds a flag.\n<<<PR#123|@kisi|sig>>>'

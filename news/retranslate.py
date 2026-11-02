@@ -14,9 +14,10 @@ yoktur: her tur en yeni adaylardan baslar (created_at azalan). Adaylar paketleni
 _paketle: GEMINI_BATCH_CHARS / GEMINI_BATCH_MAX); bir paket tek istektir (gemini.paket_cevir).
 Yapisal K8s changelog'lari paketlenmez, isaret denetimli tekil yoldan (kaydi_cevir) gider. Bir
 kaydin tum alanlari dogrulamadan gectiyse yazilir (kayit icinde hepsi ya da hicbiri); paketteki
-diger kayitlar etkilenmez. Yanit kesilirse (MAX_TOKENS) ya da Gemini hazirken istek kayda ozgu
-reddedilirse paket ikiye bolunup ayni turda denenir. Gemini hazirken reddederse (dogrulama,
-eksik kimlik, cok uzun kayit, k8s isaret kaybi, tek kayitta kesilme) icerik
+diger kayitlar etkilenmez. Yanit kesilirse (MAX_TOKENS), yanitin tamami bozuksa (SAFETY vb. /
+cozulemeyen JSON) ya da Gemini hazirken istek kayda ozgu reddedilirse paket ikiye bolunup ayni
+turda denenir; paketli K8s cevirisi de isaret denetiminden gecer. Gemini hazirken reddederse (dogrulama,
+eksik kimlik, cok uzun kayit, k8s isaret kaybi, tek kayitta kesilme ya da bozuk yanit) icerik
 hatasidir ve translation_attempts artar, RETRANSLATE_MAX_ATTEMPTS'a ulasan kayit
 aday olmaktan cikar. Gemini hazir degilse (anahtar yok / devre kesici / gunluk
 butce) asama baslamaz ya da durur; sayac artmaz, kalanlar sonraki tura kalir. Bir bolumde
@@ -229,6 +230,21 @@ def _gemini_adayi_mi(ad: str, kayit) -> bool:
     return (kayit.cvss_score or 0) >= CVE_GEMINI_ESIGI or kayit.kev_added_date is not None
 
 
+_K8S_ISARETLERI = ('===SECTION:', '---ITEM---', '<<<PR#')
+
+
+def _k8s_yapisi_korunmus(ad: str, alanlar: Dict[str, str], ceviri: Dict[str, str]) -> bool:
+    """Kubernetes cevirisinde yapi isaretlerinin sayisi orijinaliyle ayni mi (iki yolda da: tekil ve
+    paketli). False: icerik hatasi. Diger bolumler ve aciklamasiz ceviri icin hep True."""
+    if ad != 'kubernetes' or 'description' not in ceviri:
+        return True
+    for isaret in _K8S_ISARETLERI:
+        if alanlar.get('description', '').count(isaret) != ceviri['description'].count(isaret):
+            log.warning("  [Gemini] kubernetes yapisi bozuldu (isaret sayisi degisti).")
+            return False
+    return True
+
+
 def _gemini_ile_cevir(ad: str, kayit, tur: Optional[_Tur] = None) -> Optional[Dict[str, str]]:
     """Kaydi Gemini ile cevirir; DB alan adlariyla sozluk ya da None
     (aday degil / hazir degil / tur payi bitti / cevrilemedi)."""
@@ -238,13 +254,8 @@ def _gemini_ile_cevir(ad: str, kayit, tur: Optional[_Tur] = None) -> Optional[Di
     if not alanlar or not _gemini_kullanilabilir(tur):
         return None
     sonuc = gemini.kaydi_cevir(alanlar, ad)
-    if sonuc is None:
+    if sonuc is None or not _k8s_yapisi_korunmus(ad, alanlar, sonuc):
         return None
-    if ad == 'kubernetes' and 'description' in sonuc:
-        for isaret in ('===SECTION:', '---ITEM---', '<<<PR#'):
-            if alanlar['description'].count(isaret) != sonuc['description'].count(isaret):
-                log.warning("  [Gemini] kubernetes yapisi bozuldu (isaret sayisi degisti).")
-                return None
     return {_GEMINI_DB_ALANI[alan]: metin for alan, metin in sonuc.items()}
 
 
@@ -425,18 +436,19 @@ def _yapisal_k8s(ad: str, kayit) -> bool:
 
 
 def _yukseltme_kuyrugu(ad: str, kayitlar: list) -> Tuple[deque, list]:
-    """Adaylardan paket kuyrugu kurar. Donus: (kuyruk, istek atilmadan reddedilenler).
+    """Adaylardan paket kuyrugu kurar. Donus: (kuyruk, istek_disi).
 
     Kuyruk ogesi bir (kayit, alanlar) listesidir; yapisal K8s kaydi tek basina bir ogedir. Sira
-    (en yeni once) korunur. Cok uzun kayit (_gemini_alanlari bos) istek atilmadan reddedilir."""
-    kuyruk, reddedilen, dizi = deque(), [], []
+    (en yeni once) korunur. istek_disi: cevrilecek alani yok ya da cok uzun (_gemini_alanlari bos:
+    kisa CVE aciklamasi, bos kayit, GEMINI_MAX_CHARS ustu); istek atilmadan reddedilir."""
+    kuyruk, istek_disi, dizi = deque(), [], []
     sinirlar = (gemini.GEMINI_BATCH_CHARS, gemini.GEMINI_BATCH_MAX)
     for kayit in kayitlar:
         if not _gemini_adayi_mi(ad, kayit):
             continue  # sorgu zaten eler; onem sinifi disina istek atilmaz
         alanlar = _gemini_alanlari(ad, kayit)
         if not alanlar:
-            reddedilen.append(kayit)
+            istek_disi.append(kayit)
         elif _yapisal_k8s(ad, kayit):
             kuyruk.extend(_paketle(dizi, *sinirlar))
             dizi = []
@@ -444,7 +456,7 @@ def _yukseltme_kuyrugu(ad: str, kayitlar: list) -> Tuple[deque, list]:
         else:
             dizi.append((kayit, alanlar))
     kuyruk.extend(_paketle(dizi, *sinirlar))
-    return kuyruk, reddedilen
+    return kuyruk, istek_disi
 
 
 def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
@@ -452,18 +464,21 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
 
     Her paket tek istektir; tur payi paket basina sayilir ve her paketten once bakilir. Paketteki
     reddedilen kayit icerik hatasidir, digerleri yazilir. Istek hatasinda Gemini artik hazir degilse
-    (devre kesici / butce) asama durur, hicbir kayit sayilmaz. Yanit kesildiyse (MAX_TOKENS) ya da
-    Gemini hazirken istek kayda ozgu reddedildiyse (4xx, butce geri alindi) paket ikiye bolunup ayni
-    turda yeniden denenir; tek kayitta da olmuyorsa o kaydin icerik hatasidir."""
+    (devre kesici / butce) asama durur, hicbir kayit sayilmaz. Yanit kesildiyse (MAX_TOKENS), yanitin
+    tamami bozuksa (SAFETY vb. / cozulemeyen JSON) ya da Gemini hazirken istek kayda ozgu reddedildiyse
+    (4xx, butce geri alindi) paket ikiye bolunup ayni turda yeniden denenir: sucun hangi kayitta
+    oldugu bilinmez, tek bir kayit komsularini yakmasin. Tek kayitta da olmuyorsa o kaydin icerik
+    hatasidir. Paketli K8s cevirisi de isaret denetiminden gecer."""
     if not _gemini_kullanilabilir(tur):
         _gemini_sebebini_yaz(sonuc, tur)
         return 0, 0
 
-    kuyruk, uzunlar = _yukseltme_kuyrugu(ad, _yukseltme_adaylari(ad, model, sinir))
-    # Cok uzun kayit Gemini'nin cevabina bakilmadan reddedilir: icerik hatasi (G5), ardisik seriye girmez
-    for kayit in uzunlar:
+    kuyruk, istek_disi = _yukseltme_kuyrugu(ad, _yukseltme_adaylari(ad, model, sinir))
+    # Cevrilecek alani olmayan ya da cok uzun kayit istek atilmadan reddedilir: icerik hatasi (G5).
+    # Gemini'nin cevabi degildir; ardisik seriye (sistemik hata belirtisi) girmez.
+    for kayit in istek_disi:
         _basarisiz_say(kayit)
-    yukseltilen, basarisiz, ardisik = 0, len(uzunlar), 0
+    yukseltilen, basarisiz, ardisik = 0, len(istek_disi), 0
 
     def reddet(kayit):
         nonlocal basarisiz, ardisik
@@ -509,7 +524,7 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
         if paket_sonucu.istek_hatasi and not gemini.hazir():
             _gemini_sebebini_yaz(sonuc, tur)
             break
-        if paket_sonucu.istek_hatasi or paket_sonucu.kesildi:
+        if paket_sonucu.istek_hatasi or paket_sonucu.kesildi or paket_sonucu.yanit_bozuk:
             if len(paket) > 1:
                 yari = (len(paket) + 1) // 2
                 kuyruk.appendleft(paket[yari:])
@@ -517,10 +532,10 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
             else:
                 reddet(paket[0][0])
             continue
-        for i, (kayit, _) in enumerate(paket):
+        for i, (kayit, alanlar) in enumerate(paket):
             ceviri = paket_sonucu.ceviriler.get(f'k{i}')
-            if ceviri is None:
-                reddet(kayit)  # reddedilen ya da yanitta hic olmayan kimlik
+            if ceviri is None or not _k8s_yapisi_korunmus(ad, alanlar, ceviri):
+                reddet(kayit)  # reddedilen / yanitta hic olmayan kimlik / k8s isaret kaybi
             else:
                 yaz(kayit, {_GEMINI_DB_ALANI[alan]: metin for alan, metin in ceviri.items()})
     return yukseltilen, basarisiz
