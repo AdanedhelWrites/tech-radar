@@ -68,7 +68,9 @@ class RetranslateTestBase(TranslationGateMixin, TestCase):
         """Gemini kapali: mevcut zincir testleri etkilenmez. Gemini testleri kendi ayarini yapar."""
         # _butce: tur payi (G4) gunluk sayaci okur; her test bos bir surec ici sayacla baslar.
         for hedef, deger in (('hazir', lambda: False), ('butce_var', lambda: True),
-                             ('kaydi_cevir', lambda alanlar, bolum=None: None), ('_butce', gemini._LocalButce())):
+                             ('kaydi_cevir', lambda alanlar, bolum=None: None),
+                             ('paket_cevir', lambda kayitlar, bolum=None: gemini.PaketSonucu(istek_hatasi=True)),
+                             ('_butce', gemini._LocalButce())):
             yama = mock.patch.object(gemini, hedef, deger)
             yama.start()
             self.addCleanup(yama.stop)
@@ -550,24 +552,64 @@ class BozukCevirileriIsaretleTests(TestCase):
 class GeminiSahteMixin:
     """gemini modulunu ag erisimi olmadan taklit eder."""
 
-    def gemini_ayarla(self, cevap=None, hazir=True, butce=True, istek_say=False):
+    def gemini_ayarla(self, cevap=None, hazir=True, butce=True, istek_say=False, paket=None):
         """cevap: alanlar sozlugunu alan fonksiyon, sabit sozluk ya da None (cevrilemedi).
         hazir: sabit bool ya da parametresiz bir fonksiyon (cagri sirasinda degisebilir).
-        istek_say: her cagri gercek kaydi_cevir gibi gunluk sayaci artirir (tur payi testleri)."""
-        self.gemini_cagrilar = []
+        istek_say: her istek (kaydi_cevir cagrisi ya da paket) gercek istemci gibi gunluk sayaci artirir.
+        paket: paket_cevir'in senaryosu; kayitlar sozlugunu alip PaketSonucu donen fonksiyon ya da
+          PaketSonucu listesi (sirayla). Verilmezse her kayit icin cevap uygulanir (None -> reddedilen).
+
+        Kayitlar: gemini_cagrilar Gemini'ye giden her kaydin alanlari (iki yol), tekil_cagrilar
+        kaydi_cevir cagrilari, paket_cagrilar paket_cevir istekleri (kimlik -> alanlar), paket_bolumleri
+        her paketin bolum adi."""
+        self.gemini_cagrilar, self.tekil_cagrilar, self.paket_cagrilar, self.paket_bolumleri = [], [], [], []
         hazir_fn = hazir if callable(hazir) else (lambda: hazir)
+        hazir_mi = (lambda: hazir_fn() and butce)
+        senaryo = iter(paket) if isinstance(paket, (list, tuple)) else None
+
+        def istegi_say():
+            if istek_say:
+                gemini._get_butce().artir(gemini.butce_anahtari())
 
         def kaydi_cevir(alanlar, bolum=None):
             self.gemini_cagrilar.append(dict(alanlar))
-            if istek_say:
-                gemini._get_butce().artir(gemini.butce_anahtari())
+            self.tekil_cagrilar.append(dict(alanlar))
+            istegi_say()
             return cevap(alanlar) if callable(cevap) else cevap
 
-        for hedef, deger in (('hazir', lambda: hazir_fn() and butce), ('butce_var', lambda: butce),
-                             ('kaydi_cevir', kaydi_cevir)):
+        def paket_cevir(kayitlar, bolum=None):
+            if not hazir_mi():  # gercek istemci gibi: istek atilmaz
+                return gemini.PaketSonucu(istek_hatasi=True)
+            self.paket_cagrilar.append({kimlik: dict(alanlar) for kimlik, alanlar in kayitlar.items()})
+            self.paket_bolumleri.append(bolum)
+            self.gemini_cagrilar.extend(dict(alanlar) for alanlar in kayitlar.values())
+            istegi_say()
+            if senaryo is not None:
+                return next(senaryo)
+            if callable(paket):
+                return paket(kayitlar)
+            sonuc = gemini.PaketSonucu()
+            for kimlik, alanlar in kayitlar.items():
+                ceviri = cevap(alanlar) if callable(cevap) else cevap
+                if ceviri is None:
+                    sonuc.reddedilen.add(kimlik)
+                else:
+                    sonuc.ceviriler[kimlik] = ceviri
+            return sonuc
+
+        for hedef, deger in (('hazir', hazir_mi), ('butce_var', lambda: butce),
+                             ('kaydi_cevir', kaydi_cevir), ('paket_cevir', paket_cevir)):
             yama = mock.patch.object(gemini, hedef, deger)
             yama.start()
             self.addCleanup(yama.stop)
+
+    def paket_siniri(self, adet=None, karakter=None):
+        """GEMINI_BATCH_MAX / GEMINI_BATCH_CHARS'i test suresince degistirir (adet=1: kayit basina istek)."""
+        for hedef, deger in (('GEMINI_BATCH_MAX', adet), ('GEMINI_BATCH_CHARS', karakter)):
+            if deger is not None:
+                yama = mock.patch.object(gemini, hedef, deger)
+                yama.start()
+                self.addCleanup(yama.stop)
 
 
 def _gemini_cevirisi(alanlar):
@@ -793,18 +835,19 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
     def test_transport_hatasinda_yukseltme_deneme_saymaz(self):
         durum = {'hazir': True}
 
-        def cevap(alanlar):
+        def paket(kayitlar):
             durum['hazir'] = False  # 429/ag hatasi: devre kesici acildi
-            return None
+            return gemini.PaketSonucu(istek_hatasi=True)
 
-        self.gemini_ayarla(cevap, hazir=lambda: durum['hazir'])
+        self.gemini_ayarla(hazir=lambda: durum['hazir'], paket=paket)
+        self.paket_siniri(adet=1)  # iki ayri paket: ilkinin hatasi ikincisini durdurmali
         kayit1 = _libre_kaydi('t1')
         kayit2 = _libre_kaydi('t2')
 
         sonuc = self._calistir()
 
         self.assertEqual(sonuc['upgraded'], 0)
-        self.assertEqual(len(self.gemini_cagrilar), 1, 'Ilk istek hatasinda asama durmaliydi')
+        self.assertEqual(len(self.paket_cagrilar), 1, 'Ilk istek hatasinda asama durmaliydi')
         for kayit in (kayit1, kayit2):
             kayit.refresh_from_db()
             self.assertEqual(kayit.translation_provider, 'libretranslate')
@@ -882,6 +925,7 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
             return _gemini_cevirisi(alanlar)
 
         self.gemini_ayarla(cevap)
+        self.paket_siniri(adet=1)  # kayit basina bir paket: butce paketler arasinda biter
         # hazir() ikinci kayittan once False'a dusmeli
         yama = mock.patch.object(gemini, 'hazir', lambda: durum['kalan'] > 0)
         yama.start()
@@ -1172,22 +1216,38 @@ class TurPayiTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBase)
         return retranslate._Tur(pay=pay, baslangic=gemini.butce_kullanimi())
 
     def test_tur_payi_bitince_gemini_cagrilmaz(self):
+        """PR-B: pay=1 tek paket demektir; uc aday ayni istekte gider, sonra istek atilmaz."""
         self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
         kayitlar = [_libre_kaydi(f'pay-{i}', baslik=f'Story number {i + 1} published') for i in range(3)]
 
         sonuc = self._calistir(tur=self._tur(1))
 
-        self.assertEqual(len(self.gemini_cagrilar), 1)
-        self.assertEqual(sonuc['upgraded'], 1)
+        self.assertEqual(len(self.paket_cagrilar), 1)
+        self.assertEqual(self.tekil_cagrilar, [])
+        self.assertEqual(sonuc['upgraded'], 3)
         self.assertEqual(sonuc['stopped_reason'], 'gemini_tur_payi')
         self.assertFalse(sonuc['stopped'])
         self.assertEqual(sonuc['gemini_tur_payi'], 1)
+        for kayit in kayitlar:
+            kayit.refresh_from_db()
+            self.assertEqual(kayit.translation_provider, 'gemini')
+
+    def test_tur_payi_bitince_ikinci_paket_gitmez(self):
+        self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        self.paket_siniri(adet=2)
+        kayitlar = [_libre_kaydi(f'pay2-{i}', baslik=f'Story number {i + 1} published') for i in range(3)]
+
+        sonuc = self._calistir(tur=self._tur(1))
+
+        self.assertEqual([len(p) for p in self.paket_cagrilar], [2])
+        self.assertEqual(sonuc['upgraded'], 2)
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_tur_payi')
         saglayicilar = []
         for kayit in kayitlar:
             kayit.refresh_from_db()
             saglayicilar.append(kayit.translation_provider)
             self.assertEqual(kayit.translation_attempts, 0, 'Pay bitmesi icerik hatasi degildir')
-        self.assertEqual(sorted(saglayicilar), ['gemini', 'libretranslate', 'libretranslate'])
+        self.assertEqual(sorted(saglayicilar), ['gemini', 'gemini', 'libretranslate'])
 
     def test_tur_payi_bitince_bekleyen_zincirle_cevrilir(self):
         self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
@@ -1220,6 +1280,7 @@ class TurPayiTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBase)
 
     def test_oncelik_kati_cve_once(self):
         self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        self.paket_siniri(adet=1)  # kayit basina istek: pay iki CVE'de biter
         cveler = [_cve_kaydi(f'810{i}', cvss=9.8) for i in range(2)]
         ai_kayitlari = [_libre_kaydi(f'onc-{i}', baslik=f'Story number {i + 1} published') for i in range(2)]
 
@@ -1249,6 +1310,7 @@ class TurPayiTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBase)
     def test_pay_turun_kendi_harcamasini_sayar(self):
         """Kalan = pay - (simdiki kullanim - baslangic): turdan once harcanmis istekler payi yemez."""
         self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        self.paket_siniri(adet=1)
         for _ in range(7):
             gemini._get_butce().artir(gemini.butce_anahtari())
         for i in range(3):
@@ -1262,6 +1324,7 @@ class TurPayiTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBase)
     def test_tur_verilmezse_tur_payindan_kurulur(self):
         from news import retranslate
         self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        self.paket_siniri(adet=1)
         for i in range(3):
             _libre_kaydi(f'vars-{i}', baslik=f'Story number {i + 1} published')
 
@@ -1273,6 +1336,231 @@ class TurPayiTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBase)
         self.assertIsNotNone(simdi.tzinfo, 'tur_payi zaman dilimli bir an almali (timezone.now())')
         self.assertEqual(sonuc['gemini_tur_payi'], 2)
         self.assertEqual(len(self.gemini_cagrilar), 2)
+
+
+def _ceviri_paketi(kayitlar, reddet=()):
+    """Senaryo yardimcisi: reddet'teki kimlikler reddedilen, digerleri 'GEMINI ' onekiyle cevrilir."""
+    sonuc = gemini.PaketSonucu()
+    for kimlik, alanlar in kayitlar.items():
+        if kimlik in reddet:
+            sonuc.reddedilen.add(kimlik)
+        else:
+            sonuc.ceviriler[kimlik] = _gemini_cevirisi(alanlar)
+    return sonuc
+
+
+class PaketliYukseltmeTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBase):
+    """Spec 2026-11-02 G5: yukseltme asamasi bir istekte birden cok kayit gonderir."""
+
+    def setUp(self):
+        super().setUp()
+        self.libre = self.saglayicilari_ayarla(SahteSaglayici('libretranslate', _libre))[0]
+
+    def _ai_adaylari(self, adet, onek='pk'):
+        return [_libre_kaydi(f'{onek}-{i}', baslik=f'Story number {i + 1} published') for i in range(adet)]
+
+    def _kayit(self, kayit):
+        kayit.refresh_from_db()
+        return kayit
+
+    def test_paketle_karakter_ve_adet_siniri(self):
+        from news.retranslate import _paketle
+
+        def boylari(adaylar):
+            return [len(paket) for paket in _paketle(adaylar, 10000, 15)]
+
+        orta = [(i, {'title': 'a' * 400, 'description': 'b' * 500}) for i in range(20)]
+        self.assertEqual(boylari(orta), [11, 9])          # 11 x 900 = 9900; 12. kayit 10800 olurdu
+        kisa = [(i, {'title': 'c' * 100}) for i in range(20)]
+        self.assertEqual(boylari(kisa), [15, 5])          # adet siniri
+        paketler = _paketle(orta, 10000, 15)
+        self.assertEqual([k for paket in paketler for k, _ in paket], list(range(20)), 'Sira korunmali')
+        # Tek basina sinirdan buyuk kayit kendi paketinde gider; oncesi ve sonrasi ayri paketlerdir
+        buyuk = [(0, {'title': 'x' * 100}), (1, {'title': 'y' * 11000}), (2, {'title': 'z' * 100})]
+        self.assertEqual([[k for k, _ in paket] for paket in _paketle(buyuk, 10000, 15)], [[0], [1], [2]])
+        self.assertEqual(_paketle([], 10000, 15), [])
+
+    def test_yukseltme_tek_istekte_bes_kayit(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        kayitlar = self._ai_adaylari(5)
+
+        sonuc = self._calistir(upgrade_batch=5)
+
+        self.assertEqual(len(self.paket_cagrilar), 1)
+        self.assertEqual(sorted(self.paket_cagrilar[0]), ['k0', 'k1', 'k2', 'k3', 'k4'])
+        self.assertEqual(self.paket_bolumleri, ['ai'], 'Bolum adi log icin paket_cevir\'e gecmeli')
+        self.assertEqual(self.tekil_cagrilar, [])
+        self.assertEqual(sonuc['upgraded'], 5)
+        for kayit in kayitlar:
+            kayit = self._kayit(kayit)
+            self.assertEqual(kayit.translation_provider, 'gemini')
+            self.assertEqual(kayit.turkish_title, 'GEMINI ' + kayit.original_title)
+
+    def test_paketteki_reddedilen_deneme_sayar_digerleri_yazilir(self):
+        def cevap(alanlar):
+            return None if alanlar['title'] == 'Story number 2 published' else _gemini_cevirisi(alanlar)
+
+        self.gemini_ayarla(cevap)
+        kayitlar = self._ai_adaylari(3)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(len(self.paket_cagrilar), 1)
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (2, 1))
+        for kayit in map(self._kayit, kayitlar):
+            reddedildi = kayit.original_title == 'Story number 2 published'
+            self.assertEqual(kayit.translation_provider, 'libretranslate' if reddedildi else 'gemini')
+            self.assertEqual(kayit.translation_attempts, 1 if reddedildi else 0)
+
+    def test_eksik_kimlik_yalniz_o_kaydi_reddeder(self):
+        """Yanitta k1 hic yok (ne cevrilen ne reddedilen): yalniz o kayit sayilir; ceviriler kimlikle eslenir."""
+        def paket(kayitlar):
+            sonuc = _ceviri_paketi(kayitlar)
+            del sonuc.ceviriler['k1']
+            return sonuc
+
+        self.gemini_ayarla(paket=paket)
+        self._ai_adaylari(3)
+
+        sonuc = self._calistir()
+
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (2, 1))
+        gonderilen = self.paket_cagrilar[0]
+        for kimlik, alanlar in gonderilen.items():
+            kayit = AINewsEntry.objects.get(original_title=alanlar['title'])
+            if kimlik == 'k1':
+                self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('libretranslate', 1))
+            else:
+                self.assertEqual(kayit.turkish_title, 'GEMINI ' + alanlar['title'], 'Ceviri kendi kaydina yazilmali')
+                self.assertEqual(kayit.translation_attempts, 0)
+
+    def test_istek_hatasinda_hicbir_kayit_deneme_saymaz(self):
+        durum = {'hazir': True}
+
+        def paket(kayitlar):
+            durum['hazir'] = False  # 429/5xx/ag: devre kesici acildi
+            return gemini.PaketSonucu(istek_hatasi=True)
+
+        self.gemini_ayarla(hazir=lambda: durum['hazir'], paket=paket)
+        self.paket_siniri(adet=2)
+        kayitlar = self._ai_adaylari(4)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(len(self.paket_cagrilar), 1, 'Istek hatasinda asama durmali, ikinci paket gitmemeli')
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (0, 0))
+        for kayit in map(self._kayit, kayitlar):
+            self.assertEqual(kayit.translation_attempts, 0)
+            self.assertEqual(kayit.translation_provider, 'libretranslate')
+
+    def test_kayda_ozgu_istek_hatasi_paketi_boler(self):
+        """Gemini hazirken istek hatasi (kayda ozgu 4xx, devre kesici yok): kesilme gibi ikiye bolunur."""
+        senaryo = iter([gemini.PaketSonucu(istek_hatasi=True)])
+        self.gemini_ayarla(paket=lambda kayitlar: next(senaryo, None) or _ceviri_paketi(kayitlar))
+        kayitlar = self._ai_adaylari(4)
+
+        sonuc = self._calistir()
+
+        self.assertEqual([len(p) for p in self.paket_cagrilar], [4, 2, 2])
+        self.assertEqual(sonuc['upgraded'], 4)
+        for kayit in map(self._kayit, kayitlar):
+            self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('gemini', 0))
+
+    def test_tek_kayit_kayda_ozgu_istek_hatasi_icerik_hatasi(self):
+        self.gemini_ayarla(paket=lambda kayitlar: gemini.PaketSonucu(istek_hatasi=True))
+        kayit = _libre_kaydi('ozgu-1')
+
+        sonuc = self._calistir()
+
+        self.assertEqual(len(self.paket_cagrilar), 1)
+        self.assertEqual(sonuc['failed'], 1)
+        self.assertEqual(self._kayit(kayit).translation_attempts, 1)
+
+    def test_kesilen_paket_ikiye_bolunup_ayni_turda_denenir(self):
+        senaryo = iter([gemini.PaketSonucu(kesildi=True)])
+        self.gemini_ayarla(paket=lambda kayitlar: next(senaryo, None) or _ceviri_paketi(kayitlar))
+        kayitlar = self._ai_adaylari(4)
+
+        sonuc = self._calistir()
+
+        self.assertEqual([len(p) for p in self.paket_cagrilar], [4, 2, 2])
+        self.assertEqual(sonuc['upgraded'], 4)
+        # Bolunen yarilar sirayi korur: ilk yari ilk paketin ilk iki kaydidir
+        ilk = [a['title'] for a in self.paket_cagrilar[0].values()]
+        self.assertEqual([a['title'] for a in self.paket_cagrilar[1].values()], ilk[:2])
+        self.assertEqual([a['title'] for a in self.paket_cagrilar[2].values()], ilk[2:])
+        for kayit in map(self._kayit, kayitlar):
+            self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('gemini', 0))
+
+    def test_tek_kayit_kesilirse_icerik_hatasi(self):
+        self.gemini_ayarla(paket=lambda kayitlar: gemini.PaketSonucu(kesildi=True))
+        kayitlar = self._ai_adaylari(2)
+
+        sonuc = self._calistir()
+
+        self.assertEqual([len(p) for p in self.paket_cagrilar], [2, 1, 1])
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (0, 2))
+        for kayit in map(self._kayit, kayitlar):
+            self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('libretranslate', 1))
+
+    def test_k8s_yapisal_changelog_paketlenmez(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        yapisal_govde = '===SECTION: Features===\n---ITEM---\nAdds a flag.\n<<<PR#123|@kisi|sig>>>'
+        ortak = dict(category='release', published_date=date(2026, 9, 12), needs_translation=False,
+                     translation_provider='libretranslate')
+        yapisal = KubernetesEntry.objects.create(
+            source='GitHub Releases', version='v1.35.0', original_title='Kubernetes v1.35.0 released',
+            turkish_title='LIBRE Kubernetes v1.35.0 released', original_description=yapisal_govde,
+            turkish_description='LIBRE ' + yapisal_govde, link='https://ornek.test/k8s/paket1', **ortak)
+        blog = KubernetesEntry.objects.create(
+            source='Kubernetes Blog', version='', original_title='Farmers adopt new sensors',
+            turkish_title='LIBRE Farmers adopt new sensors',
+            original_description='Sensors measure soil moisture every hour.',
+            turkish_description='LIBRE Sensors measure soil moisture every hour.',
+            link='https://ornek.test/k8s/paket2', **ortak)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(self.tekil_cagrilar, [{'title': 'Kubernetes v1.35.0 released', 'description': yapisal_govde}])
+        self.assertEqual(self.paket_cagrilar, [{'k0': {'title': 'Farmers adopt new sensors',
+                                                       'description': 'Sensors measure soil moisture every hour.'}}])
+        self.assertEqual(sonuc['sections']['kubernetes']['upgraded'], 2)
+        for kayit in (yapisal, blog):
+            self.assertEqual(self._kayit(kayit).translation_provider, 'gemini')
+
+    def test_tur_payi_paket_basina_sayilir(self):
+        self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        kayitlar = self._ai_adaylari(5)
+        from news import retranslate
+        tur = retranslate._Tur(pay=1, baslangic=gemini.butce_kullanimi())
+
+        sonuc = self._calistir(upgrade_batch=5, tur=tur)
+
+        self.assertEqual(len(self.paket_cagrilar), 1)
+        self.assertEqual(gemini.butce_kullanimi() - tur.baslangic, 1, 'Paket tek istek sayilir')
+        self.assertEqual(sonuc['upgraded'], 5)
+        for kayit in map(self._kayit, kayitlar):
+            self.assertEqual(kayit.translation_provider, 'gemini')
+
+    def test_ardisik_red_paket_sirasinda_sayilir(self):
+        """Seri paket sirasiyla sayilir; paketin kabul edilen kaydi sifirlar; 5'te bolum durur."""
+        self.paket_siniri(adet=3)
+        senaryo = [
+            lambda k: _ceviri_paketi(k, reddet={'k0', 'k1', 'k2'}),   # seri 3
+            lambda k: _ceviri_paketi(k, reddet={'k1', 'k2'}),         # k0 sifirlar, seri 2
+            lambda k: _ceviri_paketi(k, reddet={'k0', 'k1', 'k2'}),   # seri 5 -> dur
+        ]
+        sira = iter(senaryo)
+        self.gemini_ayarla(paket=lambda kayitlar: next(sira)(kayitlar))
+        self._ai_adaylari(12)
+
+        sonuc = self._calistir(upgrade_batch=12)
+
+        self.assertEqual(len(self.paket_cagrilar), 3, 'Dorduncu paket gonderilmemeli')
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (1, 8))
+        self.assertEqual(sonuc['sections']['ai']['stopped_reason'], 'ardisik_icerik_hatasi')
+        denemeler = sorted(AINewsEntry.objects.values_list('translation_attempts', flat=True))
+        self.assertEqual(denemeler, [0] * 4 + [1] * 8)
 
 
 class GeminiAdayiTests(SimpleTestCase):
@@ -1392,7 +1680,9 @@ class YukseltmeHttpHatasiTests(TestCase):
 
         self.assertEqual(retranslate.ARDISIK_HATA_SINIRI, 5)
         self.assertEqual((yukseltilen, basarisiz), (0, 5))
-        self.assertEqual(post.call_count, 5)
+        # Kayda ozgu 400 (devre kesici yok) paketi ikiye boler: 7 -> 4+3 -> 2+2 -> 1+1 ...; tek kayitta
+        # icerik hatasi. 5. tek kayit reddine kadar 11 istek (4xx butceyi geri alir).
+        self.assertEqual(post.call_count, 11)
         denemeler = sorted(AINewsEntry.objects.values_list('translation_attempts', flat=True))
         self.assertEqual(denemeler, [0, 0, 1, 1, 1, 1, 1])
         self.assertEqual(sonuc['sections']['ai']['stopped_reason'], 'ardisik_icerik_hatasi')
@@ -1401,10 +1691,12 @@ class YukseltmeHttpHatasiTests(TestCase):
     def test_basari_ardisik_hata_serisini_sifirlar(self):
         from news import retranslate
         self.kayitlar += [_libre_kaydi(f'seri-{i}', baslik=f'Story number {i} published') for i in range(3, 8)]
-        sira = iter([None, None, None, None, {'turkish_title': 'Basarili'}, None, None])
+        ret, ok = gemini.PaketSonucu(reddedilen={'k0'}), gemini.PaketSonucu(ceviriler={'k0': {'title': 'Başarılı'}})
+        sira = iter([ret, ret, ret, ret, ok, ret, ret])
         sonuc = {'stopped_reason': None, 'sections': {}}
         with mock.patch.object(gemini, 'hazir', return_value=True), \
-                mock.patch.object(retranslate, '_gemini_ile_cevir', side_effect=lambda *a, **k: next(sira)):
+                mock.patch.object(gemini, 'GEMINI_BATCH_MAX', 1), \
+                mock.patch.object(gemini, 'paket_cevir', side_effect=lambda *a, **k: next(sira)):
             yukseltilen, basarisiz = retranslate._yukselt('ai', AINewsEntry, 10, sonuc)
 
         self.assertEqual((yukseltilen, basarisiz), (1, 6))
@@ -1421,7 +1713,7 @@ class YukseltmeHttpHatasiTests(TestCase):
             sonuc = retranslate.retranslate_pending(redis_client=redis_client, prefix=prefix, upgrade_batch=10,
                                                     tur=retranslate._Tur(pay=100, baslangic=0))
 
-        self.assertEqual(post.call_count, 5)
+        self.assertEqual(post.call_count, 11)  # paket bolunmesi: bkz. ardisik_icerik_hatasi_sinirinda
         self.assertEqual(sonuc['sections']['ai'], {'translated': 0, 'failed': 5, 'upgraded': 0,
                                                    'stopped_reason': 'ardisik_icerik_hatasi'})
         self.assertNotIn('stopped_reason', sonuc['sections']['news'])
@@ -1441,7 +1733,7 @@ class YukseltmeHttpHatasiTests(TestCase):
         yukseltilen, basarisiz, post = self._yukselt(400)
 
         self.assertEqual((yukseltilen, basarisiz), (0, 2))
-        self.assertEqual(post.call_count, 2)
+        self.assertEqual(post.call_count, 3, 'Iki kayitlik paket reddedilir, sonra tek tek denenir')
         for kayit in self.kayitlar:
             kayit.refresh_from_db()
             self.assertEqual(kayit.translation_attempts, 1)
@@ -1511,14 +1803,13 @@ class SilinenKayitTests(TransactionTestCase):
         ikinci = self._cve('9705')
         birinci = self._cve('9704')
 
-        def sahte_cevir(ad, kayit, tur=None):
-            if kayit.pk == birinci.pk:
-                CVEEntry.objects.filter(pk=birinci.pk).delete()  # eszamanli temizleme
-            return {'turkish_description': 'Gemini cevirisi.'}
+        def sahte_paket(kayitlar, bolum=None):
+            CVEEntry.objects.filter(pk=birinci.pk).delete()  # istek surerken eszamanli temizleme
+            return gemini.PaketSonucu(ceviriler={k: {'description': 'Gemini çevirisi.'} for k in kayitlar})
 
         sonuc = {'stopped_reason': None}
         with mock.patch.object(gemini, 'hazir', lambda: True), \
-             mock.patch.object(retranslate, '_gemini_ile_cevir', sahte_cevir):
+             mock.patch.object(gemini, 'paket_cevir', sahte_paket):
             yukseltilen, basarisiz = retranslate._yukselt('cve', CVEEntry, 10, sonuc)
 
         self.assertEqual(yukseltilen, 1, 'Silinen kayit sayilmamali, ikinci kayit yukselmeli')
