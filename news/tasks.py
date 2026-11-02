@@ -2,6 +2,7 @@
 import os
 import uuid
 from celery import shared_task
+from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 from datetime import timedelta
@@ -385,9 +386,11 @@ def _retranslate_kilidi_al():
     jeton = uuid.uuid4().hex
     try:
         redis_client = _canli_redis()
-        # Omur: tur butcesi + 600 sn pay. Worker olurse kilit en gec bu surede kendiliginden duser.
-        alindi = bool(redis_client.set(RETRANSLATE_KILIT_ANAHTARI, jeton, nx=True,
-                                       ex=RETRANSLATE_TIME_BUDGET + 600))
+        # Omur: tur butcesi + 600 sn pay, ama en fazla sert sinir + 60 sn (tur bundan uzun yasayamaz).
+        # Worker olurse kilit en gec bu surede kendiliginden duser; butce env ile buyutulse de
+        # olu kilit sonraki saatlik turu atlatmaz.
+        omur = min(RETRANSLATE_TIME_BUDGET + 600, settings.CELERY_TASK_TIME_LIMIT + 60)
+        alindi = bool(redis_client.set(RETRANSLATE_KILIT_ANAHTARI, jeton, nx=True, ex=omur))
     except Exception as e:
         log.warning(f'  [retranslate] Kilit alinamadi (Redis?), tur kilitsiz kosuluyor: {e}')
         return None, jeton, True
@@ -396,7 +399,7 @@ def _retranslate_kilidi_al():
 
 def _retranslate_kilidini_birak(redis_client, jeton):
     """Kilidi yalniz sahibiyse siler. get+delete atomik degildir: kilidin tam bu iki cagri arasinda
-    dusup baskasina gecmesi icin TTL'nin (butce+600 sn) bitmesi gerekir; tek worker sureci ve
+    dusup baskasina gecmesi icin TTL'nin (bkz. _retranslate_kilidi_al) bitmesi gerekir; tek worker sureci ve
     saatlik tur icin bu risk kabul edildi, Lua betigi gereksiz."""
     if redis_client is None:
         return

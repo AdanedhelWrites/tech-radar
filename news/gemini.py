@@ -5,7 +5,9 @@ olarak gider, ayni anahtarlarla Turkce doner. Kota korumasi:
   - Redis paylasimli aralik kapisi: istekler arasi en az GEMINI_MIN_INTERVAL sn
   - Gunluk istek butcesi (GEMINI_DAILY_BUDGET): istek ONCESI artar, 4xx'te geri alinir
   - 429 / 5xx / ag hatasi -> GEMINI_COOLDOWN sn devre kesici
-  - 401 / 403 / 404 (anahtar, yetki, model) -> devre kesici, butce geri alinir
+  - 401 / 403 / 404 (anahtar, yetki, model) ve gecersiz anahtar / hesap sorunu bildiren 400
+    (API_KEY_INVALID, FAILED_PRECONDITION...) -> devre kesici, butce geri alinir
+  - Beklenmeyen istisna (kod hatasi) -> devre kesici
 Hicbir istisna disari cikmaz; cevrilemeyen kayit icin None doner.
 XTRM yer tutucu korumasi ve turkish_post_process uygulanmaz: terimler prompt'la korunur.
 """
@@ -37,6 +39,11 @@ GEMINI_COOLDOWN = int(os.environ.get('GEMINI_COOLDOWN', '600'))
 GEMINI_MAX_CHARS = int(os.environ.get('GEMINI_MAX_CHARS', '12000'))
 # Kayittan bagimsiz 4xx: 401 anahtar gecersiz, 403 yetki/proje, 404 model adi yanlis
 SISTEMIK_HTTP = (401, 403, 404)
+# 400 de sistemik olabilir: Generative Language API gecersiz/iptal/suresi dolmus anahtari
+# 400 INVALID_ARGUMENT + details[].reason=API_KEY_INVALID ile, bazi hesap sorunlarini
+# 400 FAILED_PRECONDITION ile doner. Kayit sucu sayilsa birikim bir gunde deneme tavanina ulasirdi.
+SISTEMIK_DURUM = frozenset({'FAILED_PRECONDITION', 'PERMISSION_DENIED', 'UNAUTHENTICATED'})
+SISTEMIK_SEBEP = frozenset({'API_KEY_INVALID'})
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 MAX_RATIO = 3.0
 ECHO_MIN_WORDS = 4
@@ -192,6 +199,26 @@ def _devre_kesici(sebep: str) -> None:
     _get_gate().start_cooldown(GEMINI_COOLDOWN)
 
 
+def _sistemik_hata(yanit) -> Optional[str]:
+    """200 disi yanit kayittan bagimsiz mi (anahtar/yetki/hesap/model). Sebep metni ya da None.
+
+    Govde JSON olmayabilir ya da beklenmedik sekilde olabilir; ASLA firlatmaz."""
+    if yanit.status_code in SISTEMIK_HTTP:
+        return f'HTTP {yanit.status_code}'
+    try:
+        hata = json.loads(yanit.text).get('error')
+        durum = hata.get('status')
+        if isinstance(durum, str) and durum in SISTEMIK_DURUM:
+            return f'HTTP {yanit.status_code} {durum}'
+        for ayrinti in hata.get('details') or ():
+            sebep = ayrinti.get('reason') if isinstance(ayrinti, dict) else None
+            if isinstance(sebep, str) and sebep in SISTEMIK_SEBEP:
+                return f'HTTP {yanit.status_code} {sebep}'
+    except Exception:  # JSON degil / dict degil / details liste degil: kayda ozgu sayilir
+        return None
+    return None
+
+
 def _kelime_sayisi(metin: str) -> int:
     return len(re.findall(r'[^\W\d_]{2,}', metin))
 
@@ -274,23 +301,25 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
         _devre_kesici(type(hata).__name__)
         return None
     except Exception as hata:  # beklenmeyen hata retranslate'i durdurmasin
+        # Kod hatasi her kayitta tekrarlar: kaydin sucu sayilmasin, devre kesici acilsin
         log.warning(f"  [Gemini] beklenmeyen hata: {type(hata).__name__}")
+        _devre_kesici(type(hata).__name__)
         return None
 
     if yanit.status_code == 429 or yanit.status_code >= 500:
         _devre_kesici(f'HTTP {yanit.status_code}')
         return None
-    if yanit.status_code in SISTEMIK_HTTP:
-        # Anahtar iptal / yetki yok / model yok: kota harcanmadi ama her istek ayni yaniti alir.
-        # Devre kesici acilmazsa hazir() True kalir ve retranslate her adayi icerik hatasi sayip
-        # RETRANSLATE_MAX_ATTEMPTS turda tum yukseltme adaylarini kuyruktan dusururdu.
-        butce.azalt(anahtar)
-        _devre_kesici(f'HTTP {yanit.status_code}')
-        return None
     if yanit.status_code != 200:
-        # Kayda ozgu istek sorunu (400 gecersiz govde vb.): kota harcanmadi, devre kesici acilmaz
-        butce.azalt(anahtar)
-        log.info(f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {yanit.text[:200]}")
+        butce.azalt(anahtar)  # 4xx: kota harcanmadi
+        sistemik = _sistemik_hata(yanit)
+        if sistemik:
+            # Anahtar iptal / yetki yok / hesap / model yok: her istek ayni yaniti alir. Devre kesici
+            # acilmazsa hazir() True kalir ve retranslate her adayi icerik hatasi sayip
+            # RETRANSLATE_MAX_ATTEMPTS turda tum yukseltme adaylarini kuyruktan dusururdu.
+            _devre_kesici(sistemik)
+            return None
+        # Kayda ozgu istek sorunu (400 gecersiz govde vb.): devre kesici acilmaz
+        log.info(f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {str(yanit.text)[:200]}")
         return None
 
     cikti = _yaniti_coz(yanit)

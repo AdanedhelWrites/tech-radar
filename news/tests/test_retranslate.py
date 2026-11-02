@@ -423,6 +423,23 @@ class RetranslateGoreviTests(RetranslateKilitMixin, SimpleTestCase):
         self.assertGreater(gorulen['ttl'], RETRANSLATE_TIME_BUDGET)
         self.assertLessEqual(gorulen['ttl'], RETRANSLATE_TIME_BUDGET + 600)
 
+    def test_kilit_omru_sert_sinir_arti_60_sn_i_asmaz(self):
+        """Butce env ile buyutulse de olu worker'in kilidi sert sinirdan (+60 sn) uzun yasamaz;
+        yoksa sonraki saatlik tur atlanabilirdi."""
+        from news import tasks
+        redis_client, anahtar = self.kilit_redis, self.kilit_anahtari
+        gorulen = {}
+
+        def sahte_tur():
+            gorulen['ttl'] = redis_client.ttl(anahtar)
+            return {'translated': 0}
+
+        with mock.patch('news.retranslate.RETRANSLATE_TIME_BUDGET', 3500), \
+                mock.patch('news.retranslate.retranslate_pending', side_effect=sahte_tur):
+            tasks.retranslate_pending_task()
+        self.assertLessEqual(gorulen['ttl'], settings.CELERY_TASK_TIME_LIMIT + 60)
+        self.assertGreater(gorulen['ttl'], settings.CELERY_TASK_TIME_LIMIT)
+
     def test_tur_bitince_kilit_birakilir(self):
         from news import tasks
         redis_client, anahtar = self.kilit_redis, self.kilit_anahtari
@@ -1343,13 +1360,72 @@ class YukseltmeHttpHatasiTests(TestCase):
             self.addCleanup(yama.stop)
         self.kayitlar = [_libre_kaydi(f'http-{i}', baslik=f'Story number {i + 1} published') for i in range(2)]
 
-    def _yukselt(self, durum):
+    def _yukselt(self, durum, metin='{"error": {}}', sonuc=None):
         from news import retranslate
-        yanit = mock.Mock(status_code=durum, text='{"error": {}}')
-        sonuc = {'stopped_reason': None}
+        yanit = mock.Mock(status_code=durum, text=metin)
+        sonuc = {'stopped_reason': None, 'sections': {}} if sonuc is None else sonuc
         with mock.patch('news.gemini.requests.post', return_value=yanit) as post:
             yukseltilen, basarisiz = retranslate._yukselt('ai', AINewsEntry, 10, sonuc)
         return yukseltilen, basarisiz, post
+
+    def test_400_gecersiz_anahtar_yukseltmede_deneme_saymaz_ve_asama_durur(self):
+        """Google gecersiz anahtari 401 degil 400 + API_KEY_INVALID ile doner (bulgu 1)."""
+        from news.tests.test_gemini import GECERSIZ_ANAHTAR_400
+        yukseltilen, basarisiz, post = self._yukselt(400, metin=GECERSIZ_ANAHTAR_400)
+
+        self.assertEqual((yukseltilen, basarisiz), (0, 0))
+        self.assertEqual(post.call_count, 1, 'Devre kesici acildi; ikinci kayit denenmemeli')
+        for kayit in self.kayitlar:
+            kayit.refresh_from_db()
+            self.assertEqual(kayit.translation_attempts, 0)
+            self.assertEqual(kayit.translation_provider, 'libretranslate')
+
+    def test_ardisik_icerik_hatasi_sinirinda_bolum_asamasi_durur(self):
+        """Ayni turda bir bolumde 5 ardisik icerik hatasi: kalan adaylar denenmez, sayilmaz
+        (taninmayan sistemik bir hata butun birikimi deneme tavanina itmesin)."""
+        from news import retranslate
+        self.kayitlar += [_libre_kaydi(f'http-ek-{i}', baslik=f'Story number {i} published')
+                          for i in range(3, 8)]
+        self.assertEqual(len(self.kayitlar), 7)
+        sonuc = {'stopped_reason': None, 'sections': {}}
+        yukseltilen, basarisiz, post = self._yukselt(400, sonuc=sonuc)
+
+        self.assertEqual(retranslate.ARDISIK_HATA_SINIRI, 5)
+        self.assertEqual((yukseltilen, basarisiz), (0, 5))
+        self.assertEqual(post.call_count, 5)
+        denemeler = sorted(AINewsEntry.objects.values_list('translation_attempts', flat=True))
+        self.assertEqual(denemeler, [0, 0, 1, 1, 1, 1, 1])
+        self.assertEqual(sonuc['sections']['ai']['stopped_reason'], 'ardisik_icerik_hatasi')
+        self.assertIsNone(sonuc['stopped_reason'], 'tur duzeyi sebep ezilmemeli')
+
+    def test_basari_ardisik_hata_serisini_sifirlar(self):
+        from news import retranslate
+        self.kayitlar += [_libre_kaydi(f'seri-{i}', baslik=f'Story number {i} published') for i in range(3, 8)]
+        sira = iter([None, None, None, None, {'turkish_title': 'Basarili'}, None, None])
+        sonuc = {'stopped_reason': None, 'sections': {}}
+        with mock.patch.object(gemini, 'hazir', return_value=True), \
+                mock.patch.object(retranslate, '_gemini_ile_cevir', side_effect=lambda *a, **k: next(sira)):
+            yukseltilen, basarisiz = retranslate._yukselt('ai', AINewsEntry, 10, sonuc)
+
+        self.assertEqual((yukseltilen, basarisiz), (1, 6))
+        self.assertNotIn('ai', sonuc['sections'])
+
+    def test_ardisik_hata_sebebi_tur_sonucunda_bolum_satirinda_kalir(self):
+        from news import retranslate
+        self.kayitlar += [_libre_kaydi(f'tur-{i}', baslik=f'Story number {i} published') for i in range(3, 8)]
+        redis_client = test_redis_client()
+        prefix = f'test-retranslate-{uuid.uuid4().hex}'
+        yanit = mock.Mock(status_code=400, text='{"error": {"status": "INVALID_ARGUMENT"}}')
+        with mock.patch.object(tu, 'herhangi_saglayici_hazir', return_value=False), \
+                mock.patch('news.gemini.requests.post', return_value=yanit) as post:
+            sonuc = retranslate.retranslate_pending(redis_client=redis_client, prefix=prefix, upgrade_batch=10,
+                                                    tur=retranslate._Tur(pay=100, baslangic=0))
+
+        self.assertEqual(post.call_count, 5)
+        self.assertEqual(sonuc['sections']['ai'], {'translated': 0, 'failed': 5, 'upgraded': 0,
+                                                   'stopped_reason': 'ardisik_icerik_hatasi'})
+        self.assertNotIn('stopped_reason', sonuc['sections']['news'])
+        self.assertIsNone(sonuc['stopped_reason'])
 
     def test_401_yukseltmede_deneme_saymaz_ve_asama_durur(self):
         yukseltilen, basarisiz, post = self._yukselt(401)

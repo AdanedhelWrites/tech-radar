@@ -12,6 +12,11 @@ from news import translation_utils as tu
 from news.tests.base import test_redis_client
 
 ANAHTAR = 'test-anahtar'
+# Google'in gecersiz anahtar yaniti (google.rpc.Status + ErrorInfo); 401 degil 400 doner
+GECERSIZ_ANAHTAR_400 = json.dumps({'error': {
+    'code': 400, 'message': 'API key not valid. Please pass a valid API key.', 'status': 'INVALID_ARGUMENT',
+    'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID',
+                 'domain': 'googleapis.com'}]}})
 
 
 def _yanit(durum=200, govde=None, metin=None, finish='STOP', ham=''):
@@ -110,10 +115,13 @@ class GeminiIstekTests(GeminiTestMixin, SimpleTestCase):
         self.assertIsNone(gemini.kaydi_cevir({'title': '', 'description': ' '}))
         self.assertEqual(post.call_count, 0)
 
-    def test_hicbir_istisna_sizmaz(self):
+    def test_hicbir_istisna_sizmaz_beklenmeyen_hata_devre_kesiciyi_acar(self):
+        """Beklenmeyen hata (kod hatasi) her kayitta tekrarlar: kaydin sucu degil, sistemik sayilir.
+        Devre kesici acilmazsa retranslate her adayi icerik hatasi sayip kuyruktan dusururdu."""
         self._post(side_effect=RuntimeError('beklenmeyen'))
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
-        self.assertFalse(gemini._gate.cooldown_active())
+        self.assertTrue(gemini._gate.cooldown_active())
+        self.assertFalse(gemini.hazir())
 
     def test_aralik_kapisi_cagrilir(self):
         self._post(_yanit(govde=CEVIRI))
@@ -234,6 +242,46 @@ class GeminiHataTests(GeminiTestMixin, SimpleTestCase):
         self.assertFalse(gemini._gate.cooldown_active())
         self.assertEqual(gemini.butce_kullanimi(), 0)
         self.assertTrue(gemini.hazir())
+
+    def test_400_api_key_invalid_sistemiktir(self):
+        """Generative Language API gecersiz/iptal/suresi dolmus anahtari 400 INVALID_ARGUMENT +
+        details[].reason=API_KEY_INVALID ile doner. Kayit sucu sayilirsa butun yukseltme birikimi
+        bir gunde deneme tavanina ulasirdi: devre kesici acilir, butce geri alinir."""
+        self._post(_yanit(durum=400, ham=GECERSIZ_ANAHTAR_400))
+        self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+        self.assertTrue(gemini._gate.cooldown_active())
+        self.assertFalse(gemini.hazir())
+        self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_400_hesap_duzeyi_durumlar_sistemiktir(self):
+        for durum in ('FAILED_PRECONDITION', 'PERMISSION_DENIED', 'UNAUTHENTICATED'):
+            with self.subTest(durum=durum):
+                gemini._gate = tu._LocalGate()
+                self._post(_yanit(durum=400, ham=json.dumps(
+                    {'error': {'code': 400, 'message': 'hesap sorunu', 'status': durum}})))
+                self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+                self.assertTrue(gemini._gate.cooldown_active())
+                self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_400_baska_sebepli_invalid_argument_devre_kesici_acmaz(self):
+        self._post(_yanit(durum=400, ham=json.dumps({'error': {
+            'code': 400, 'status': 'INVALID_ARGUMENT',
+            'details': [{'@type': 'type.googleapis.com/google.rpc.BadRequest', 'reason': 'FIELD_INVALID'}]}})))
+        self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+        self.assertFalse(gemini._gate.cooldown_active())
+        self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_400_bozuk_govde_istisna_atmaz_devre_kesici_acmaz(self):
+        """Hata govdesi JSON olmayabilir ya da beklenmedik sekilde olabilir: ayristirma asla firlatmaz."""
+        for ham in ('<html>Bad Request</html>', '', '[1, 2]', '{"error": "metin"}',
+                    '{"error": {"status": 5, "details": "liste degil"}}',
+                    '{"error": {"details": [null, "x", {"reason": 7}]}}', None):
+            with self.subTest(ham=ham):
+                gemini._gate = tu._LocalGate()
+                self._post(_yanit(durum=400, ham=ham))
+                self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+                self.assertFalse(gemini._gate.cooldown_active())
+                self.assertEqual(gemini.butce_kullanimi(), 0)
 
     def test_safety_finish_reason_reddedilir(self):
         self._post(_yanit(govde=CEVIRI, finish='SAFETY'))

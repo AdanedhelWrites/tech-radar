@@ -15,7 +15,9 @@ dogrulamadan gecirdiyse yazilir (hepsi ya da hicbiri, gemini.kaydi_cevir icinde)
 Gemini hazirken reddederse (dogrulama, cok uzun kayit, k8s isaret kaybi) icerik
 hatasidir ve translation_attempts artar, RETRANSLATE_MAX_ATTEMPTS'a ulasan kayit
 aday olmaktan cikar. Gemini hazir degilse (anahtar yok / devre kesici / gunluk
-butce) asama baslamaz ya da durur; sayac artmaz, kalanlar sonraki tura kalir.
+butce) asama baslamaz ya da durur; sayac artmaz, kalanlar sonraki tura kalir. Bir bolumde
+ARDISIK_HATA_SINIRI ardisik icerik hatasi gelirse o bolumun asamasi o tur durur
+(sections[ad]['stopped_reason']='ardisik_icerik_hatasi'); kalanlar sayilmaz.
 Eski 'google' etiketli kayitlar yukseltilmez.
 `stopped_reason='gemini_budget'` iken `stopped` False olabilir: LibreTranslate zinciri surer.
 
@@ -64,6 +66,10 @@ RETRANSLATE_UPGRADE_BATCH = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH', '40'
 # translation_given_up ile sayar. 2026-10-08: ayni ~23 kayit her 2 saatte Gemini
 # kotasi yiyerek yeniden reddediliyordu (turda 23-39 "hata", bekleyen toplam 23).
 RETRANSLATE_MAX_ATTEMPTS = int(os.environ.get('RETRANSLATE_MAX_ATTEMPTS', '5'))
+# Yukseltmede bir bolumde ayni turda bu kadar ardisik icerik hatasi gelirse bolumun asamasi o tur
+# durur (sayilanlar sayili kalir, basari seriyi sifirlar). gemini.py'nin taniyamadigi yeni bir
+# sistemik hata (orn. anahtar sorununun farkli bir yaniti) butun birikimi deneme tavanina itmesin.
+ARDISIK_HATA_SINIRI = 5
 # Spec 2026-11-02 G1 (kullanicinin karari): orta/dusuk CVE'ye Gemini kotasi harcanmaz.
 # Esik ya da KEV kaydi aday yapar; skoru sonradan gelen kayit sonraki turda kendiliginden aday olur.
 CVE_GEMINI_ESIGI = 7.0
@@ -391,9 +397,14 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
         _gemini_sebebini_yaz(sonuc, tur)
         return 0, 0
 
-    yukseltilen = basarisiz = 0
+    yukseltilen = basarisiz = ardisik = 0
     for kayit in _yukseltme_adaylari(ad, model, sinir):
         if _sure_doldu(bitis):
+            break
+        if ardisik >= ARDISIK_HATA_SINIRI:
+            # Kalan adaylar sayilmadan sonraki tura kalir; tur duzeyi stopped_reason'a dokunulmaz
+            sonuc.setdefault('sections', {}).setdefault(ad, {})['stopped_reason'] = 'ardisik_icerik_hatasi'
+            log.warning(f"  [Retranslate] {ad}: {ardisik} ardisik Gemini reddi, yukseltme bu tur durdu.")
             break
         if not _gemini_kullanilabilir(tur):
             # butce/devre kesici/tur payi asama ortasinda: kalanlar sonraki tura
@@ -410,8 +421,10 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
             # Gemini hazirken reddetti (dogrulama / cok uzun / k8s isaret kaybi / 400): icerik hatasi.
             # Sayilmazsa "en yeni N aday" sorgusu ayni kaydi her tur yeniden dener (G5).
             basarisiz += 1
+            ardisik += 1
             _basarisiz_say(kayit)
             continue
+        ardisik = 0
         if _yaz(kayit, alanlar, 'gemini'):
             yukseltilen += 1
     return yukseltilen, basarisiz
@@ -449,7 +462,9 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
 
         if cevrilen or yukseltilen:
             cache_yenile(ad)
-        sonuc['sections'][ad] = {'translated': cevrilen, 'failed': basarisiz, 'upgraded': yukseltilen}
+        # update: _yukselt bolum satirina stopped_reason yazmis olabilir (ardisik icerik hatasi)
+        sonuc['sections'].setdefault(ad, {}).update(
+            {'translated': cevrilen, 'failed': basarisiz, 'upgraded': yukseltilen})
         sonuc['translated'] += cevrilen
         sonuc['failed'] += basarisiz
         sonuc['upgraded'] += yukseltilen
