@@ -1625,6 +1625,38 @@ class PaketliYukseltmeTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslate
         denemeler = sorted(AINewsEntry.objects.values_list('translation_attempts', flat=True))
         self.assertEqual(denemeler, [0] * 4 + [1] * 8)
 
+    def test_tamami_reddedilen_paket_yalniz_siniri_kadar_sayilir(self):
+        """15 kayitlik paket tamamen reddedilirse 5'te sayim durur; kalan 10 deneme almaz (kalan adaylar sayilmaz)."""
+        self.gemini_ayarla(paket=lambda k: _ceviri_paketi(k, reddet=set(k)))
+        self._ai_adaylari(15)
+
+        sonuc = self._calistir(upgrade_batch=15)
+
+        self.assertEqual(len(self.paket_cagrilar), 1)
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (0, 5))
+        self.assertEqual(sonuc['sections']['ai']['stopped_reason'], 'ardisik_icerik_hatasi')
+        denemeler = sorted(AINewsEntry.objects.values_list('translation_attempts', flat=True))
+        self.assertEqual(denemeler, [0] * 10 + [1] * 5)
+
+    def test_karisik_paketta_kabul_seriyi_sifirlar_sinir_sonrasi_sayilmaz(self):
+        """3 red, 1 kabul, 6 red: 3 sayilir, kabul yazilir ve seriyi sifirlar, sonraki 5 sayilir, sonuncusu sayilmaz."""
+        self.paket_siniri(adet=10)
+        reddedilen = {'k0', 'k1', 'k2'} | {f'k{i}' for i in range(4, 10)}
+        self.gemini_ayarla(paket=lambda k: _ceviri_paketi(k, reddet=reddedilen))
+        kayitlar = self._ai_adaylari(10)
+
+        sonuc = self._calistir(upgrade_batch=10)
+
+        self.assertEqual(len(self.paket_cagrilar), 1)
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (1, 8))
+        self.assertEqual(sonuc['sections']['ai']['stopped_reason'], 'ardisik_icerik_hatasi')
+        # Aday sirasi bilinmediginden kimlikle degil dagilimla dogrulanir
+        kabul = [k for k in map(self._kayit, kayitlar) if k.translation_provider == 'gemini']
+        self.assertEqual(len(kabul), 1)
+        self.assertEqual(kabul[0].translation_attempts, 0)
+        denemeler = sorted(k.translation_attempts for k in map(self._kayit, kayitlar))
+        self.assertEqual(denemeler, [0, 0] + [1] * 8)
+
 
 class GeminiAdayiTests(SimpleTestCase):
     """_gemini_adayi_mi: CVE icin CVSS >= 7.0 ya da KEV; diger bolumlerde her kayit."""

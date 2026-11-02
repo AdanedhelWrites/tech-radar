@@ -563,6 +563,25 @@ class GeminiPaketTests(GeminiTestMixin, SimpleTestCase):
         self.assertFalse(gemini._gate.cooldown_active())
         self.assertEqual(gemini.butce_kullanimi(), 0)
 
+    def test_paket_duzeyi_4xx_uyari_seviyesinde_loglanir(self):
+        """Paket (2+ kayit) 400'u gorunur olmali (sema cok buyuk vb.); gövde ve anahtar loga girmez."""
+        self._post(_yanit(durum=400, ham='{"error": {"status": "INVALID_ARGUMENT"}}'))
+        with self.assertLogs('news.gemini', level='INFO') as kayit:
+            gemini.paket_cevir(KAYITLAR, 'ai')
+        satirlar = [k for k in kayit.records if 'istek reddedildi' in k.getMessage()]
+        self.assertEqual(len(satirlar), 1)
+        self.assertEqual(satirlar[0].levelname, 'WARNING')
+        self.assertIn('HTTP 400', satirlar[0].getMessage())
+        self.assertNotIn(ANAHTAR, kayit.output[0])
+        self.assertNotIn('Attackers exploit', ''.join(kayit.output))
+
+    def test_tek_kayitli_istek_4xx_info_seviyesinde_kalir(self):
+        self._post(_yanit(durum=400, ham='{"error": {"status": "INVALID_ARGUMENT"}}'))
+        with self.assertLogs('news.gemini', level='INFO') as kayit:
+            gemini.paket_cevir({'k0': ALANLAR}, 'ai')
+        satirlar = [k for k in kayit.records if 'istek reddedildi' in k.getMessage()]
+        self.assertEqual([k.levelname for k in satirlar], ['INFO'])
+
     def test_hazir_degilse_istek_yok(self):
         post = self._post(self._cevap())
         gemini._gate.start_cooldown(60)

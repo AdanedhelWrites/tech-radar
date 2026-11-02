@@ -297,13 +297,13 @@ def _istek_govdesi(veri: dict, sema: dict, talimat: str) -> dict:
     }
 
 
-def _istek_at(govde: dict, etiket: str = 'genel kaydi') -> Optional[requests.Response]:
+def _istek_at(govde: dict, etiket: str = 'genel kaydi', kayit_sayisi: int = 1) -> Optional[requests.Response]:
     """Kota kurallariyla tek istek atar. 200 yanitini ya da None doner (sebep loglandi).
 
     hazir() kontrolu cagirana aittir. Butce istek ONCESI artar; tavan asildiysa istek atilmaz.
     429 / 5xx / ag hatasi / beklenmeyen istisna -> devre kesici, butce geri alinmaz.
     Diger 200 disi yanitlar -> butce geri alinir; sistemikse (_sistemik_hata) devre kesici de acilir.
-    etiket yalniz log metni icindir."""
+    etiket ve kayit_sayisi yalniz log icindir (kayit_sayisi >= 2 olan istegin 4xx'i WARNING)."""
     butce, anahtar = _get_butce(), butce_anahtari()
     if butce.artir(anahtar) > butce_tavani():
         butce.azalt(anahtar)
@@ -340,7 +340,9 @@ def _istek_at(govde: dict, etiket: str = 'genel kaydi') -> Optional[requests.Res
             _devre_kesici(sistemik)
             return None
         # Kayda ozgu istek sorunu (400 gecersiz govde vb.): devre kesici acilmaz
-        log.info(f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {str(yanit.text)[:200]}")
+        # Paket duzeyi 4xx (sema/govde cok buyuk vb.) gorunur olmali; tek kayitlik istek sessiz kalir
+        log.log(logging.WARNING if kayit_sayisi >= 2 else logging.INFO,
+                f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {str(yanit.text)[:200]}")
         return None
     return yanit
 
@@ -499,7 +501,8 @@ def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None
         return PaketSonucu(istek_hatasi=True)
 
     etiket = f"{bolum or 'genel'} paketi ({len(gonderilecek)} kayit)"
-    yanit = _istek_at(_istek_govdesi(gonderilecek, _paket_semasi(gonderilecek), PAKET_TALIMATI), etiket)
+    yanit = _istek_at(_istek_govdesi(gonderilecek, _paket_semasi(gonderilecek), PAKET_TALIMATI), etiket,
+                      len(gonderilecek))
     if yanit is None:
         return PaketSonucu(istek_hatasi=True)
     cikti, sebep = _aday_ciktisi(yanit)

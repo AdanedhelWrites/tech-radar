@@ -487,6 +487,14 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
         ardisik += 1
         _basarisiz_say(kayit)
 
+    def seri_doldu():
+        if ardisik < ARDISIK_HATA_SINIRI:
+            return False
+        # Kalan adaylar sayilmadan sonraki tura kalir; tur duzeyi stopped_reason'a dokunulmaz
+        sonuc.setdefault('sections', {}).setdefault(ad, {})['stopped_reason'] = 'ardisik_icerik_hatasi'
+        log.warning(f"  [Retranslate] {ad}: {ardisik} ardisik Gemini reddi, yukseltme bu tur durdu.")
+        return True
+
     def yaz(kayit, alanlar):
         nonlocal yukseltilen, ardisik
         ardisik = 0
@@ -496,10 +504,7 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
     while kuyruk:
         if _sure_doldu(bitis):
             break
-        if ardisik >= ARDISIK_HATA_SINIRI:
-            # Kalan adaylar sayilmadan sonraki tura kalir; tur duzeyi stopped_reason'a dokunulmaz
-            sonuc.setdefault('sections', {}).setdefault(ad, {})['stopped_reason'] = 'ardisik_icerik_hatasi'
-            log.warning(f"  [Retranslate] {ad}: {ardisik} ardisik Gemini reddi, yukseltme bu tur durdu.")
+        if seri_doldu():
             break
         if not _gemini_kullanilabilir(tur):
             # butce/devre kesici/tur payi asama ortasinda: kalanlar sonraki tura
@@ -535,9 +540,14 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
         for i, (kayit, alanlar) in enumerate(paket):
             ceviri = paket_sonucu.ceviriler.get(f'k{i}')
             if ceviri is None or not _k8s_yapisi_korunmus(ad, alanlar, ceviri):
-                reddet(kayit)  # reddedilen / yanitta hic olmayan kimlik / k8s isaret kaybi
+                # reddedilen / yanitta hic olmayan kimlik / k8s isaret kaybi. Seri sinira ulastiysa
+                # paketin kalan reddedilenleri sayilmaz (sonraki turda yine aday): sinir paket icinde de gecerli
+                if ardisik < ARDISIK_HATA_SINIRI:
+                    reddet(kayit)
             else:
                 yaz(kayit, {_GEMINI_DB_ALANI[alan]: metin for alan, metin in ceviri.items()})
+        if seri_doldu():
+            break
     return yukseltilen, basarisiz
 
 
