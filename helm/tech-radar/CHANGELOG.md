@@ -6,6 +6,15 @@ dizinindeki her degisiklik `Chart.yaml` `version`'ini artirir ve buraya `## [sur
 basligi ekler; CI (`scripts/chart_surum_kontrol.sh`) bunu zorlar. `appVersion`
 uygulama imajinin etiketidir (CalVer `YYYY.M.N`).
 
+## [3.1.0] - 2026-11-03 — appVersion 2026.10.3
+
+Yeni istege bagli values: Gemini paket cevirisi sinirlari (spec
+`docs/superpowers/specs/2026-11-02-ceviri-yayma-design.md` G5). Varsayilanlar kodla ayni; mevcut kurulumlar degismeden calisir.
+
+### Eklenenler
+- `config.app.geminiBatchChars` (`"10000"`) -> ConfigMap `GEMINI_BATCH_CHARS`: bir Gemini isteginde paketlenen kayitlarin toplam karakter siniri.
+- `config.app.geminiBatchMax` (`"15"`) -> ConfigMap `GEMINI_BATCH_MAX`: bir pakette en fazla kayit sayisi.
+
 ## [3.0.0] - 2026-11-02 — appVersion 2026.10.3
 
 Geriye uyumsuz values degisikligi: CVE Gemini rezervi uygulamadan kalkti

@@ -346,6 +346,8 @@ config:
     retentionDays: "90"
     geminiDailyBudget: "450"
     geminiModel: "gemini-3.5-flash-lite"
+    geminiBatchChars: "10000"
+    geminiBatchMax: "15"
     libretranslateTimeout: "60"
     libretranslateCooldown: "60"
     libretranslateChunkChars: "160"

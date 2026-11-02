@@ -25,6 +25,8 @@ data:
   RETENTION_DAYS: {{ .Values.config.app.retentionDays | quote }}
   GEMINI_DAILY_BUDGET: {{ .Values.config.app.geminiDailyBudget | quote }}
   GEMINI_MODEL: {{ .Values.config.app.geminiModel | quote }}
+  GEMINI_BATCH_CHARS: {{ .Values.config.app.geminiBatchChars | quote }}
+  GEMINI_BATCH_MAX: {{ .Values.config.app.geminiBatchMax | quote }}
   LIBRETRANSLATE_URL: {{ include "tech-radar.libretranslateUrl" . | quote }}
   LIBRETRANSLATE_TIMEOUT: {{ .Values.config.app.libretranslateTimeout | quote }}
   LIBRETRANSLATE_COOLDOWN: {{ .Values.config.app.libretranslateCooldown | quote }}
