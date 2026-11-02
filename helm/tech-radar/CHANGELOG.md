@@ -6,6 +6,18 @@ dizinindeki her degisiklik `Chart.yaml` `version`'ini artirir ve buraya `## [sur
 basligi ekler; CI (`scripts/chart_surum_kontrol.sh`) bunu zorlar. `appVersion`
 uygulama imajinin etiketidir (CalVer `YYYY.M.N`).
 
+## [3.2.0] - 2026-11-03 — appVersion 2026.10.3
+
+Yeni istege bagli values: ucretsiz yedek ceviri zinciri (spec
+`docs/superpowers/specs/2026-11-02-ceviri-yayma-design.md` G6/G7). Hepsi bos/kapali gelir; mevcut kurulumlar degismeden calisir.
+Yukseltme sirasi: once `python manage.py migrate` (migration 0017, yalniz secenek listesi; PostgreSQL'de islem yok), sonra kod.
+
+### Eklenenler
+- `secrets.openrouterApiKey` (`""`) -> Secret `OPENROUTER_API_KEY`, `secrets.deeplApiKey` (`""`) -> `DEEPL_API_KEY`. Pod'larda `optional: true`; `existingSecret` bu anahtarlari tasimiyorsa pod yine acilir.
+- `config.app.geminiFallbackModel` (`""`) -> `GEMINI_FALLBACK_MODEL` ve `config.app.geminiFallbackDailyBudget` (`"450"`) -> `GEMINI_FALLBACK_DAILY_BUDGET`: Gemini ikinci model.
+- `config.app.openrouterModel` (`""`, adi `:free` ile bitmeli) -> `OPENROUTER_MODEL`, `openrouterDailyBudget` (`"50"`) -> `OPENROUTER_DAILY_BUDGET`, `openrouterMinInterval` (`"4"`) -> `OPENROUTER_MIN_INTERVAL`.
+- `config.app.deeplMonthlyChars` (`"450000"`) -> `DEEPL_MONTHLY_CHARS`: DeepL API Free aylik karakter butcesi.
+
 ## [3.1.0] - 2026-11-03 — appVersion 2026.10.3
 
 Yeni istege bagli values: Gemini paket cevirisi sinirlari (spec

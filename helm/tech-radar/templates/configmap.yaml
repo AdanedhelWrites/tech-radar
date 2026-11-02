@@ -27,6 +27,13 @@ data:
   GEMINI_MODEL: {{ .Values.config.app.geminiModel | quote }}
   GEMINI_BATCH_CHARS: {{ .Values.config.app.geminiBatchChars | quote }}
   GEMINI_BATCH_MAX: {{ .Values.config.app.geminiBatchMax | quote }}
+  # chart 3.2.0: ucretsiz yedek ceviri zinciri (bos model = o yedek kapali)
+  GEMINI_FALLBACK_MODEL: {{ .Values.config.app.geminiFallbackModel | quote }}
+  GEMINI_FALLBACK_DAILY_BUDGET: {{ .Values.config.app.geminiFallbackDailyBudget | quote }}
+  OPENROUTER_MODEL: {{ .Values.config.app.openrouterModel | quote }}
+  OPENROUTER_DAILY_BUDGET: {{ .Values.config.app.openrouterDailyBudget | quote }}
+  OPENROUTER_MIN_INTERVAL: {{ .Values.config.app.openrouterMinInterval | quote }}
+  DEEPL_MONTHLY_CHARS: {{ .Values.config.app.deeplMonthlyChars | quote }}
   LIBRETRANSLATE_URL: {{ include "tech-radar.libretranslateUrl" . | quote }}
   LIBRETRANSLATE_TIMEOUT: {{ .Values.config.app.libretranslateTimeout | quote }}
   LIBRETRANSLATE_COOLDOWN: {{ .Values.config.app.libretranslateCooldown | quote }}
