@@ -61,6 +61,17 @@ _TURKCE_HARF = re.compile('[çğıöşüÇĞİÖŞÜ]')
 # uydurulmustur (2026-10-21 canli olcum: 'sunarken' -> 'sերerken'). Orijinalde varsa (ozel ad) serbest.
 _YABANCI_YAZI = re.compile('[Ͱ-ϿЀ-ӿ԰-֏֐-׿؀-ۿ'
                            '぀-ヿ一-鿿가-힯]')
+# Paket capalari (bkz. _capalar): ceviride AYNEN kalmasi gereken belirtecler. Iki parcali ondalik
+# (9.8) bilerek yok: Turkce '9,8' yazilabilir.
+_CAPA_DESENLERI = (
+    re.compile(r'\bCVE-\d{4}-\d{4,}\b', re.IGNORECASE),
+    re.compile(r'\bGHSA(?:-[0-9a-z]+)+', re.IGNORECASE),
+    re.compile(r'`[^`\n]+`'),                                   # kod parcasi (ters tirnaklariyla)
+    re.compile(r'\bv?\d+(?:\.\d+){2,}\b', re.IGNORECASE),        # 2.4.1, v1.31.0
+    re.compile(r'\bv\d+\.\d+(?!\.?\d)', re.IGNORECASE),          # v1.31
+)
+_URL = re.compile(r'https?://\S+', re.IGNORECASE)
+_URL_SONU = '.,;:!?)]}>\'"'
 
 # Proje kurali "kod ASCII Turkce" bu metne UYGULANMAZ: talimat modele gider ve model yazimini taklit
 # eder. 2026-10-16'ya kadar diakritiksiz yazilmisti; Gemini cevirilerinin yarisi (CVE'de %53) Turkce
@@ -376,6 +387,33 @@ def _kayit_cevirisi(alanlar: Dict[str, str], cikti: dict, onek: str = '') -> Opt
     return sonuc
 
 
+def _capalar(metin: str) -> Set[str]:
+    """Ceviride aynen kalmasi gereken belirtecler, buyuk harfe normalize: CVE/GHSA kimlikleri, URL'ler
+    (sondaki noktalama atilir), ters tirnakli kod parcalari, >=3 parcali ya da v onekli surumler."""
+    capalar = {eslesme.upper() for desen in _CAPA_DESENLERI for eslesme in desen.findall(metin)}
+    capalar.update(url.rstrip(_URL_SONU).upper() for url in _URL.findall(metin))
+    capalar.discard('')
+    return capalar
+
+
+def _capa_sorunu(capalar: Dict[str, Set[str]], kimlik: str, ceviri: str) -> Optional[str]:
+    """Paket icinde kimlik karismasi: ceviri baska kaydin capasini tasiyor ya da (>=2 capali kayitta)
+    kendi capalarinin hicbirini tasimiyor. Ayni bicimli yer degisimini _alan_sorunu yakalayamaz.
+    Duz alt dize testi: Turkce ek kesmeden sonra gelir ('2.4.1'den')."""
+    kendi = capalar[kimlik]
+    metin = ceviri.upper()
+    for diger, onlarin in capalar.items():
+        if diger == kimlik:
+            continue
+        for capa in onlarin - kendi:
+            # Kendi capasinin parcasiysa (1.2.3 / 1.2.3.4, kisa / uzun URL) karisma sayilmaz
+            if capa in metin and not any(capa in k for k in kendi):
+                return f'capa karisti ({diger} kaydinin capasi)'
+    if len(kendi) >= 2 and not any(capa in metin for capa in kendi):
+        return 'capalar kayip'
+    return None
+
+
 def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optional[Dict[str, str]]:
     """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi).
 
@@ -401,7 +439,8 @@ class PaketSonucu:
       5xx, 200 disi yanit); hicbir kaydin sucu degil.
     kesildi: yanit MAX_TOKENS ile yarim kaldi; paket boyu sorunudur (cagiran bolup yeniden dener).
     Bu ikisinden biri True ise ceviriler ve reddedilen bostur. Ikisi de False ise her girdi kimligi
-    ya ceviriler'de ya reddedilen'dedir (icerik hatasi: dogrulama, eksik kimlik, cozulemeyen yanit)."""
+    ya ceviriler'de ya reddedilen'dedir (icerik hatasi: dogrulama, eksik kimlik, capa karismasi,
+    cozulemeyen yanit)."""
     ceviriler: Dict[str, Dict[str, str]] = field(default_factory=dict)
     reddedilen: Set[str] = field(default_factory=set)
     istek_hatasi: bool = False
@@ -414,7 +453,10 @@ def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None
 
     Bos alanlar istege girmez; tum alanlari bos kayit gonderilmez ve reddedilir. Modelin kimligi
     dusurdugu, nesne olmayan deger dondurdugu ya da bir alani dogrulamadan gecemeyen kayit yalniz
-    kendisi reddedilir; digerleri cevrilir. finishReason MAX_TOKENS -> kesildi; diger tamamlanmamis
+    kendisi reddedilir; digerleri cevrilir. Ayni bicimli yer degisimi icin capa capraz denetimi
+    (_capa_sorunu): cevirisi baska kaydin CVE/GHSA/URL/kod/surum capasini tasiyan ya da >=2 capali
+    olup hicbirini tasimayan kayit reddedilir; capasiz kayitlar etkilenmez.
+    finishReason MAX_TOKENS -> kesildi; diger tamamlanmamis
     (SAFETY vb.) ya da cozulemeyen yanit -> tum kayitlar reddedilir. Hicbir istisna disari cikmaz."""
     gonderilecek, bos = {}, set()
     for kimlik, alanlar in kayitlar.items():
@@ -451,4 +493,13 @@ def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None
             sonuc.reddedilen.add(kimlik)
         else:
             sonuc.ceviriler[kimlik] = ceviri
+
+    # Capa capraz denetimi: tum paketin orijinalleri burada elde; reddedilenlerin capalari da sayilir
+    capalar = {kimlik: _capalar('\n'.join(alanlar.values())) for kimlik, alanlar in gonderilecek.items()}
+    for kimlik, ceviri in list(sonuc.ceviriler.items()):
+        sorun = _capa_sorunu(capalar, kimlik, '\n'.join(ceviri.values()))
+        if sorun:
+            log.warning(f"  [Gemini] dogrulama basarisiz ({kimlik}: {sorun}).")
+            del sonuc.ceviriler[kimlik]
+            sonuc.reddedilen.add(kimlik)
     return sonuc

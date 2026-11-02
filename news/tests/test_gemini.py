@@ -482,7 +482,8 @@ class GeminiPaketTests(GeminiTestMixin, SimpleTestCase):
 
     def test_karisan_kimlik_alan_tutmazsa_yalniz_o_reddedilir(self):
         # Model k2'nin cevirisini k0'a koyarsa k0'in description'i eksik kalir: yalniz k0 reddedilir.
-        # Not: alanlari ve uzunluklari tutan bir yer degisimi dogrulamadan gecer (oran sinirlari genis).
+        # Alanlari ve uzunluklari tutan yer degisimini _alan_sorunu yakalamaz; onu capa capraz denetimi
+        # yakalar (bkz. GeminiPaketCapaTests). Capasiz kayitlarda o da yakalanamaz.
         self._post(self._cevap(k0=PAKET_CEVIRI['k2']))
         sonuc = gemini.paket_cevir(KAYITLAR)
         self.assertEqual(sonuc.reddedilen, {'k0'})
@@ -618,3 +619,90 @@ class GeminiPaketTests(GeminiTestMixin, SimpleTestCase):
         self.assertTrue(talimat.endswith('- Yalnızca JSON döndür.'))
         # Tek kayit yolunun talimati degismez: onun girdisi kimlik anahtarli degil
         self.assertNotIn(kural, gemini.SISTEM_TALIMATI)
+
+
+CVE_KAYITLARI = {
+    'k0': {'description': 'A heap overflow in libfoo before 2.4.1 allows remote attackers to execute '
+                          'arbitrary code (CVE-2026-1111).'},
+    'k1': {'description': 'A heap overflow in libbar before 3.1.7 allows remote attackers to execute '
+                          'arbitrary code (CVE-2026-2222).'},
+}
+CVE_CEVIRILERI = {
+    'k0': {'description': "libfoo 2.4.1'den önceki sürümlerdeki bir yığın taşması, uzaktaki saldırganların "
+                          'rastgele kod çalıştırmasına izin verir (CVE-2026-1111).'},
+    'k1': {'description': "libbar 3.1.7'den önceki sürümlerdeki bir yığın taşması, uzaktaki saldırganların "
+                          'rastgele kod çalıştırmasına izin verir (CVE-2026-2222).'},
+}
+
+
+class GeminiPaketCapaTests(GeminiTestMixin, SimpleTestCase):
+    """Ayni bicimli (sablon CVE, benzer uzunluk) yer degisimini _alan_sorunu yakalamaz; capa capraz
+    denetimi baska kaydin CVE/surum/URL/kod capasini tasiyan ceviriyi reddeder."""
+
+    def test_yer_degistiren_cve_cevirileri_reddedilir(self):
+        self._post(_yanit(govde={'k0': CVE_CEVIRILERI['k1'], 'k1': CVE_CEVIRILERI['k0']}))
+        sonuc = gemini.paket_cevir(CVE_KAYITLARI, 'cve')
+        self.assertEqual(sonuc.reddedilen, {'k0', 'k1'})
+        self.assertEqual(sonuc.ceviriler, {})
+        self.assertFalse(sonuc.istek_hatasi)
+
+    def test_dogru_capali_paket_kabul_edilir(self):
+        self._post(_yanit(govde=CVE_CEVIRILERI))
+        sonuc = gemini.paket_cevir(CVE_KAYITLARI, 'cve')
+        self.assertEqual(sonuc.ceviriler, CVE_CEVIRILERI)
+        self.assertEqual(sonuc.reddedilen, set())
+
+    def test_ondalik_virgulle_yazilsa_da_kabul_edilir(self):
+        kayitlar = dict(CVE_KAYITLARI, k0={
+            'description': 'The flaw in libfoo 2.4.1 has a CVSS score of 9.8 and is tracked as CVE-2026-1111.'})
+        cevap = dict(CVE_CEVIRILERI, k0={
+            'description': "libfoo 2.4.1'deki açığın CVSS puanı 9,8 olup CVE-2026-1111 olarak izleniyor."})
+        self._post(_yanit(govde=cevap))
+        sonuc = gemini.paket_cevir(kayitlar)
+        self.assertEqual(sonuc.ceviriler, cevap)
+        self.assertEqual(sonuc.reddedilen, set())
+
+    def test_iki_capasini_da_kaybeden_kayit_reddedilir(self):
+        cevap = dict(CVE_CEVIRILERI, k0={
+            'description': 'Bir kütüphanedeki yığın taşması, uzaktaki saldırganların rastgele kod '
+                           'çalıştırmasına izin verir.'})
+        self._post(_yanit(govde=cevap))
+        sonuc = gemini.paket_cevir(CVE_KAYITLARI)
+        self.assertEqual(sonuc.reddedilen, {'k0'})
+        self.assertEqual(set(sonuc.ceviriler), {'k1'})
+
+    def test_capasiz_kayitlar_eskisi_gibi(self):
+        self._post(_yanit(govde=PAKET_CEVIRI))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertEqual(sonuc.ceviriler, PAKET_CEVIRI)
+
+    def test_capalar_desenleri(self):
+        durumlar = (
+            ('see cve-2026-12345 and GHSA-abcd-1234-efgh.', {'CVE-2026-12345', 'GHSA-ABCD-1234-EFGH'}),
+            ('Details (see https://example.com/advisory/1).', {'HTTPS://EXAMPLE.COM/ADVISORY/1'}),
+            ("Kaynak: 'https://example.com/a?b=1';", {'HTTPS://EXAMPLE.COM/A?B=1'}),
+            ('call `parse_header()` now', {'`PARSE_HEADER()`'}),
+            ("2.4.1'den önceki sürümler", {'2.4.1'}),
+            ('v1.31 and v1.31.0.', {'V1.31', 'V1.31.0'}),
+            ('Kubernetes v1.31.0 yayında', {'V1.31.0'}),
+            ('CVSS 9.8, Kubernetes 1.31 ve 9,8', set()),
+            ('Hiç çapa yok.', set()),
+        )
+        for metin, beklenen in durumlar:
+            with self.subTest(metin=metin):
+                self.assertEqual(gemini._capalar(metin), beklenen)
+
+    def test_kendi_capasinin_parcasi_karisma_sayilmaz(self):
+        # k1'in 1.2.3'u, k0'in kendi 1.2.3.4'unun parcasi: k0 reddedilmez
+        kayitlar = {
+            'k0': {'title': 'Router firmware 1.2.3.4 fixes the authentication bypass'},
+            'k1': {'title': 'Library 1.2.3 fixes a memory leak in the parser'},
+        }
+        cevap = {
+            'k0': {'title': 'Yönlendirici yazılımı 1.2.3.4 kimlik doğrulama atlatmasını gideriyor'},
+            'k1': {'title': 'Kütüphane 1.2.3 ayrıştırıcıdaki bellek sızıntısını gideriyor'},
+        }
+        self._post(_yanit(govde=cevap))
+        sonuc = gemini.paket_cevir(kayitlar)
+        self.assertEqual(sonuc.ceviriler, cevap)
+        self.assertEqual(sonuc.reddedilen, set())
