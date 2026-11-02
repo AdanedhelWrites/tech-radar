@@ -517,12 +517,26 @@ class DeepLTests(CevirmenTestMixin, SimpleTestCase):
         self.assertEqual(cevirmen.butce_kullanimi(), gonderilen, 'Sayac istek basina degil karakter kadar artar')
         self.assertTrue(cevirmen.hazir(), 'Tavanin altinda: hazir')
 
-        # Ikinci istek tavani asar: gonderilmez, sayac geri alinir
+        # Ikinci istek tavani asar: gonderilmez, sayac tavana doldurulur (C3 duzeltme 1): hazir() False
         self.assertIsNone(cevirmen.kaydi_cevir(ALANLAR))
         self.assertEqual(post.call_count, 1)
-        self.assertEqual(cevirmen.butce_kullanimi(), gonderilen)
+        self.assertEqual(cevirmen.butce_kullanimi(), 150)
+        self.assertFalse(cevirmen.hazir())
         ozet = cevirmen.butce_ozeti()
         self.assertEqual((ozet['limit'], ozet['period']), (150, 'month'))
+
+    def test_deepl_kalan_karakter_paketten_azsa_istek_atilmaz_hazir_kapanir(self):
+        """Kalan aylik pay pakete yetmiyor: istek yok, istek_hatasi, sayac tavana dolar, hazir() False."""
+        cevirmen = _yerel(kc.DeepLCevirmen(tavan=1000, aralik=0.0))
+        cevirmen._sayac().artir(cevirmen._donem_anahtari(), 900)
+        post = self._post(_deepl_yanit())
+
+        sonuc = cevirmen.paket_cevir({'k0': KAYITLAR['k0'], 'k1': KAYITLAR['k1']})
+
+        self.assertTrue(sonuc.istek_hatasi)
+        post.assert_not_called()
+        self.assertEqual(cevirmen.butce_kullanimi(), 1000)
+        self.assertFalse(cevirmen.hazir())
 
     def test_deepl_ay_anahtari(self):
         self.assertRegex(self.deepl._donem_anahtari(), r'^budget:\d{4}-\d{2}$')

@@ -619,6 +619,14 @@ class KayitCevirmeni:
         butce, anahtar = self._sayac(), self._donem_anahtari()
         if butce.artir(anahtar, miktar) > self.tavan():
             butce.azalt(anahtar, miktar)
+            if miktar > 1:
+                # Miktar karakterse (DeepL) donemin kalani bu istege yetmedi. Sayac geri alinip birakilirsa
+                # hazir() True kalir ve retranslate istek atilmayan saglam kayitlari icerik hatasi sayip
+                # yukseltme kuyrugundan dusururdu. Sayac tavana doldurulur (456 gibi): hazir() donem
+                # degisene kadar False, cagiran yeniden secer. Istek basina 1 (Gemini/OpenRouter) etkilenmez.
+                eksik = self.tavan() - butce.oku(anahtar)
+                if eksik > 0:
+                    butce.artir(anahtar, eksik)
             self._log.warning(f"  [{self.log_adi}] {self.donem_metni} butce doldu ({self.tavan()}); "
                               f"{etiket} cevrilmedi.")
             return None

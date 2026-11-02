@@ -2285,6 +2285,76 @@ class YedekZincirTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestB
         self.assertEqual((bozuk.translation_provider, bozuk.translation_attempts), ('libretranslate', 1),
                          'Isaret kaybi her cevirmende icerik hatasidir')
 
+    def test_hemen_yeniden_acilan_yedek_paketi_sonsuz_dondurmez(self):
+        """Duzeltme 2: hazir() her hatadan sonra bir kez False donup yeniden True olur. Ayni paket en cok
+        1 + len(YEDEKLER) kez denenir, sonra asama durur; hicbir kayit sayilmaz."""
+        durum = {'kapali': False}
+
+        def hazir():
+            if durum['kapali']:
+                durum['kapali'] = False   # devre kesici hemen kapandi
+                return False
+            return True
+
+        def kapanir(kayitlar):
+            durum['kapali'] = True
+            return gemini.PaketSonucu(istek_hatasi=True)
+
+        openrouter, = self.yedekleri_ayarla(SahteCevirmen('openrouter', hazir=hazir, paket=kapanir))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        adaylar = self._adaylar(2)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(len(openrouter.paket_cagrilar), 2)
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (0, 0))
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_budget')
+        for kayit in map(self._kayit, adaylar):
+            self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('libretranslate', 0))
+
+    def _gercek_deepl(self, tavan=1000, kullanilan=950):
+        """Gercek DeepLCevirmen (anahtar sahte, kapi/sayac surec ici); kalan aylik pay kullanilan'dan sonrasi."""
+        from news import kayit_cevirmenleri as kc
+        ayar = override_settings(DEEPL_API_KEY='test-deepl-anahtari:fx')
+        ayar.enable()
+        self.addCleanup(ayar.disable)
+        deepl = kc.DeepLCevirmen(tavan=tavan, aralik=0.0)
+        deepl._gate, deepl._butce = tu._LocalGate(), gemini._LocalButce()
+        deepl._sayac().artir(deepl._donem_anahtari(), kullanilan)
+        self.yedekleri_ayarla(deepl)
+        return deepl
+
+    def test_deepl_kalan_karakteri_paketten_azsa_kayit_sayilmaz(self):
+        """Duzeltme 1: DeepL'in kalan aylik payi (50 kr) pakete yetmez: istek yok, red yok, DeepL kapanir."""
+        deepl = self._gercek_deepl()
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        adaylar = self._adaylar(2)
+
+        with mock.patch('news.gemini.requests.post') as post:
+            sonuc = self._calistir()
+
+        post.assert_not_called()
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (0, 0))
+        self.assertFalse(deepl.hazir())
+        for kayit in map(self._kayit, adaylar):
+            self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('libretranslate', 0))
+
+    def test_deepl_kalan_karakteri_bekleyene_yetmezse_kayit_sayilmaz(self):
+        self.libre.hazir = False
+        deepl = self._gercek_deepl()
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+
+        with mock.patch('news.gemini.requests.post') as post:
+            sonuc = self._calistir()
+
+        post.assert_not_called()
+        self.assertEqual(sonuc['failed'], 0)
+        self.assertFalse(deepl.hazir())
+        bekleyen = self._kayit(bekleyen)
+        self.assertTrue(bekleyen.needs_translation)
+        self.assertEqual(bekleyen.translation_attempts, 0)
+
     def test_anahtarsiz_kurulum_bugunku_gibi_calisir(self):
         """YEDEKLER gercek (anahtarlar bos): hicbiri hazir degil, HTTP yok; sonuc bugunku zincirle ayni."""
         from news import kayit_cevirmenleri, retranslate

@@ -321,6 +321,8 @@ def _bekleyen_cevirisi(ad: str, kayit, tur: Optional[_Tur] = None):
         sorulan = cevirmen
         sorulanlar.append(cevirmen)
         ceviri = _tekil_cevir(cevirmen, ad, alanlar)
+        # Bilinen sapma (zararsiz): icerik reddi cevirmenin son birimini harcayip onu kapattiysa (tavan tam
+        # o istekte doldu) istek duzeyi hata gibi gorunur ve kayit ayni turda siradaki cevirmene gider.
         if ceviri is not None or _hazir(cevirmen):
             return ceviri, cevirmen
 
@@ -572,6 +574,23 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
         if _yaz(kayit, alanlar, saglayici):
             yukseltilen += 1
 
+    # Ayni paketin kac kez kuyruga geri kondugu (anahtar: kayit kimlikleri). Yeniden secim, kapanan cevirmenin
+    # hazir()'inin hemen False donmesine dayanir; hemen yeniden acilan (kisa cooldown) bir cevirmen ayni
+    # paketi sonsuza dek dondurmesin: 1 + len(YEDEKLER) geri koymadan sonra asama bu tur durur.
+    geri_konan: Dict[tuple, int] = {}
+
+    def geri_koy(paket) -> bool:
+        """Paketi kuyrugun basina koyar; sinira ulasildiysa koymaz, False (cagiran asamayi durdurur).
+        Hicbir kayit sayilmaz."""
+        anahtar = tuple(kayit.pk for kayit, _ in paket)
+        geri_konan[anahtar] = geri_konan.get(anahtar, 0) + 1
+        if geri_konan[anahtar] >= 1 + len(kayit_cevirmenleri.YEDEKLER):
+            log.warning(f"  [Retranslate] {ad}: ayni paket {geri_konan[anahtar]} kez istek hatasiyla dondu, "
+                        "yukseltme bu tur durdu.")
+            return False
+        kuyruk.appendleft(paket)
+        return True
+
     while kuyruk:
         if _sure_doldu(bitis):
             break
@@ -593,7 +612,12 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
             elif not _hazir(cevirmen):
                 # Istek duzeyi hata (429/5xx/ag/401/403/404) ya da butce: kaydin sucu degil, sayac artmaz.
                 # Kayit kuyruga geri doner; sonraki secim siradaki yedegi verir ya da asamayi durdurur.
-                kuyruk.appendleft(paket)
+                # Bilinen sapma (zararsiz): icerik reddi cevirmenin son birimini harcayip onu kapattiysa
+                # (gunluk/aylik tavan tam o istekte doldu) red sayilmaz ve kayit ayni turda siradaki
+                # cevirmene gider; "reddedilen kayit baska cevirmene gitmez" kurali bu durumda esner.
+                if not geri_koy(paket):
+                    _gemini_sebebini_yaz(sonuc, tur)
+                    break
             else:
                 reddet(kayit)  # dogrulama / isaret kaybi / kayda ozgu 400
             continue
@@ -602,7 +626,9 @@ def _yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
         if paket_sonucu.istek_hatasi and not _hazir(cevirmen):
             # Cevirmen kapandi (devre kesici / butce): hicbir kayit sayilmaz, ayni paket sonraki secimle
             # (siradaki yedek) yeniden denenir; hazir cevirmen kalmadiysa dongu basinda asama durur
-            kuyruk.appendleft(paket)
+            if not geri_koy(paket):
+                _gemini_sebebini_yaz(sonuc, tur)
+                break
             continue
         if paket_sonucu.istek_hatasi or paket_sonucu.kesildi or paket_sonucu.yanit_bozuk:
             if len(paket) > 1:
