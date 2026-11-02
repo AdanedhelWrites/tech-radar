@@ -5,6 +5,7 @@ zincirde yok), OpenRouter ucretsiz model, DeepL API Free. ZINCIR[0] disindakiler
 gemini.KayitCevirmeni arayuzunu (name, hazir, kaydi_cevir, paket_cevir, butce_ozeti) ve ortak kota,
 HTTP ve dogrulama kurallarini paylasir. Anahtari bos olan saglayici hazir degildir (atlanir).
 Anahtar degerleri yalniz istek basligina girer; loga, ozete ve hata metnine yazilmaz.
+HTTP cagrisi tabanin _istek_at'indadir (news.gemini); testler news.gemini.requests.post'u yamalar.
 """
 import json
 import logging
@@ -13,7 +14,6 @@ import re
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
-import requests  # noqa: F401  (testler news.kayit_cevirmenleri.requests.post'u yamalar)
 from django.conf import settings
 
 from . import gemini
@@ -51,6 +51,45 @@ _URUN_ADI = re.compile(r'\b(?!XTRM\d{4}X)[A-Za-z]+\d[A-Za-z0-9]*\b')
 
 def _ayar(ad: str) -> str:
     return (getattr(settings, ad, '') or '').strip()
+
+
+def _hata_kodu(hata) -> Optional[int]:
+    try:
+        return int(hata.get('code'))
+    except Exception:  # hata dict degil / kod yok / sayi degil
+        return None
+
+
+def _govde_hatasi(yanit):
+    """OpenRouter 200 yaniti aslinda saglayici hatasi mi: (kod, sebep) ya da None. ASLA firlatmaz.
+
+    Hata sayilan: ust duzey error (choices yok), bos/eksik choices, finish_reason 'error', 'stop' ile
+    bos/None icerik. Cozulemeyen govde, content_filter ve cozulemeyen icerik burada degil, _cikti'da
+    yanit_bozuk olur."""
+    try:
+        govde = yanit.json()
+    except Exception:
+        return None
+    if not isinstance(govde, dict):
+        return None
+    ust_hata = govde.get('error')
+    secenekler = govde.get('choices')
+    if not isinstance(secenekler, list) or not secenekler:
+        kod = _hata_kodu(ust_hata)
+        return kod, f"HTTP 200 hata {kod if kod is not None else 'choices yok'}"
+    secenek = secenekler[0]
+    if not isinstance(secenek, dict):
+        return None
+    if secenek.get('finish_reason') == 'error':
+        kod = _hata_kodu(secenek.get('error'))
+        kod = kod if kod is not None else _hata_kodu(ust_hata)
+        return kod, f"HTTP 200 hata {kod if kod is not None else 'finish_reason error'}"
+    mesaj = secenek.get('message')
+    icerik = mesaj.get('content') if isinstance(mesaj, dict) else None
+    if secenek.get('finish_reason') in (None, 'stop') and not (isinstance(icerik, str) and icerik.strip()):
+        kod = _hata_kodu(ust_hata)
+        return kod, f"HTTP 200 hata {kod if kod is not None else 'bos icerik'}"
+    return None
 
 
 class OpenRouterCevirmen(gemini.KayitCevirmeni):
@@ -104,6 +143,23 @@ class OpenRouterCevirmen(gemini.KayitCevirmeni):
             'messages': [{'role': 'system', 'content': talimat},
                          {'role': 'user', 'content': json.dumps(veri, ensure_ascii=False)}],
         }, None
+
+    def _istek_at(self, govde: dict, etiket: str = 'genel kaydi', kayit_sayisi: int = 1, miktar: int = 1):
+        """Taban kurallari + 200 icinde gelen saglayici hatasi (ucretsiz katmanda ust saglayici hiz
+        siniri/asiri yuk). Bu istek duzeyi hatadir: kayit sucu sayilmaz, devre kesici acilir, None doner
+        (paket_cevir -> istek_hatasi). error.code sistemikse (401/402/403/404) sayac geri alinir;
+        degilse istek harcanmis sayilir."""
+        yanit = super()._istek_at(govde, etiket, kayit_sayisi, miktar)
+        if yanit is None:
+            return None
+        hata = _govde_hatasi(yanit)
+        if hata is None:
+            return yanit
+        kod, sebep = hata
+        if kod in self.sistemik_http:
+            self._sayac().azalt(self._donem_anahtari(), miktar)
+        self._devre_kesici(sebep)
+        return None
 
     def _cikti(self, yanit, veri: dict, paket: bool, baglam):
         try:
@@ -172,6 +228,16 @@ class DeepLCevirmen(gemini.KayitCevirmeni):
 
     def _donem_anahtari(self) -> str:
         return f'budget:{datetime.now(timezone.utc):%Y-%m}'
+
+    def _kesici_yaniti(self, durum: int) -> None:
+        """456: DeepL aylik kotasi bitti. Sayac ay tavanina doldurulur: hazir() ay degisene kadar False
+        kalir, devre kesici her bekleme sonunda yeniden yoklamaz."""
+        if durum != 456:
+            return
+        anahtar = self._donem_anahtari()
+        eksik = self.tavan() - self._sayac().oku(anahtar)
+        if eksik > 0:
+            self._sayac().artir(anahtar, eksik)
 
     def _istek_adresi(self) -> str:
         return DEEPL_URL

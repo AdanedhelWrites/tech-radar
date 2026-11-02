@@ -78,9 +78,9 @@ class CevirmenTestMixin:
 
     def _post(self, *yanitlar, side_effect=None):
         if side_effect is None and len(yanitlar) == 1:
-            yama = mock.patch('news.kayit_cevirmenleri.requests.post', return_value=yanitlar[0])
+            yama = mock.patch('news.gemini.requests.post', return_value=yanitlar[0])
         else:
-            yama = mock.patch('news.kayit_cevirmenleri.requests.post',
+            yama = mock.patch('news.gemini.requests.post',
                               side_effect=side_effect if side_effect is not None else list(yanitlar))
         post = yama.start()
         self.addCleanup(yama.stop)
@@ -220,6 +220,13 @@ class Gemini2Tests(CevirmenTestMixin, SimpleTestCase):
         self.assertEqual(post.call_count, 1)
         self.assertTrue(gemini.hazir())
 
+    def test_gemini2_loglari_kendi_adiyla(self):
+        self._post(_yanit(metin='JSON degil'))
+        with self.assertLogs('news.gemini', level='WARNING') as kayit:
+            self.assertIsNone(self.gemini2.kaydi_cevir(ALANLAR))
+        self.assertTrue(kayit.output)
+        self.assertTrue(all('[Gemini-2 gemini-ikinci-model]' in satir for satir in kayit.output), kayit.output)
+
     def test_birincil_modul_arayuzu_ayni_ornek(self):
         self.assertEqual(gemini.BIRINCIL.onek, 'gemini')
         self.assertEqual(gemini.BIRINCIL.model_adi(), gemini.GEMINI_MODEL)
@@ -313,6 +320,57 @@ class OpenRouterTests(CevirmenTestMixin, SimpleTestCase):
             with self.subTest(yanit=yanit.json.return_value):
                 self._post(yanit)
                 self.assertTrue(self.openrouter.paket_cevir(KAYITLAR).yanit_bozuk)
+
+    @staticmethod
+    def _ham_200(govde):
+        yanit = mock.Mock(status_code=200, text=json.dumps(govde))
+        yanit.json.return_value = govde
+        return yanit
+
+    def test_openrouter_200_hata_govdesi_istek_hatasi(self):
+        """Ucretsiz katmanda ust saglayici hiz siniri/asiri yuk 200 ile gelebilir: kaydin sucu degil."""
+        sekiller = {
+            'ust duzey error': {'error': {'code': 429, 'message': 'Rate limit exceeded: free-models-per-day'}},
+            'choices bos': {'id': 'gen-1', 'choices': []},
+            'choices yok': {'id': 'gen-1'},
+            'finish error': {'choices': [{'finish_reason': 'error', 'error': {'code': 502, 'message': 'upstream'},
+                                          'message': {'role': 'assistant', 'content': ''}}]},
+            'icerik bos': {'choices': [{'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': ''}}]},
+            'icerik None': {'choices': [{'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': None}}]},
+        }
+        for ad, govde in sekiller.items():
+            with self.subTest(sekil=ad):
+                cevirmen = _yerel(kc.OpenRouterCevirmen(model=UCRETSIZ_MODEL, tavan=50, aralik=0.0))
+                self._post(self._ham_200(govde))
+                sonuc = cevirmen.paket_cevir(KAYITLAR)
+                self.assertTrue(sonuc.istek_hatasi)
+                self.assertFalse(sonuc.yanit_bozuk)
+                self.assertTrue(cevirmen._gate.cooldown_active())
+                self.assertFalse(cevirmen.hazir())
+                self.assertEqual(cevirmen.butce_kullanimi(), 1, 'Sistemik olmayan: istek harcanmis sayilir')
+                self.assertIsNone(cevirmen.kaydi_cevir(ALANLAR))
+
+    def test_openrouter_200_sistemik_hata_kodu_butceyi_geri_alir(self):
+        for kod in (401, 402, 403, 404, '402'):
+            with self.subTest(kod=kod):
+                cevirmen = _yerel(kc.OpenRouterCevirmen(model=UCRETSIZ_MODEL, tavan=50, aralik=0.0))
+                self._post(self._ham_200({'error': {'code': kod, 'message': 'Insufficient credits'}}))
+                self.assertIsNone(cevirmen.kaydi_cevir(ALANLAR))
+                self.assertTrue(cevirmen._gate.cooldown_active())
+                self.assertEqual(cevirmen.butce_kullanimi(), 0)
+
+    def test_openrouter_content_filter_yanit_bozuk_kalir(self):
+        self._post(_or_yanit(govde=PAKET_CEVIRI, finish='content_filter'))
+        sonuc = self.openrouter.paket_cevir(KAYITLAR)
+        self.assertTrue(sonuc.yanit_bozuk)
+        self.assertFalse(sonuc.istek_hatasi)
+        self.assertFalse(self.openrouter._gate.cooldown_active())
+
+    def test_openrouter_loglari_kendi_adiyla(self):
+        self._post(_or_yanit(metin='JSON degil'))
+        with self.assertLogs(level='WARNING') as kayit:
+            self.openrouter.paket_cevir(KAYITLAR)
+        self.assertTrue(all('[OpenRouter]' in satir for satir in kayit.output), kayit.output)
 
     def test_openrouter_kod_citlu_json_cozulur(self):
         self._post(_or_yanit(metin='```json\n' + json.dumps(CEVIRI, ensure_ascii=False) + '\n```'))
@@ -483,6 +541,24 @@ class DeepLTests(CevirmenTestMixin, SimpleTestCase):
                 self.assertTrue(cevirmen.paket_cevir(KAYITLAR).istek_hatasi)
                 self.assertTrue(cevirmen._gate.cooldown_active())
                 self.assertGreater(cevirmen.butce_kullanimi(), 0, 'Kota harcanmis sayilir')
+
+    def test_deepl_456_sayaci_ay_tavanina_doldurur(self):
+        """Aylik kota bitti: hazir() ay degisene kadar False kalir, devre kesici her bekleme sonunda yoklamaz."""
+        cevirmen = _yerel(kc.DeepLCevirmen(tavan=450000, aralik=0.0))
+        post = self._post(_deepl_yanit(durum=456, ham='{"message": "Quota exceeded"}'))
+        self.assertIsNone(cevirmen.kaydi_cevir(ALANLAR))
+        self.assertEqual(cevirmen.butce_kullanimi(), 450000)
+        cevirmen._gate.start_cooldown(0)   # bekleme bitti
+        self.assertFalse(cevirmen.hazir())
+        self.assertIsNone(cevirmen.kaydi_cevir(ALANLAR))
+        self.assertEqual(post.call_count, 1)
+        self.assertFalse(cevirmen.butce_ozeti()['available'])
+
+    def test_deepl_429_sayaci_doldurmaz(self):
+        cevirmen = _yerel(kc.DeepLCevirmen(tavan=450000, aralik=0.0))
+        self._post(_deepl_yanit(durum=429))
+        cevirmen.kaydi_cevir(ALANLAR)
+        self.assertLess(cevirmen.butce_kullanimi(), 1000)
 
     def test_deepl_4xx_butce_geri_alinir(self):
         for durum, sistemik in ((400, False), (413, False), (403, True)):

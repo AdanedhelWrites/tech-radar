@@ -297,21 +297,22 @@ def _istek_at(govde: dict, etiket: str = 'genel kaydi', kayit_sayisi: int = 1) -
     return BIRINCIL._istek_at(govde, etiket, kayit_sayisi)
 
 
-def _aday_ciktisi(yanit):
-    """(cikti, finishReason). cikti None: yanit tamamlanmadi ya da JSON nesnesi cozulemedi. ASLA firlatmaz."""
+def _aday_ciktisi(yanit, log_adi: str = 'Gemini'):
+    """(cikti, finishReason). cikti None: yanit tamamlanmadi ya da JSON nesnesi cozulemedi. ASLA firlatmaz.
+    log_adi yalniz log icindir (ikinci model kendi adiyla loglar)."""
     sebep = None
     try:
         aday = yanit.json()['candidates'][0]
         sebep = aday.get('finishReason')
         if sebep not in (None, 'STOP'):
-            log.warning(f"  [Gemini] yanit tamamlanmadi ({sebep}).")
+            log.warning(f"  [{log_adi}] yanit tamamlanmadi ({sebep}).")
             return None, sebep
         cikti = json.loads(aday['content']['parts'][0]['text'])
     except Exception as hata:  # ValueError/KeyError/IndexError/TypeError/AttributeError vb.
-        log.warning(f"  [Gemini] yanit cozulemedi ({type(hata).__name__}).")
+        log.warning(f"  [{log_adi}] yanit cozulemedi ({type(hata).__name__}).")
         return None, sebep
     if not isinstance(cikti, dict):
-        log.warning("  [Gemini] yanit JSON nesnesi degil.")
+        log.warning(f"  [{log_adi}] yanit JSON nesnesi degil.")
         return None, sebep
     return cikti, sebep
 
@@ -563,6 +564,9 @@ class KayitCevirmeni:
     def _sistemik_hata(self, yanit) -> Optional[str]:
         return f'HTTP {yanit.status_code}' if yanit.status_code in self.sistemik_http else None
 
+    def _kesici_yaniti(self, durum: int) -> None:
+        """kesici_http / 5xx yaniti alindi, devre kesici acilmak uzere (DeepL 456: sayaci doldurur)."""
+
     # --- Kota ---
 
     def butce_kullanimi(self) -> int:
@@ -625,6 +629,7 @@ class KayitCevirmeni:
             return None
 
         if yanit.status_code in self.kesici_http or yanit.status_code >= 500:
+            self._kesici_yaniti(yanit.status_code)
             self._devre_kesici(f'HTTP {yanit.status_code}')
             return None
         if yanit.status_code != 200:
@@ -693,7 +698,7 @@ class GeminiCevirmen(KayitCevirmeni):
         super().__init__(onek, GEMINI_DAILY_BUDGET if tavan is None else tavan,
                          GEMINI_MIN_INTERVAL if aralik is None else aralik)
         self.model = (model or '').strip()
-        self.log_adi = 'Gemini' if onek == 'gemini' else f'Gemini {self.model}'
+        self.log_adi = 'Gemini' if onek == 'gemini' else f'Gemini-2 {self.model}'
 
     @property
     def zaman_asimi(self):
@@ -727,7 +732,7 @@ class GeminiCevirmen(KayitCevirmeni):
         return _istek_govdesi(veri, _alan_semasi(veri), SISTEM_TALIMATI), None
 
     def _cikti(self, yanit, veri: dict, paket: bool, baglam):
-        cikti, sebep = _aday_ciktisi(yanit)
+        cikti, sebep = _aday_ciktisi(yanit, self.log_adi)
         return cikti, sebep == 'MAX_TOKENS'
 
     def _sistemik_hata(self, yanit) -> Optional[str]:
