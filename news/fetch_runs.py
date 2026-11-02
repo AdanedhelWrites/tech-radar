@@ -149,6 +149,15 @@ def tur_bitti(sender=None, task_id=None, retval=None, state=None, **kwargs):
                 _kapat(task_id, status='success')
             return
 
+        if retval.get('skipped'):
+            # Tekil kilit yuzunden atlanan tur (retranslate_pending_task -> {'skipped': 'locked'}):
+            # is yapilmadi. 'success' + saved_count 0 satiri ceviri_kuyrugu_ozeti'ni yaniltirdi
+            # (ust uste atlanan turlar "takili" sayilirdi), bu yuzden satir hic birakilmaz.
+            kayit_id = _acik_turlar.pop(task_id, None)
+            if kayit_id is not None:
+                FetchRun.objects.filter(pk=kayit_id).delete()
+            return
+
         hata_var = 'error' in retval
         hata = str(retval.get('error') or '')[:HATA_TAVANI] if hata_var else ''
         bolum = _bolum(sender)

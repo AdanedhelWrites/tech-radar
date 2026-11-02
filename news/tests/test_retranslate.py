@@ -392,6 +392,80 @@ class RetranslateGoreviTests(SimpleTestCase):
             self.assertEqual(tasks.retranslate_pending_task(), {'translated': 3})
         sahte.assert_called_once_with()
 
+    # --- Tekil calisma kilidi (spec 2026-11-02 G4): saatlik turlar ust uste binmemeli ---
+
+    def _kilit_ortami(self):
+        """Test Redis'i + benzersiz kilit anahtari; canli anahtara dokunulmaz."""
+        from news import tasks
+        redis_client = test_redis_client()
+        anahtar = f'test-retranslate-kilit-{uuid.uuid4().hex}:kilit'
+        self.addCleanup(redis_client.delete, anahtar)
+        for yama in (mock.patch.object(tasks, 'RETRANSLATE_KILIT_ANAHTARI', anahtar),
+                     mock.patch('news.retranslate._canli_redis', return_value=redis_client)):
+            yama.start()
+            self.addCleanup(yama.stop)
+        return tasks, redis_client, anahtar
+
+    def test_kilit_tutuluyken_ikinci_tur_atlar(self):
+        tasks, redis_client, anahtar = self._kilit_ortami()
+        redis_client.set(anahtar, 'baska-turun-jetonu', ex=300)
+        with mock.patch('news.retranslate.retranslate_pending') as sahte:
+            sonuc = tasks.retranslate_pending_task()
+        self.assertEqual(sonuc, {'skipped': 'locked'})
+        sahte.assert_not_called()
+        self.assertEqual(redis_client.get(anahtar), b'baska-turun-jetonu',
+                         'sahibi olmayan tur kilidi silmemeli / degistirmemeli')
+
+    def test_tur_calisirken_kilit_tutulur_ve_omru_vardir(self):
+        from news.retranslate import RETRANSLATE_TIME_BUDGET
+        tasks, redis_client, anahtar = self._kilit_ortami()
+        gorulen = {}
+
+        def sahte_tur():
+            gorulen['deger'] = redis_client.get(anahtar)
+            gorulen['ttl'] = redis_client.ttl(anahtar)
+            return {'translated': 1}
+
+        with mock.patch('news.retranslate.retranslate_pending', side_effect=sahte_tur):
+            tasks.retranslate_pending_task()
+        self.assertTrue(gorulen['deger'], 'tur calisirken kilit tutulmali')
+        self.assertGreater(gorulen['ttl'], RETRANSLATE_TIME_BUDGET)
+        self.assertLessEqual(gorulen['ttl'], RETRANSLATE_TIME_BUDGET + 600)
+
+    def test_tur_bitince_kilit_birakilir(self):
+        tasks, redis_client, anahtar = self._kilit_ortami()
+        with mock.patch('news.retranslate.retranslate_pending', return_value={'translated': 2}):
+            self.assertEqual(tasks.retranslate_pending_task(), {'translated': 2})
+        self.assertFalse(redis_client.exists(anahtar))
+
+    def test_tur_istisnayla_bitse_de_kilit_birakilir(self):
+        tasks, redis_client, anahtar = self._kilit_ortami()
+        with mock.patch('news.retranslate.retranslate_pending', side_effect=RuntimeError('patladi')):
+            with self.assertRaises(RuntimeError):
+                tasks.retranslate_pending_task()
+        self.assertFalse(redis_client.exists(anahtar))
+
+    def test_sure_asiminda_baskasinin_kilidi_silinmez(self):
+        """Kilit TTL ile dusup baska tur yeni kilit aldiysa, eski tur bitince onu silmemeli."""
+        tasks, redis_client, anahtar = self._kilit_ortami()
+
+        def sahte_tur():
+            redis_client.set(anahtar, 'yeni-turun-jetonu', ex=300)
+            return {'translated': 0}
+
+        with mock.patch('news.retranslate.retranslate_pending', side_effect=sahte_tur):
+            tasks.retranslate_pending_task()
+        self.assertEqual(redis_client.get(anahtar), b'yeni-turun-jetonu')
+
+    def test_redis_ulasilamazsa_tur_yine_de_kosar(self):
+        """Kilit yuzunden tur kaybedilmez: Redis yoksa uyarilir ve tur kosulur."""
+        from news import tasks
+        with mock.patch('news.retranslate._canli_redis', side_effect=ConnectionError('redis yok')), \
+                mock.patch('news.retranslate.retranslate_pending',
+                           return_value={'translated': 5}) as sahte:
+            self.assertEqual(tasks.retranslate_pending_task(), {'translated': 5})
+        sahte.assert_called_once_with()
+
     def test_beat_takvimi_saatlik_cekim_saatleri_haric(self):
         """Spec 2026-11-02 G4: saatlik tur, cekim saatleri (00/06/12/18) haric; gunde 20 tur."""
         self.assertNotIn('retranslate-pending-every-2h', settings.CELERY_BEAT_SCHEDULE)
