@@ -5,6 +5,7 @@ olarak gider, ayni anahtarlarla Turkce doner. Kota korumasi:
   - Redis paylasimli aralik kapisi: istekler arasi en az GEMINI_MIN_INTERVAL sn
   - Gunluk istek butcesi (GEMINI_DAILY_BUDGET): istek ONCESI artar, 4xx'te geri alinir
   - 429 / 5xx / ag hatasi -> GEMINI_COOLDOWN sn devre kesici
+  - 401 / 403 / 404 (anahtar, yetki, model) -> devre kesici, butce geri alinir
 Hicbir istisna disari cikmaz; cevrilemeyen kayit icin None doner.
 XTRM yer tutucu korumasi ve turkish_post_process uygulanmaz: terimler prompt'la korunur.
 """
@@ -34,6 +35,8 @@ GEMINI_DAILY_BUDGET = int(os.environ.get('GEMINI_DAILY_BUDGET', '450'))
 GEMINI_COOLDOWN = int(os.environ.get('GEMINI_COOLDOWN', '600'))
 # Daha buyuk kayit 60 sn'de bitmiyor ve devre kesiciyi aciyor; LibreTranslate yolunda kalir
 GEMINI_MAX_CHARS = int(os.environ.get('GEMINI_MAX_CHARS', '12000'))
+# Kayittan bagimsiz 4xx: 401 anahtar gecersiz, 403 yetki/proje, 404 model adi yanlis
+SISTEMIK_HTTP = (401, 403, 404)
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 MAX_RATIO = 3.0
 ECHO_MIN_WORDS = 4
@@ -261,8 +264,15 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
     if yanit.status_code == 429 or yanit.status_code >= 500:
         _devre_kesici(f'HTTP {yanit.status_code}')
         return None
+    if yanit.status_code in SISTEMIK_HTTP:
+        # Anahtar iptal / yetki yok / model yok: kota harcanmadi ama her istek ayni yaniti alir.
+        # Devre kesici acilmazsa hazir() True kalir ve retranslate her adayi icerik hatasi sayip
+        # RETRANSLATE_MAX_ATTEMPTS turda tum yukseltme adaylarini kuyruktan dusururdu.
+        butce.azalt(anahtar)
+        _devre_kesici(f'HTTP {yanit.status_code}')
+        return None
     if yanit.status_code != 200:
-        # Istek sorunu (anahtar, gecersiz govde): kota harcanmadi, devre kesici acilmaz
+        # Kayda ozgu istek sorunu (400 gecersiz govde vb.): kota harcanmadi, devre kesici acilmaz
         butce.azalt(anahtar)
         log.info(f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {yanit.text[:200]}")
         return None

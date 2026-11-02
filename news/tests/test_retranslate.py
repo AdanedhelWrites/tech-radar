@@ -747,6 +747,20 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
         self.assertEqual(len(self.gemini_cagrilar), 1)
         self.assertEqual(kayit.translation_attempts, 1, 'Gemini hazirken reddetti: icerik hatasi')
 
+    def test_yukseltme_icerik_hatasi_tur_sonucunda_failed_sayilir(self):
+        def cevap(alanlar):
+            return None if 'Story number 1' in alanlar.get('title', '') else _gemini_cevirisi(alanlar)
+
+        self.gemini_ayarla(cevap)
+        _libre_kaydi('f1', baslik='Story number 1 published')
+        _libre_kaydi('f2', baslik='Story number 2 published')
+
+        sonuc = self._calistir()
+
+        self.assertEqual(sonuc['upgraded'], 1)
+        self.assertEqual(sonuc['sections']['ai'], {'translated': 0, 'failed': 1, 'upgraded': 1})
+        self.assertEqual(sonuc['failed'], 1)
+
     def test_gemini_hazir_degilse_yukseltme_baslamaz(self):
         self.gemini_ayarla(_gemini_cevirisi, hazir=False)
         _libre_kaydi('y3')
@@ -1045,10 +1059,54 @@ class GeminiBolumAdiTests(TestCase):
                                return_value={'description': 'Yeni Gemini cevirisi.'}) as cevir:
             retranslate._gemini_ile_cevir('cve', cve)
 
+        self.assertTrue(hazir.called, 'gemini.hazir cagrilmaliydi')
         self.assertTrue(all(c.args == () and c.kwargs == {} for c in hazir.call_args_list),
                         'gemini.hazir parametresiz cagrilmali')
         self.assertEqual(cevir.call_args.args[1], 'cve',
                          'gemini.kaydi_cevir bolum adiyla cagrilmaliydi (log)')
+
+
+class YukseltmeHttpHatasiTests(TestCase):
+    """Gercek gemini.kaydi_cevir, sahte HTTP: sistemik 4xx kayitlari kuyruktan dusurmemeli."""
+
+    def setUp(self):
+        super().setUp()
+        ayar = override_settings(GEMINI_API_KEY='test-anahtar')
+        ayar.enable()
+        self.addCleanup(ayar.disable)
+        for hedef, deger in (('_gate', tu._LocalGate()), ('_butce', gemini._LocalButce()),
+                             ('GEMINI_MIN_INTERVAL', 0.0)):
+            yama = mock.patch.object(gemini, hedef, deger)
+            yama.start()
+            self.addCleanup(yama.stop)
+        self.kayitlar = [_libre_kaydi(f'http-{i}', baslik=f'Story number {i + 1} published') for i in range(2)]
+
+    def _yukselt(self, durum):
+        from news import retranslate
+        yanit = mock.Mock(status_code=durum, text='{"error": {}}')
+        sonuc = {'stopped_reason': None}
+        with mock.patch('news.gemini.requests.post', return_value=yanit) as post:
+            yukseltilen, basarisiz = retranslate._yukselt('ai', AINewsEntry, 10, sonuc)
+        return yukseltilen, basarisiz, post
+
+    def test_401_yukseltmede_deneme_saymaz_ve_asama_durur(self):
+        yukseltilen, basarisiz, post = self._yukselt(401)
+
+        self.assertEqual((yukseltilen, basarisiz), (0, 0))
+        self.assertEqual(post.call_count, 1, 'Devre kesici acildi; ikinci kayit denenmemeli')
+        for kayit in self.kayitlar:
+            kayit.refresh_from_db()
+            self.assertEqual(kayit.translation_attempts, 0)
+            self.assertEqual(kayit.translation_provider, 'libretranslate')
+
+    def test_400_yukseltmede_kayit_basina_deneme_sayar(self):
+        yukseltilen, basarisiz, post = self._yukselt(400)
+
+        self.assertEqual((yukseltilen, basarisiz), (0, 2))
+        self.assertEqual(post.call_count, 2)
+        for kayit in self.kayitlar:
+            kayit.refresh_from_db()
+            self.assertEqual(kayit.translation_attempts, 1)
 
 
 class SilinenKayitTests(TransactionTestCase):
@@ -1123,8 +1181,9 @@ class SilinenKayitTests(TransactionTestCase):
         sonuc = {'stopped_reason': None}
         with mock.patch.object(gemini, 'hazir', lambda: True), \
              mock.patch.object(retranslate, '_gemini_ile_cevir', sahte_cevir):
-            yukseltilen = retranslate._yukselt('cve', CVEEntry, 10, sonuc)
+            yukseltilen, basarisiz = retranslate._yukselt('cve', CVEEntry, 10, sonuc)
 
         self.assertEqual(yukseltilen, 1, 'Silinen kayit sayilmamali, ikinci kayit yukselmeli')
+        self.assertEqual(basarisiz, 0, 'Silinen kayit icerik hatasi degildir')
         ikinci.refresh_from_db()
         self.assertEqual(ikinci.translation_provider, 'gemini')

@@ -292,37 +292,39 @@ def _yukseltme_adaylari(ad, model, sinir) -> list:
     return list(sorgu.order_by('-created_at', '-id')[:sinir])
 
 
-def _gemini_durdu(sonuc) -> None:
+def _butce_sebebini_yaz(sonuc) -> None:
+    """Gemini durduysa ve sebep gunluk butceyse turun stopped_reason'ina yazar."""
     if not gemini.butce_var():
         sonuc['stopped_reason'] = 'gemini_budget'
 
 
 def _yukselt(ad, model, sinir, sonuc, bitis=None):
-    """Asama 2. Yalnizca Gemini, imlecsiz. Donus: yukseltilen kayit sayisi."""
+    """Asama 2. Yalnizca Gemini, imlecsiz. Donus: (yukseltilen, basarisiz)."""
     if not gemini.hazir():
-        _gemini_durdu(sonuc)
-        return 0
+        _butce_sebebini_yaz(sonuc)
+        return 0, 0
 
-    yukseltilen = 0
+    yukseltilen = basarisiz = 0
     for kayit in _yukseltme_adaylari(ad, model, sinir):
         if _sure_doldu(bitis):
             break
         if not gemini.hazir():
-            _gemini_durdu(sonuc)  # butce/devre kesici asama ortasinda: kalanlar sonraki tura
+            _butce_sebebini_yaz(sonuc)  # butce/devre kesici asama ortasinda: kalanlar sonraki tura
             break
         alanlar = _gemini_ile_cevir(ad, kayit)
         if alanlar is None:
             if not gemini.hazir():
-                # Istek duzeyi hata (429/5xx/ag) ya da butce: kaydin sucu degil, sayac artmaz
-                _gemini_durdu(sonuc)
+                # Istek duzeyi hata (429/5xx/ag/401/403/404) ya da butce: kaydin sucu degil, sayac artmaz
+                _butce_sebebini_yaz(sonuc)
                 break
-            # Gemini hazirken reddetti (dogrulama / cok uzun / k8s isaret kaybi): icerik hatasi.
+            # Gemini hazirken reddetti (dogrulama / cok uzun / k8s isaret kaybi / 400): icerik hatasi.
             # Sayilmazsa "en yeni N aday" sorgusu ayni kaydi her tur yeniden dener (G5).
+            basarisiz += 1
             _basarisiz_say(kayit)
             continue
         if _yaz(kayit, alanlar, 'gemini'):
             yukseltilen += 1
-    return yukseltilen
+    return yukseltilen, basarisiz
 
 
 def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
@@ -346,7 +348,8 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
             break
 
         cevrilen, basarisiz, durdu = _bekleyenler(ad, model, cevir, redis_client, prefix, batch, sonuc, bitis)
-        yukseltilen = 0 if durdu else _yukselt(ad, model, upgrade_batch, sonuc, bitis)
+        yukseltilen, yukseltme_basarisiz = (0, 0) if durdu else _yukselt(ad, model, upgrade_batch, sonuc, bitis)
+        basarisiz += yukseltme_basarisiz  # iki asamanin icerik hatalari tek 'failed' sayacinda
 
         if cevrilen or yukseltilen:
             cache_yenile(ad)

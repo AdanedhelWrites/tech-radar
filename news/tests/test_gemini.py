@@ -215,8 +215,21 @@ class GeminiHataTests(GeminiTestMixin, SimpleTestCase):
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
         self.assertTrue(gemini._gate.cooldown_active())
 
-    def test_401_devre_kesici_acmaz_butce_geri_alinir(self):
-        self._post(_yanit(durum=401, ham='{"error": {"status": "UNAUTHENTICATED"}}'))
+    def test_401_403_404_devre_kesiciyi_acar_butce_geri_alinir(self):
+        """Anahtar iptal / yetki / yanlis model sistemiktir: kayit sucu degil, devre kesici acilir
+        (yoksa retranslate her adayi icerik hatasi sayip kuyruktan dusururdu). Kota harcanmadi."""
+        for durum in (401, 403, 404):
+            with self.subTest(durum=durum):
+                gemini._gate = tu._LocalGate()
+                self._post(_yanit(durum=durum, ham='{"error": {"status": "UNAUTHENTICATED"}}'))
+                self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+                self.assertTrue(gemini._gate.cooldown_active())
+                self.assertFalse(gemini.hazir())
+                self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_400_devre_kesici_acmaz_butce_geri_alinir(self):
+        """Gecersiz govde kayda ozgu sayilir: devre kesici acilmaz, retranslate icerik hatasi sayar."""
+        self._post(_yanit(durum=400, ham='{"error": {"status": "INVALID_ARGUMENT"}}'))
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
         self.assertFalse(gemini._gate.cooldown_active())
         self.assertEqual(gemini.butce_kullanimi(), 0)
