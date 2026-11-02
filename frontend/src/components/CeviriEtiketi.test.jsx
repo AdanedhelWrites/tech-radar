@@ -7,6 +7,13 @@ describe('CeviriEtiketi', () => {
     render(<CeviriEtiketi kayit={{ translation_provider: 'libretranslate' }} />)
     expect(screen.getByText('Makine çevirisi: LibreTranslate')).toBeInTheDocument()
   })
+  it('LibreTranslate aciklamasi "2 saat" vaadi vermez, gun ici iyilestirmeyi soyler', () => {
+    render(<CeviriEtiketi kayit={{ translation_provider: 'libretranslate' }} />)
+    const baslik = screen.getByText('Makine çevirisi: LibreTranslate').getAttribute('title')
+    expect(baslik).not.toContain('En geç 2 saat içinde')
+    expect(baslik).toBe('Yerel LibreTranslate ile çevrildi; anlam hatası olabilir, orijinal metne bakın. Haberler ile kritik ve yüksek zafiyetler gün içinde Gemini ile iyileştirilir.')
+    expect(ceviriEtiketiHtml({ translation_provider: 'libretranslate' })).not.toContain('En geç 2 saat içinde')
+  })
   it('Gemini kaydi gri bilgi rozeti alir', () => {
     render(<CeviriEtiketi kayit={{ translation_provider: 'gemini' }} />)
     expect(screen.getByText('Çeviri: Gemini')).toBeInTheDocument()

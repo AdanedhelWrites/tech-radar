@@ -171,6 +171,22 @@ def hazir() -> bool:
         return False
 
 
+def butce_ozeti() -> dict:
+    """Anonim /api/saglik/ icin butce ozeti; ASLA firlatmaz ve anahtar/kimlik bilgisi icermez.
+
+    Redis erisilemezse used=0, available=False, cooldown=False doner (serit "bilinmiyor"u
+    sessizce gosterir, saglik ucu 500 vermez).
+    """
+    ozet = {'used': 0, 'limit': butce_tavani(), 'period': 'day', 'available': False, 'cooldown': False}
+    try:
+        ozet['used'] = butce_kullanimi()
+        ozet['cooldown'] = bool(_get_gate().cooldown_active())
+        ozet['available'] = hazir()
+    except Exception:
+        return {'used': 0, 'limit': butce_tavani(), 'period': 'day', 'available': False, 'cooldown': False}
+    return ozet
+
+
 def _devre_kesici(sebep: str) -> None:
     log.warning(f"  [Gemini] erisilemiyor ({sebep}); {GEMINI_COOLDOWN} sn atlanacak.")
     _get_gate().start_cooldown(GEMINI_COOLDOWN)
