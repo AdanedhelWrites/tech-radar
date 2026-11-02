@@ -389,3 +389,232 @@ class TekTavanTests(GeminiTestMixin, SimpleTestCase):
         post.assert_not_called()
         self.assertEqual(gemini.butce_kullanimi(), onceki,
                          'Sayac geri alinmaliydi (artir sonrasi azalt calismali)')
+
+
+KAYITLAR = {
+    'k0': ALANLAR,
+    'k1': {'title': 'Researchers disclose a critical bug in the router firmware',
+           'description': 'The vendor released a patch that fixes the memory corruption issue in the web interface.'},
+    'k2': {'title': 'Kubernetes 1.31 released'},
+}
+PAKET_CEVIRI = {
+    'k0': CEVIRI,
+    'k1': {'title': 'Araştırmacılar yönlendirici yazılımında kritik bir hata açıkladı',
+           'description': 'Üretici, web arayüzündeki bellek bozulması sorununu gideren bir yama yayımladı.'},
+    'k2': {'title': 'Kubernetes 1.31 yayımlandı'},
+}
+
+
+class GeminiPaketTests(GeminiTestMixin, SimpleTestCase):
+    """Spec 2026-11-02 G5: bir istekte birden cok kayit; dogrulama kayit basina."""
+
+    def _cevap(self, **degisiklik):
+        """PAKET_CEVIRI'nin kopyasi; deger None ise o kimlik yanittan cikar."""
+        govde = {kimlik: dict(alanlar) for kimlik, alanlar in PAKET_CEVIRI.items()}
+        for kimlik, deger in degisiklik.items():
+            if deger is None:
+                govde.pop(kimlik)
+            else:
+                govde[kimlik] = deger
+        return _yanit(govde=govde)
+
+    def test_sinir_degerleri(self):
+        self.assertEqual(gemini.GEMINI_BATCH_CHARS, 10000)
+        self.assertEqual(gemini.GEMINI_BATCH_MAX, 15)
+
+    def test_paket_tek_istekte_gider(self):
+        post = self._post(self._cevap())
+        gemini.paket_cevir(KAYITLAR, 'news')
+        self.assertEqual(post.call_count, 1)
+        self.assertEqual(gemini.butce_kullanimi(), 1)
+        govde = post.call_args.kwargs['json']
+        self.assertEqual(json.loads(govde['contents'][0]['parts'][0]['text']), KAYITLAR)
+        self.assertEqual(govde['generationConfig']['responseMimeType'], 'application/json')
+        sema = govde['generationConfig']['responseSchema']
+        self.assertEqual(sema['type'], 'OBJECT')
+        self.assertEqual(sema['required'], ['k0', 'k1', 'k2'])
+        self.assertEqual(sema['properties']['k0'], {
+            'type': 'OBJECT',
+            'properties': {'title': {'type': 'STRING'}, 'description': {'type': 'STRING'}},
+            'required': ['title', 'description']})
+        self.assertEqual(sema['properties']['k2']['required'], ['title'])
+
+    def test_paket_basarili_kayitlari_dondurur(self):
+        self._post(self._cevap())
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertEqual(sonuc.ceviriler, PAKET_CEVIRI)
+        self.assertEqual(sonuc.reddedilen, set())
+        self.assertFalse(sonuc.istek_hatasi)
+        self.assertFalse(sonuc.kesildi)
+
+    def test_bozuk_kayit_yalniz_kendini_dusurur(self):
+        self._post(self._cevap(k1=dict(KAYITLAR['k1'])))  # yanki
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertEqual(sonuc.reddedilen, {'k1'})
+        self.assertEqual(set(sonuc.ceviriler), {'k0', 'k2'})
+        self.assertEqual(sonuc.ceviriler['k0'], CEVIRI)
+
+    def test_eksik_kimlik_yalniz_o_kaydi_reddeder(self):
+        self._post(self._cevap(k2=None))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertEqual(sonuc.reddedilen, {'k2'})
+        self.assertEqual(set(sonuc.ceviriler), {'k0', 'k1'})
+
+    def test_alanlardan_biri_bozuksa_kayit_reddedilir(self):
+        self._post(self._cevap(k0={'title': CEVIRI['title'], 'description': ''}))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertEqual(sonuc.reddedilen, {'k0'})
+        self.assertEqual(set(sonuc.ceviriler), {'k1', 'k2'})
+
+    def test_eksik_alan_ya_da_nesne_olmayan_deger_reddedilir(self):
+        self._post(self._cevap(k0={'title': CEVIRI['title']}, k1='metin'))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertEqual(sonuc.reddedilen, {'k0', 'k1'})
+        self.assertEqual(set(sonuc.ceviriler), {'k2'})
+
+    def test_istenmeyen_alan_ve_kimlik_yok_sayilir(self):
+        fazla = dict(PAKET_CEVIRI['k2'], description='Fazladan alan')
+        govde = dict(PAKET_CEVIRI, k2=fazla, k9={'title': 'Uydurma kayıt'})
+        self._post(_yanit(govde=govde))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertEqual(sonuc.ceviriler, PAKET_CEVIRI)
+        self.assertEqual(sonuc.reddedilen, set())
+
+    def test_karisan_kimlik_alan_tutmazsa_yalniz_o_reddedilir(self):
+        # Model k2'nin cevirisini k0'a koyarsa k0'in description'i eksik kalir: yalniz k0 reddedilir.
+        # Not: alanlari ve uzunluklari tutan bir yer degisimi dogrulamadan gecer (oran sinirlari genis).
+        self._post(self._cevap(k0=PAKET_CEVIRI['k2']))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertEqual(sonuc.reddedilen, {'k0'})
+        self.assertEqual(set(sonuc.ceviriler), {'k1', 'k2'})
+
+    def test_max_tokens_kesildi_isaretler(self):
+        self._post(_yanit(metin='{"k0": {"title": "yar', finish='MAX_TOKENS'))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertTrue(sonuc.kesildi)
+        self.assertFalse(sonuc.istek_hatasi)
+        self.assertEqual(sonuc.ceviriler, {})
+        self.assertEqual(sonuc.reddedilen, set())
+        self.assertFalse(gemini._gate.cooldown_active())
+        self.assertEqual(gemini.butce_kullanimi(), 1)
+
+    def test_safety_tum_paketi_icerik_hatasi_sayar(self):
+        self._post(_yanit(govde=PAKET_CEVIRI, finish='SAFETY'))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertEqual(sonuc.reddedilen, set(KAYITLAR))
+        self.assertEqual(sonuc.ceviriler, {})
+        self.assertFalse(sonuc.istek_hatasi)
+        self.assertFalse(sonuc.kesildi)
+        self.assertFalse(gemini._gate.cooldown_active())
+
+    def test_bozuk_ya_da_nesne_olmayan_json_tum_paketi_reddeder(self):
+        for metin in ('{"k0": yarim', '["liste"]'):
+            with self.subTest(metin=metin):
+                self._post(_yanit(metin=metin))
+                sonuc = gemini.paket_cevir(KAYITLAR)
+                self.assertEqual(sonuc.reddedilen, set(KAYITLAR))
+                self.assertEqual(sonuc.ceviriler, {})
+                self.assertFalse(sonuc.istek_hatasi)
+                self.assertFalse(sonuc.kesildi)
+                self.assertFalse(gemini._gate.cooldown_active())
+
+    def test_429_istek_hatasi(self):
+        self._post(_yanit(durum=429, ham='{"error": {"status": "RESOURCE_EXHAUSTED"}}'))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertTrue(sonuc.istek_hatasi)
+        self.assertEqual(sonuc.reddedilen, set())
+        self.assertEqual(sonuc.ceviriler, {})
+        self.assertTrue(gemini._gate.cooldown_active())
+        self.assertEqual(gemini.butce_kullanimi(), 1)
+
+    def test_ag_hatasi_5xx_ve_beklenmeyen_hata_istek_hatasi(self):
+        for etki in (requests.Timeout('zaman asimi'), RuntimeError('beklenmeyen'), None):
+            with self.subTest(etki=etki):
+                gemini._gate = tu._LocalGate()
+                if etki is None:
+                    self._post(_yanit(durum=503))
+                else:
+                    self._post(side_effect=etki)
+                sonuc = gemini.paket_cevir(KAYITLAR)
+                self.assertTrue(sonuc.istek_hatasi)
+                self.assertEqual(sonuc.reddedilen, set())
+                self.assertTrue(gemini._gate.cooldown_active())
+
+    def test_sistemik_400_istek_hatasi_butce_geri_alinir(self):
+        self._post(_yanit(durum=400, ham=GECERSIZ_ANAHTAR_400))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertTrue(sonuc.istek_hatasi)
+        self.assertEqual(sonuc.reddedilen, set())
+        self.assertTrue(gemini._gate.cooldown_active())
+        self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_kayda_ozgu_400_istek_hatasi_devre_kesici_acmaz(self):
+        self._post(_yanit(durum=400, ham='{"error": {"status": "INVALID_ARGUMENT"}}'))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertTrue(sonuc.istek_hatasi)
+        self.assertEqual(sonuc.reddedilen, set())
+        self.assertFalse(gemini._gate.cooldown_active())
+        self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_hazir_degilse_istek_yok(self):
+        post = self._post(self._cevap())
+        gemini._gate.start_cooldown(60)
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertTrue(sonuc.istek_hatasi)
+        self.assertEqual(sonuc.ceviriler, {})
+        self.assertEqual(sonuc.reddedilen, set())
+        post.assert_not_called()
+        self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_tavana_dayaninca_istek_atmaz_ve_sayaci_geri_alir(self):
+        post = self._post(self._cevap())
+        for _ in range(gemini.butce_tavani()):
+            gemini._butce.artir(gemini.butce_anahtari())
+        with mock.patch.object(gemini, 'hazir', return_value=True):
+            sonuc = gemini.paket_cevir(KAYITLAR, 'news')
+        self.assertTrue(sonuc.istek_hatasi)
+        post.assert_not_called()
+        self.assertEqual(gemini.butce_kullanimi(), gemini.butce_tavani())
+
+    def test_aralik_kapisi_cagrilir(self):
+        self._post(self._cevap())
+        with mock.patch.object(gemini._gate, 'wait_for_slot') as beklet:
+            gemini.paket_cevir(KAYITLAR)
+        beklet.assert_called_once_with(gemini.GEMINI_MIN_INTERVAL)
+
+    def test_bos_girdi_istek_atmaz(self):
+        post = self._post(self._cevap())
+        sonuc = gemini.paket_cevir({})
+        self.assertEqual((sonuc.ceviriler, sonuc.reddedilen, sonuc.istek_hatasi, sonuc.kesildi),
+                         ({}, set(), False, False))
+        post.assert_not_called()
+
+    def test_bos_alanlar_ve_bos_kayit_istege_girmez(self):
+        post = self._post(_yanit(govde={'k0': {'title': CEVIRI['title']}}))
+        sonuc = gemini.paket_cevir({'k0': {'title': ALANLAR['title'], 'description': ' '},
+                                    'k1': {'title': '', 'description': None}})
+        gonderilen = json.loads(post.call_args.kwargs['json']['contents'][0]['parts'][0]['text'])
+        self.assertEqual(gonderilen, {'k0': {'title': ALANLAR['title']}})
+        self.assertEqual(sonuc.ceviriler, {'k0': {'title': CEVIRI['title']}})
+        self.assertEqual(sonuc.reddedilen, {'k1'})
+
+    def test_hepsi_bos_kayitsa_istek_yok(self):
+        post = self._post(self._cevap())
+        sonuc = gemini.paket_cevir({'k0': {'title': ' '}})
+        post.assert_not_called()
+        self.assertFalse(sonuc.istek_hatasi)
+        self.assertEqual(sonuc.reddedilen, {'k0'})
+        self.assertEqual(gemini.butce_kullanimi(), 0)
+
+    def test_talimat_paket_kuralini_icerir(self):
+        kural = ("- Girdi, kimlik anahtarlı kayıtlardan oluşan bir JSON nesnesidir; her kaydı ayrı çevir, "
+                 "aynı kimlik ve alan anahtarlarıyla döndür. Kayıtları birleştirme, sırasını ya da kimliğini "
+                 "değiştirme.")
+        post = self._post(self._cevap())
+        gemini.paket_cevir(KAYITLAR)
+        talimat = post.call_args.kwargs['json']['systemInstruction']['parts'][0]['text']
+        self.assertIn(kural, talimat)
+        self.assertIn('Türkçe karakter', talimat)
+        self.assertTrue(talimat.endswith('- Yalnızca JSON döndür.'))
+        # Tek kayit yolunun talimati degismez: onun girdisi kimlik anahtarli degil
+        self.assertNotIn(kural, gemini.SISTEM_TALIMATI)
