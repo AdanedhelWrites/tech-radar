@@ -153,6 +153,9 @@ def tur_bitti(sender=None, task_id=None, retval=None, state=None, **kwargs):
             # Tekil kilit yuzunden atlanan tur (retranslate_pending_task -> {'skipped': 'locked'}):
             # is yapilmadi. 'success' + saved_count 0 satiri ceviri_kuyrugu_ozeti'ni yaniltirdi
             # (ust uste atlanan turlar "takili" sayilirdi), bu yuzden satir hic birakilmaz.
+            # Bilinen sinir: atlanan turun task_prerun'u (tur_basladi), kilidi tutan calisan turun
+            # 'running' satirini interrupted/failure yapmis olabilir; o tur bitince postrun
+            # (_kapat, pk ile) satiri gercek sonucuyla ustune yazar. Arada gecici yanlis gorunum olur.
             kayit_id = _acik_turlar.pop(task_id, None)
             if kayit_id is not None:
                 FetchRun.objects.filter(pk=kayit_id).delete()

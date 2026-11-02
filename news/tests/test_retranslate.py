@@ -18,7 +18,7 @@ from news import gemini
 from news import translation_providers as tp
 from news import translation_utils as tu
 from news.models import AINewsEntry, CVEEntry, KubernetesEntry, NewsArticle
-from news.tests.base import LOCMEM_CACHE, test_redis_client
+from news.tests.base import LOCMEM_CACHE, RetranslateKilitMixin, test_redis_client
 from news.tests.test_translation import FakeTranslator, TranslationGateMixin
 from news.tests.saglayici_yardimcilari import SahteSaglayici, SaglayiciZinciriMixin
 
@@ -383,7 +383,8 @@ class RetranslateSaglayiciTests(SaglayiciZinciriMixin, RetranslateTestBase):
         self.assertEqual(kayit.turkish_title, 'Çiftçiler yeni sensörler benimsiyor')
 
 
-class RetranslateGoreviTests(SimpleTestCase):
+class RetranslateGoreviTests(RetranslateKilitMixin, SimpleTestCase):
+    """Kilit izolasyonu mixin'den gelir: canli retranslate:kilit anahtarina dokunulmaz."""
 
     def test_gorev_retranslate_pending_cagirir(self):
         from news import tasks
@@ -394,20 +395,9 @@ class RetranslateGoreviTests(SimpleTestCase):
 
     # --- Tekil calisma kilidi (spec 2026-11-02 G4): saatlik turlar ust uste binmemeli ---
 
-    def _kilit_ortami(self):
-        """Test Redis'i + benzersiz kilit anahtari; canli anahtara dokunulmaz."""
-        from news import tasks
-        redis_client = test_redis_client()
-        anahtar = f'test-retranslate-kilit-{uuid.uuid4().hex}:kilit'
-        self.addCleanup(redis_client.delete, anahtar)
-        for yama in (mock.patch.object(tasks, 'RETRANSLATE_KILIT_ANAHTARI', anahtar),
-                     mock.patch('news.retranslate._canli_redis', return_value=redis_client)):
-            yama.start()
-            self.addCleanup(yama.stop)
-        return tasks, redis_client, anahtar
-
     def test_kilit_tutuluyken_ikinci_tur_atlar(self):
-        tasks, redis_client, anahtar = self._kilit_ortami()
+        from news import tasks
+        redis_client, anahtar = self.kilit_redis, self.kilit_anahtari
         redis_client.set(anahtar, 'baska-turun-jetonu', ex=300)
         with mock.patch('news.retranslate.retranslate_pending') as sahte:
             sonuc = tasks.retranslate_pending_task()
@@ -418,7 +408,8 @@ class RetranslateGoreviTests(SimpleTestCase):
 
     def test_tur_calisirken_kilit_tutulur_ve_omru_vardir(self):
         from news.retranslate import RETRANSLATE_TIME_BUDGET
-        tasks, redis_client, anahtar = self._kilit_ortami()
+        from news import tasks
+        redis_client, anahtar = self.kilit_redis, self.kilit_anahtari
         gorulen = {}
 
         def sahte_tur():
@@ -433,13 +424,15 @@ class RetranslateGoreviTests(SimpleTestCase):
         self.assertLessEqual(gorulen['ttl'], RETRANSLATE_TIME_BUDGET + 600)
 
     def test_tur_bitince_kilit_birakilir(self):
-        tasks, redis_client, anahtar = self._kilit_ortami()
+        from news import tasks
+        redis_client, anahtar = self.kilit_redis, self.kilit_anahtari
         with mock.patch('news.retranslate.retranslate_pending', return_value={'translated': 2}):
             self.assertEqual(tasks.retranslate_pending_task(), {'translated': 2})
         self.assertFalse(redis_client.exists(anahtar))
 
     def test_tur_istisnayla_bitse_de_kilit_birakilir(self):
-        tasks, redis_client, anahtar = self._kilit_ortami()
+        from news import tasks
+        redis_client, anahtar = self.kilit_redis, self.kilit_anahtari
         with mock.patch('news.retranslate.retranslate_pending', side_effect=RuntimeError('patladi')):
             with self.assertRaises(RuntimeError):
                 tasks.retranslate_pending_task()
@@ -447,7 +440,8 @@ class RetranslateGoreviTests(SimpleTestCase):
 
     def test_sure_asiminda_baskasinin_kilidi_silinmez(self):
         """Kilit TTL ile dusup baska tur yeni kilit aldiysa, eski tur bitince onu silmemeli."""
-        tasks, redis_client, anahtar = self._kilit_ortami()
+        from news import tasks
+        redis_client, anahtar = self.kilit_redis, self.kilit_anahtari
 
         def sahte_tur():
             redis_client.set(anahtar, 'yeni-turun-jetonu', ex=300)

@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from news.models import FetchRun
+from news.tests.base import RetranslateKilitMixin
 
 
 class FetchRunModelTests(TestCase):
@@ -324,7 +325,7 @@ class SinyalTests(TestCase):
         self.assertFalse(FetchRun.objects.filter(pk=eski.pk).exists())
 
 
-class DonusSozlesmesiTests(TestCase):
+class DonusSozlesmesiTests(RetranslateKilitMixin, TestCase):
     """Alti fetch task'i sinyalin ihtiyac duydugu sayaclari dondurmeli."""
 
     def test_cve_task_fetched_count_dondurur(self):
