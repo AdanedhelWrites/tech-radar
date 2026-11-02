@@ -2,7 +2,7 @@ import toast from 'react-hot-toast';
 import { useState, useEffect } from 'react'
 import { Alert } from 'react-bootstrap'
 import useAraliklaYenile from '../hooks/useAraliklaYenile'
-import { kacis, guvenliHref } from '../utils/html'
+import { kacis, kacisliParagraf, guvenliHref } from '../utils/html'
 import BolumSayfasi, { BolumCubugu } from './bolum/BolumSayfasi'
 import { FaCalendarWeek, FaInfoCircle, FaBell, FaGoogle, FaCode } from 'react-icons/fa'
 import { sreApi, istekHataMesaji } from '../services/api'
@@ -145,7 +145,7 @@ function SREComponent() {
 <h1>SRE Haberleri Raporu</h1>
 <p class="meta">${date} tarihinde oluşturuldu &mdash; ${items.length} haber</p>
 ${items.map(item => {
-          const content = (item.turkish_description || item.original_description || '').replace(/\n/g, '<br>')
+          const content = kacisliParagraf(item.turkish_description || item.original_description || '')
           return `<div class="article">
   <span class="source">${kacis(item.source || '')}</span><span class="date">${kacis(item.published_date || '')}</span>
   <h3>${kacis(item.turkish_title || item.original_title || '')}</h3>
