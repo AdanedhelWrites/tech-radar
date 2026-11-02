@@ -6,6 +6,18 @@ dizinindeki her degisiklik `Chart.yaml` `version`'ini artirir ve buraya `## [sur
 basligi ekler; CI (`scripts/chart_surum_kontrol.sh`) bunu zorlar. `appVersion`
 uygulama imajinin etiketidir (CalVer `YYYY.M.N`).
 
+## [3.0.0] - 2026-11-02 — appVersion 2026.10.3
+
+Geriye uyumsuz values degisikligi: CVE Gemini rezervi uygulamadan kalkti
+(spec `docs/superpowers/specs/2026-11-02-ceviri-yayma-design.md` G3; oncelik artik `BOLUMLER` sirasidir).
+
+### Yukseltme notu (2.2.1 -> 3.0.0)
+- `config.app.geminiCveReserve` kalkti; ConfigMap'te `GEMINI_CVE_RESERVE` uretilmez. Override eden kurulumda deger
+  yok sayilir (uygulama okumaz).
+
+### Degisenler
+- `config.app.geminiDailyBudget` varsayilani `"400"` -> `"450"` (kod varsayilaniyla ayni; ucretsiz katman 500 RPD).
+
 ## [2.2.1] - 2026-10-14 — appVersion 2026.10.3
 
 Yalniz `appVersion` yukseltmesi; sablon ve values degismedi (render farki yalniz imaj etiketi ve `helm.sh/chart`).

@@ -9,12 +9,18 @@ kayit sirada kalir ama imlec onu gecer; sona gelinince imlec silinir. Gorev
 yalnizca HICBIR saglayici (Gemini dahil) hazir degilse durur; imlec o kaydi gecmez.
 
 Asama 2 — Yukseltme (needs_translation=False, translation_provider='libretranslate'),
-yalnizca Gemini ile. Gemini tum alanlari dogrulamadan gecirdiyse yazilir (hepsi ya
-da hicbiri, gemini.kaydi_cevir icinde); aksi halde LibreTranslate cevirisi yerinde
-kalir ve imlec ilerler. Gemini hazir degilse (anahtar yok / devre kesici / gunluk
-butce) asama baslamaz; butce asama ortasinda biterse imlec ilerletilmeden durur.
-Kendi imleci vardir ({prefix}:upgrade-cursor:{bolum}). Eski 'google' etiketli kayitlar yukseltilmez.
+yalnizca Gemini ile (spec 2026-11-02-ceviri-yayma G1-G2, G5 deneme sayaci). Imlec
+yoktur: her tur en yeni adaylardan baslar (created_at azalan). Gemini tum alanlari
+dogrulamadan gecirdiyse yazilir (hepsi ya da hicbiri, gemini.kaydi_cevir icinde);
+Gemini hazirken reddederse (dogrulama, cok uzun kayit, k8s isaret kaybi) icerik
+hatasidir ve translation_attempts artar, RETRANSLATE_MAX_ATTEMPTS'a ulasan kayit
+aday olmaktan cikar. Gemini hazir degilse (anahtar yok / devre kesici / gunluk
+butce) asama baslamaz ya da durur; sayac artmaz, kalanlar sonraki tura kalir.
+Eski 'google' etiketli kayitlar yukseltilmez.
 `stopped_reason='gemini_budget'` iken `stopped` False olabilir: LibreTranslate zinciri surer.
+
+Onem sinifi (G1): CVE'lerde yalniz CVSS >= CVE_GEMINI_ESIGI ya da KEV'deki kayitlar
+Gemini adayidir, iki asamada da; digerleri LibreTranslate cevirisiyle kalir.
 
 Yazma kurallari:
   - Basarisiz denemede kayda yazilmaz: updated_at ilerlemez.
@@ -27,7 +33,7 @@ from typing import Dict, Optional
 
 from django.conf import settings
 from django.db import DatabaseError, OperationalError
-from django.db.models import F
+from django.db.models import F, Q
 
 from . import gemini
 from . import translation_utils as tu
@@ -49,6 +55,9 @@ RETRANSLATE_UPGRADE_BATCH = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH', '40'
 # translation_given_up ile sayar. 2026-10-08: ayni ~23 kayit her 2 saatte Gemini
 # kotasi yiyerek yeniden reddediliyordu (turda 23-39 "hata", bekleyen toplam 23).
 RETRANSLATE_MAX_ATTEMPTS = int(os.environ.get('RETRANSLATE_MAX_ATTEMPTS', '5'))
+# Spec 2026-11-02 G1 (kullanicinin karari): orta/dusuk CVE'ye Gemini kotasi harcanmaz.
+# Esik ya da KEV kaydi aday yapar; skoru sonradan gelen kayit sonraki turda kendiliginden aday olur.
+CVE_GEMINI_ESIGI = 7.0
 # Tur sure butcesi (sn). 2026-10-21: SoftTimeLimitExceeded siradan bir Exception'dir; ceviri
 # katmanindaki genis except'ler onu yutuyor, tur sert sinirda (1800 sn) olduruluyordu. Tur her
 # kayittan once butceye bakar; yumusak sinirdan once temiz biter, imlec yerinde kalir. Pay, tek
@@ -121,10 +130,19 @@ def _gemini_alanlari(ad: str, kayit) -> Dict[str, str]:
     return alanlar
 
 
+def _gemini_adayi_mi(ad: str, kayit) -> bool:
+    """Onem sinifi (G1): CVE icin CVSS >= esik ya da KEV; diger bolumlerde her kayit."""
+    if ad != 'cve':
+        return True
+    return (kayit.cvss_score or 0) >= CVE_GEMINI_ESIGI or kayit.kev_added_date is not None
+
+
 def _gemini_ile_cevir(ad: str, kayit) -> Optional[Dict[str, str]]:
     """Kaydi Gemini ile cevirir; DB alan adlariyla sozluk ya da None (aday degil / hazir degil / cevrilemedi)."""
+    if not _gemini_adayi_mi(ad, kayit):
+        return None  # onem sinifi disi: istek atilmaz
     alanlar = _gemini_alanlari(ad, kayit)
-    if not alanlar or not gemini.hazir(ad):
+    if not alanlar or not gemini.hazir():
         return None
     sonuc = gemini.kaydi_cevir(alanlar, ad)
     if sonuc is None:
@@ -137,15 +155,15 @@ def _gemini_ile_cevir(ad: str, kayit) -> Optional[Dict[str, str]]:
     return {_GEMINI_DB_ALANI[alan]: metin for alan, metin in sonuc.items()}
 
 
-# ADR-0005: cve basta. Tuketicinin asil cektigi bolum oldugu icin tur basina
-# butceye ilk o erisir; ayrica gemini.butce_tavani onu rezerve ile korur.
+# Spec 2026-11-02 G3 (kullanicinin karari): Gemini butcesine bu sirayla erisilir; CVE rezervi
+# yoktur, oncelik yalniz siradir. Sira butce dar oldugunda belirleyicidir.
 BOLUMLER = (
     ('cve', CVEEntry, _cve),
     ('news', NewsArticle, _baslik_ve_uzun_aciklama),
-    ('kubernetes', KubernetesEntry, _kubernetes),
+    ('ai', AINewsEntry, _baslik_ve_uzun_aciklama),
     ('sre', SREEntry, _baslik_ve_uzun_aciklama),
     ('devtools', DevToolsEntry, _baslik_ve_uzun_aciklama),
-    ('ai', AINewsEntry, _baslik_ve_uzun_aciklama),
+    ('kubernetes', KubernetesEntry, _kubernetes),
 )
 
 
@@ -213,7 +231,7 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc, bitis=Non
         if _sure_doldu(bitis):
             durdu = True  # imlec ilerlemez: sonraki tur bu kayittan baslar
             break
-        if not (tu.herhangi_saglayici_hazir() or gemini.hazir(ad)):
+        if not (tu.herhangi_saglayici_hazir() or gemini.hazir()):
             durdu = True
             break
         deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
@@ -227,8 +245,9 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc, bitis=Non
             continue
 
         if gemini_alanlar is None and not tu.herhangi_saglayici_hazir():
-            if gemini.hazir(ad) and _gemini_alanlari(ad, kayit):
-                # Gemini hazirdi ama icerigi reddetti; zincir kapali: icerik hatasi say, imlec gecsin
+            if gemini.hazir() and _gemini_adayi_mi(ad, kayit) and _gemini_alanlari(ad, kayit):
+                # Gemini hazirdi ama icerigi reddetti; zincir kapali: icerik hatasi say, imlec gecsin.
+                # Aday olmayan kayit (orta CVE) icin hicbir saglayici yoktur: asagida durulur.
                 basarisiz += 1
                 _basarisiz_say(kayit)
                 redis_client.set(anahtar, deneme_oncesi)
@@ -263,41 +282,46 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc, bitis=Non
     return cevrilen, basarisiz, durdu
 
 
-def _yukselt(ad, model, redis_client, prefix, sinir, sonuc, bitis=None):
-    """Asama 2. Yalnizca Gemini. Donus: yukseltilen kayit sayisi."""
-    if not gemini.hazir(ad):
-        if not gemini.butce_var(ad):
-            sonuc['stopped_reason'] = 'gemini_budget'
+def _yukseltme_adaylari(ad, model, sinir) -> list:
+    """En yeni yukseltme adaylari (G2). Sorgu guncel skora bakar: NVD skoru sonradan
+    esigi gecen CVE sonraki turda kendiliginden aday olur."""
+    sorgu = model.objects.filter(needs_translation=False, translation_provider='libretranslate',
+                                 translation_attempts__lt=RETRANSLATE_MAX_ATTEMPTS)
+    if ad == 'cve':
+        sorgu = sorgu.filter(Q(cvss_score__gte=CVE_GEMINI_ESIGI) | Q(kev_added_date__isnull=False))
+    return list(sorgu.order_by('-created_at', '-id')[:sinir])
+
+
+def _gemini_durdu(sonuc) -> None:
+    if not gemini.butce_var():
+        sonuc['stopped_reason'] = 'gemini_budget'
+
+
+def _yukselt(ad, model, sinir, sonuc, bitis=None):
+    """Asama 2. Yalnizca Gemini, imlecsiz. Donus: yukseltilen kayit sayisi."""
+    if not gemini.hazir():
+        _gemini_durdu(sonuc)
         return 0
-    anahtar = f'{prefix}:upgrade-cursor:{ad}'
-    sorgu = (model.objects.filter(needs_translation=False, translation_provider='libretranslate')
-             .order_by('updated_at', 'id'))
-    kayitlar = _imlecten_sonraki(redis_client, anahtar, sorgu, sinir)
 
     yukseltilen = 0
-    durdu = False
-    for kayit in kayitlar:
+    for kayit in _yukseltme_adaylari(ad, model, sinir):
         if _sure_doldu(bitis):
-            durdu = True
             break
-        if not gemini.hazir(ad):
-            durdu = True  # butce/devre kesici asama ortasinda; imleci ilerletme
-            if not gemini.butce_var(ad):
-                sonuc['stopped_reason'] = 'gemini_budget'
+        if not gemini.hazir():
+            _gemini_durdu(sonuc)  # butce/devre kesici asama ortasinda: kalanlar sonraki tura
             break
-        deneme_oncesi = encode_cursor(kayit.updated_at, kayit.id)
         alanlar = _gemini_ile_cevir(ad, kayit)
-        if alanlar is None and not gemini.hazir(ad):
-            durdu = True  # transport hatasi devre kesiciyi acti: bu kayit sonraki turda once denensin
-            if not gemini.butce_var(ad):
-                sonuc['stopped_reason'] = 'gemini_budget'
-            break
-        if alanlar is not None and _yaz(kayit, alanlar, 'gemini'):
+        if alanlar is None:
+            if not gemini.hazir():
+                # Istek duzeyi hata (429/5xx/ag) ya da butce: kaydin sucu degil, sayac artmaz
+                _gemini_durdu(sonuc)
+                break
+            # Gemini hazirken reddetti (dogrulama / cok uzun / k8s isaret kaybi): icerik hatasi.
+            # Sayilmazsa "en yeni N aday" sorgusu ayni kaydi her tur yeniden dener (G5).
+            _basarisiz_say(kayit)
+            continue
+        if _yaz(kayit, alanlar, 'gemini'):
             yukseltilen += 1
-        redis_client.set(anahtar, deneme_oncesi)
-
-    if not durdu and len(kayitlar) < sinir:
-        redis_client.delete(anahtar)
     return yukseltilen
 
 
@@ -322,7 +346,7 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
             break
 
         cevrilen, basarisiz, durdu = _bekleyenler(ad, model, cevir, redis_client, prefix, batch, sonuc, bitis)
-        yukseltilen = 0 if durdu else _yukselt(ad, model, redis_client, prefix, upgrade_batch, sonuc, bitis)
+        yukseltilen = 0 if durdu else _yukselt(ad, model, upgrade_batch, sonuc, bitis)
 
         if cevrilen or yukseltilen:
             cache_yenile(ad)

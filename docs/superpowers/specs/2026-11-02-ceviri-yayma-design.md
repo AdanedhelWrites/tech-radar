@@ -52,8 +52,8 @@ Sorun kapasiteden çok **dağıtım ve sıra**:
 ### G2. Yeni kayıt önce
 
 Yükseltme (Libre → Gemini) **en yeni kayıttan başlar** (`created_at` azalan). Kullanıcı yeni gelene bakar;
-eski Libre birikimi bütçe kaldıkça geriye doğru erir. Bekleyen (`needs_translation=True`) aşaması da aynı
-kuralla yeniden eskiye gider.
+eski Libre birikimi bütçe kaldıkça geriye doğru erir. Bekleyen (`needs_translation=True`) aşaması bugünkü
+imleç sırasını korur (bekleyen kayıt nadirdir, sıra etkisizdir).
 
 ### G3. Bölümler arası öncelik sırası (kullanıcının kararı: "öncelikli CVE'ler, ondan sonra devam et")
 

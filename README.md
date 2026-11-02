@@ -731,7 +731,7 @@ Ceviri sonrasi otomatik duzeltmeler:
 
 ### 5. Retranslate ve Gemini Yukseltme
 
-`retranslate_pending` Celery Beat gorevi her 2 saatte bir (tek saatlerde, dakika 05) calisir ve iki isi yapar: bekleyen (`needs_translation=True`) kayitlari LibreTranslate ile cevirir, ardindan `translation_provider='libretranslate'` kayitlari Gemini API (`gemini-3.5-flash-lite`) ile kayit basina tek istekte yukseltir. Yukseltme bolum basina `RETRANSLATE_UPGRADE_BATCH` kayitla sinirlidir. Eski `google` etiketli kayitlar yukseltilmez, etiketli kalir.
+`retranslate_pending` Celery Beat gorevi her 2 saatte bir (tek saatlerde, dakika 05) calisir ve iki isi yapar: bekleyen (`needs_translation=True`) kayitlari LibreTranslate ile cevirir, ardindan `translation_provider='libretranslate'` kayitlari Gemini API (`gemini-3.5-flash-lite`) ile kayit basina tek istekte yukseltir. Yukseltme bolum basina `RETRANSLATE_UPGRADE_BATCH` kayitla sinirlidir ve her turda en yeni kayittan baslar. Bolum sirasi Gemini butcesine erisim sirasidir: CVE, haber, AI, SRE, DevTools, Kubernetes. CVE'lerde yalniz CVSS >= 7.0 ya da CISA KEV'deki kayitlar Gemini'ye gider; digerleri LibreTranslate cevirisiyle kalir. Gemini'nin hazirken reddettigi yukseltme `translation_attempts`'i artirir, `RETRANSLATE_MAX_ATTEMPTS`'a ulasan kayit yukseltme adayi olmaktan cikar. Eski `google` etiketli kayitlar yukseltilmez, etiketli kalir.
 
 **Anahtar alma:** Google AI Studio (aistudio.google.com) → Get API key → Create API key; `cybersecurity_news/.env` icine `GEMINI_API_KEY=...` (gitignore'da). Kart gerekmez; kota asilirsa 429 doner, sistem LibreTranslate ile surer.
 
@@ -1006,12 +1006,11 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `LOG_LEVEL` | `INFO` | Uygulama loglarinin seviyesi (`DEBUG` cekim ayraclarini da gosterir); Django/Celery kendi gurultusu `WARNING`'de kalir |
 | `LOG_FORMAT` | `text` | `text`: `2026-10-08 17:05:32 WARNING news.devtools_scraper: [GitLab] Atom hatasi: ...`; `json`: satir basina bir JSON nesnesi (`ts`, `level`, `logger`, `msg`, `exc`) — Loki/ELK icin ([`cybernews/loglama.py`](cybernews/loglama.py)) |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model |
-| `GEMINI_DAILY_BUDGET` | `400` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD) |
+| `GEMINI_DAILY_BUDGET` | `450` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD). Tum bolumler paylasir; oncelik sirasi CVE (yalniz CVSS >= 7 ya da KEV), haber, AI, SRE, DevTools, Kubernetes |
 | `GEMINI_MIN_INTERVAL` | `5` | Istekler arasi saniye (15 RPM'in altinda) |
 | `GEMINI_COOLDOWN` | `600` | 429/5xx sonrasi bekleme (sn) |
 | `GEMINI_TIMEOUT` | `60` | Istek zaman asimi (sn) |
 | `GEMINI_MAX_CHARS` | `12000` | Bu uzunlugun ustundeki kayit Gemini'ye gitmez |
-| `GEMINI_CVE_RESERVE` | `0.5` | Gunluk Gemini butcesinin CVE'ye ayrilan payi; CVE tavani 400, diger bolumler 200 ([ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md)) |
 | `RETRANSLATE_BATCH` | `100` | Retranslate turunda bolum basina taranan bekleyen kayit sayisi |
 | `RETRANSLATE_UPGRADE_BATCH` | `40` | Tur ve bolum basina yukseltme siniri |
 | `RETRANSLATE_MAX_ATTEMPTS` | `5` | Bir kaydin icerik hatasiyla (saglayici reddetti / dogrulama gecmedi) kac kez denenecegi; esige ulasan kayit kuyruktan duser (`needs_translation` kalir) ve `/api/v1/status/` `translation_given_up` ile sayilir. Basarili cevirinin sayaci sifirlar. Sayaci elle sifirlamak (admin ya da shell) kaydi yeniden kuyruga alir |
@@ -1038,7 +1037,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 
 ## Bilinen Kisitlamalar
 
-- LibreTranslate cevirileri Gemini'ye gore daha dusuk kalitede olabilir (ozel ad/guvenlik terimi hatalari otomatik dogrulamayla yakalanmaz); rozetten ayirt edilir, `retranslate_pending` Gemini ile yukseltene kadar boyle kalir. Gemini gunluk butcesi (`GEMINI_DAILY_BUDGET`, varsayilan 400) asilirsa yukseltme bir sonraki gune kalir (bkz. [Hiz Siniri ve Devre Kesici](#4-hiz-siniri-ve-devre-kesici))
+- LibreTranslate cevirileri Gemini'ye gore daha dusuk kalitede olabilir (ozel ad/guvenlik terimi hatalari otomatik dogrulamayla yakalanmaz); rozetten ayirt edilir, `retranslate_pending` Gemini ile yukseltene kadar boyle kalir. Gemini gunluk butcesi (`GEMINI_DAILY_BUDGET`, varsayilan 450) asilirsa yukseltme bir sonraki gune kalir (bkz. [Hiz Siniri ve Devre Kesici](#4-hiz-siniri-ve-devre-kesici))
 - Dark Reading HTML scraping'e 403 doner, bu yuzden RSS feed kullanilir
 - Gunicorn timeout 300 saniye — cok fazla kaynak secilirse zaman asimi olabilir
 - Her fetch'te toplam makale sayisi **30 ile sinirlidir** (Gunicorn timeout'undan kacinmak icin)

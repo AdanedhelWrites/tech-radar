@@ -28,18 +28,12 @@ PASIFIK = ZoneInfo('America/Los_Angeles')  # Google RPD kotasi bu saat diliminde
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-3.5-flash-lite')
 GEMINI_TIMEOUT = float(os.environ.get('GEMINI_TIMEOUT', '60'))
 GEMINI_MIN_INTERVAL = float(os.environ.get('GEMINI_MIN_INTERVAL', '5'))   # 15 RPM'in altinda kal
-GEMINI_DAILY_BUDGET = int(os.environ.get('GEMINI_DAILY_BUDGET', '400'))   # 500 RPD'nin altinda kal
+# 500 RPD'nin altinda kal (50 guvenlik payi). Tum bolumler tek tavani paylasir: CVE rezervi
+# (ADR-0005) 2026-11-02'de kalkti; oncelik retranslate.BOLUMLER sirasiyla verilir.
+GEMINI_DAILY_BUDGET = int(os.environ.get('GEMINI_DAILY_BUDGET', '450'))
 GEMINI_COOLDOWN = int(os.environ.get('GEMINI_COOLDOWN', '600'))
 # Daha buyuk kayit 60 sn'de bitmiyor ve devre kesiciyi aciyor; LibreTranslate yolunda kalir
 GEMINI_MAX_CHARS = int(os.environ.get('GEMINI_MAX_CHARS', '12000'))
-# ADR-0005: CVE oncelikli bolumdur (tuketicinin asil cektigi veri). Butce
-# darlastiginda CVE ac kalmasin diye gunluk butcenin bir payi ona ayrilir:
-# CVE tum butceye erisir, diger bolumler yalnizca rezerve disi kisma.
-# Sinir disi deger butce korumasini bozar: negatifse diger bolumlerin tavani
-# GEMINI_DAILY_BUDGET'i asar, 1'den buyukse tavan negatife duser ve o bolumler
-# sessizce devre disi kalir; bu yuzden 0..1 araligina sabitleniyor.
-GEMINI_CVE_RESERVE = min(max(float(os.environ.get('GEMINI_CVE_RESERVE', '0.5')), 0.0), 1.0)
-ONCELIKLI_BOLUM = 'cve'
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 MAX_RATIO = 3.0
 ECHO_MIN_WORDS = 4
@@ -157,27 +151,19 @@ def butce_kullanimi() -> int:
     return _get_butce().oku(butce_anahtari())
 
 
-def butce_tavani(bolum: Optional[str] = None) -> int:
-    """Bolumun kullanabilecegi gunluk istek tavani.
-
-    Sayac paylasilir; oncelikli bolum tum butceye erisir, digerleri rezerve
-    disi kisimla sinirlidir. Boylece oncelikli bolume en az
-    GEMINI_DAILY_BUDGET * GEMINI_CVE_RESERVE kadar cagri garanti edilir.
-    Bolum verilmediyse guvenli taraf secilir (rezerve korunur).
-    """
-    if bolum == ONCELIKLI_BOLUM:
-        return GEMINI_DAILY_BUDGET
-    return int(GEMINI_DAILY_BUDGET * (1 - GEMINI_CVE_RESERVE))
+def butce_tavani() -> int:
+    """Gunluk istek tavani; sayac tum bolumler ve worker'lar arasinda paylasilir."""
+    return GEMINI_DAILY_BUDGET
 
 
-def butce_var(bolum: Optional[str] = None) -> bool:
-    return butce_kullanimi() < butce_tavani(bolum)
+def butce_var() -> bool:
+    return butce_kullanimi() < butce_tavani()
 
 
-def hazir(bolum: Optional[str] = None) -> bool:
-    """Anahtar dolu, devre kesici kapali ve bolumun butcesi var mi. Redis erisilemezse False."""
+def hazir() -> bool:
+    """Anahtar dolu, devre kesici kapali ve gunluk butce var mi. Redis erisilemezse False."""
     try:
-        return bool(_anahtar()) and not _get_gate().cooldown_active() and butce_var(bolum)
+        return bool(_anahtar()) and not _get_gate().cooldown_active() and butce_var()
     except Exception:
         return False
 
@@ -243,16 +229,18 @@ def _yaniti_coz(yanit) -> Optional[dict]:
 
 
 def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optional[Dict[str, str]]:
-    """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi)."""
+    """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi).
+
+    bolum yalniz log metni icindir; tavan tum bolumler icin aynidir."""
     alanlar = {ad: metin for ad, metin in alanlar.items() if isinstance(metin, str) and metin.strip()}
-    if not alanlar or not hazir(bolum):
+    if not alanlar or not hazir():
         return None
 
     butce, anahtar = _get_butce(), butce_anahtari()
-    if butce.artir(anahtar) > butce_tavani(bolum):
+    if butce.artir(anahtar) > butce_tavani():
         butce.azalt(anahtar)
-        log.warning(f"  [Gemini] {bolum or 'genel'} bolumu gunluk butce payini doldurdu "
-              f"({butce_tavani(bolum)}/{GEMINI_DAILY_BUDGET}).")
+        log.warning(f"  [Gemini] gunluk butce doldu ({butce_tavani()}); "
+                    f"{bolum or 'genel'} kaydi cevrilmedi.")
         return None
 
     _get_gate().wait_for_slot(GEMINI_MIN_INTERVAL)
