@@ -1,6 +1,6 @@
 # Çeviri Kapasitesi: Gemini'yi Tam ve Doğru Yaymak — Tasarım
 
-> Tarih: 2026-11-02. Kaynak: brainstorming oturumu (UI turu sonrası). Durum: PR-A uygulandi (dal feat/ceviri-yayma-a); PR-B ve PR-C bekliyor.
+> Tarih: 2026-11-02. Kaynak: brainstorming oturumu (UI turu sonrası). Durum: PR-A ve PR-B uygulandi (dallar feat/ceviri-yayma-a, feat/ceviri-yayma-b); PR-C bekliyor.
 > Önceki tasarımlar: `2026-09-14-ceviri-saglayici-zinciri`, `2026-09-15-gemini-yukseltme-design.md`,
 > `2026-09-17-cve-saklama-ve-gemini-onceligi` (ADR-0005, CVE rezervi). Bu tasarım ADR-0005'teki CVE rezervinin
 > yerine önem sınıfına dayalı bir öncelik koyar.

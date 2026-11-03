@@ -9,7 +9,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Uygulama surumu** | `appVersion` 2026.10.3 (CalVer; imaj etiketi) |
 | **Helm chart** | 2.2.1 (SemVer; etiket `chart-2.2.1`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 648 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 174 Vitest testi, 19 dosya (`frontend/src/`) |
+| **Testler** | 699 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 174 Vitest testi, 19 dosya (`frontend/src/`) |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -300,7 +300,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-648 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+699 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -590,7 +590,7 @@ cybersecurity_news/
 │   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
 │   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
-│   ├── tests/                  # 648 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
+│   ├── tests/                  # 699 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
 │   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
 │   ├── cve_scraper.py          # 5 CVE kaynagi scraper'i
@@ -710,7 +710,7 @@ Terimler uzunluktan kisaya siralanarak islenir — kisa terimlerin kelime icinde
 
 ### 2. Parca Tabanli Ceviri
 
-Uzun metinler cumle sinirlarindan 4500 karakterlik parcalara bolunur (saglayici istek boyutu sinirlarini asmamak icin). Her parca icin ayri terim koruma uygulanir. LibreTranslate bu parcalari kendi icinde ayrica 160 karakterlik alt parcalara boler (`LIBRETRANSLATE_CHUNK_CHARS`); Gemini yukseltmesi kayit basina tek istekte calisir.
+Uzun metinler cumle sinirlarindan 4500 karakterlik parcalara bolunur (saglayici istek boyutu sinirlarini asmamak icin). Her parca icin ayri terim koruma uygulanir. LibreTranslate bu parcalari kendi icinde ayrica 160 karakterlik alt parcalara boler (`LIBRETRANSLATE_CHUNK_CHARS`); Gemini yukseltmesi ise birden cok kaydi tek istekte paketler (bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)).
 
 ### 3. Turkce Post-Processing
 
@@ -731,12 +731,14 @@ Ceviri sonrasi otomatik duzeltmeler:
 
 ### 5. Retranslate ve Gemini Yukseltme
 
-`retranslate_pending` Celery Beat gorevi (`retranslate-pending-hourly`) saatlik calisir: dakika 05, saatler 1-5, 7-11, 13-17 ve 19-23; cekim saatleri (00/06/12/18) atlanir, yani gunde 20 tur. Her tur iki isi yapar: bekleyen (`needs_translation=True`) kayitlari LibreTranslate ile cevirir (bolum basina imlec sirasiyla), ardindan `translation_provider='libretranslate'` kayitlari Gemini API (`gemini-3.5-flash-lite`) ile kayit basina tek istekte yukseltir.
+`retranslate_pending` Celery Beat gorevi (`retranslate-pending-hourly`) saatlik calisir: dakika 05, saatler 1-5, 7-11, 13-17 ve 19-23; cekim saatleri (00/06/12/18) atlanir, yani gunde 20 tur. Her tur iki isi yapar: bekleyen (`needs_translation=True`) kayitlari LibreTranslate ile cevirir (bolum basina imlec sirasiyla), ardindan `translation_provider='libretranslate'` kayitlari Gemini API (`gemini-3.5-flash-lite`) ile yukseltir; birden cok kayit tek istekte (paket) cevrilir.
 
 - **Onem sinifi:** CVE'lerde yalniz CVSS >= 7.0 ya da CISA KEV'deki kayitlar Gemini adayidir; digerleri (dusuk/orta skorlu ya da skoru olmayan) kalici olarak LibreTranslate cevirisiyle kalir, ne bekleyen ne yukseltme asamasinda Gemini'ye gitmez. Diger bolumlerde butun kayitlar adaydir.
 - **Yeni kayit once:** Yukseltme asamasinin imleci yoktur; her tur bolum basina en fazla `RETRANSLATE_UPGRADE_BATCH` kaydi `created_at` azalan sirayla (en yeniden eskiye) alir. Eski LibreTranslate birikimi butce kaldikca geriye dogru erir.
 - **Bolum onceligi:** Sira CVE, haber, AI, SRE, DevTools, Kubernetes'tir ve katidir: ustteki bolumun adaylari bitmeden alttaki Gemini payi almaz. Bolumler icin ayrilmis bir pay yoktur (`GEMINI_CVE_RESERVE` kaldirildi, bkz. [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md)).
-- **Tur payi:** Gunluk butce (`GEMINI_DAILY_BUDGET`, varsayilan 450) gune yayilir. Bir turun Gemini payi `ceil(kalan gunluk butce / Pasifik gece yarisina kadar kalan tur sayisi)`'dir; kullanilmayan pay sonraki turlara kalir. Pay biterse yukseltme asamasi `stopped_reason='gemini_tur_payi'` ile durur, bekleyen kayitlar LibreTranslate ile surer; gunluk butce bitmisse sebep `gemini_budget` olur.
+- **Paketleme:** Yukseltme asamasi adaylari siraya sadik kalarak paketler; paket `GEMINI_BATCH_CHARS` (varsayilan 10000) karakteri ya da `GEMINI_BATCH_MAX` (varsayilan 15) kaydi asmaz. Yapili Kubernetes degisiklik kayitlari paketlenmez, tek basina gider. Paket cevirisi kayit basina dogrulanir; ek olarak capa capraz denetimi (CVE/GHSA numarasi, URL, kod parcasi, 3+ parcali surum) cevirisi baska kaydin capasini tasiyan kaydi reddeder (ayni bicimli yer degisimi onlenir); capasiz kayitlar etkilenmez. Paketli K8s cevirileri de ayni yapi isareti denetiminden gecer.
+- **Bolme:** Kesilen (MAX_TOKENS), bozuk yanitli (SAFETY vb. tamamlanmamis ya da cozulemeyen JSON, `yanit_bozuk`) ya da kayda ozgu 4xx alan paket ikiye bolunup ayni turda yeniden denenir; yalniz hala basarisiz olan tek kayit deneme sayacini artirir. Bekleyen asama kayit basina calismaya devam eder.
+- **Tur payi:** Gunluk butce (`GEMINI_DAILY_BUDGET`, varsayilan 450) gune yayilir. Bir turun Gemini payi `ceil(kalan gunluk butce / Pasifik gece yarisina kadar kalan tur sayisi)`'dir ve istek (paket) basina sayilir, kayit basina degil; kullanilmayan pay sonraki turlara kalir. Pay biterse yukseltme asamasi `stopped_reason='gemini_tur_payi'` ile durur, bekleyen kayitlar LibreTranslate ile surer; gunluk butce bitmisse sebep `gemini_budget` olur.
 - **Deneme sayaci:** Icerik hatasi (Gemini cevirmedi ya da dogrulama gecmedi) `translation_attempts`'i artirir; `RETRANSLATE_MAX_ATTEMPTS`'a ulasan kayit yukseltme adayi olmaktan cikar (`/api/saglik/` `sections[ad].upgrade_given_up`). Aktarim ve kota hatalari (zaman asimi, baglanti, 429, 5xx) sayaci artirmaz. Gemini 401/403/404 (anahtar, yetki ya da model adi hatasi) ve anahtar/hesap sorunu bildiren 400 (`error.details[].reason=API_KEY_INVALID` ya da `error.status` FAILED_PRECONDITION / PERMISSION_DENIED / UNAUTHENTICATED) devre kesiciyi acar ve butceyi geri verir; sayac artmaz. Diger 400'ler kayda ozgu icerik hatasidir. Beklenmeyen istisna (kod hatasi) da devre kesiciyi acar. Savunma katmani: bir bolumde ayni turda 5 ardisik icerik hatasi (`ARDISIK_HATA_SINIRI`) gelirse o bolumun yukseltmesi o tur durur, kalan adaylar sayilmaz (tur sonucunda `sections[ad].stopped_reason='ardisik_icerik_hatasi'`).
 - **Tekil tur kilidi:** Tur, Redis kilidi `retranslate:kilit` ile korunur (sahip jetonu, TTL `min(RETRANSLATE_TIME_BUDGET + 600, CELERY_TASK_TIME_LIMIT + 60)` sn; olu worker'in kilidi sonraki saatlik turu atlatmaz). Onceki tur surerken baslayan tur `{'skipped': 'locked'}` doner ve `FetchRun` satiri birakmaz.
 - **Gorunurluk:** `/api/saglik/` `translation_budget.gemini` (`used`, `limit`, `period`, `available`, `cooldown`) dondurur; ana sayfa saglik seridi "Gemini kullanilan/sinir" gosterir. Bekleyen var ve son 6 bitmis tur (~6 saat) hic kayit cevirmediyse bolum `stalled` sayilir.
@@ -928,7 +930,7 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 
 | Is akisi | Tetik | Mod | Ne yapar |
 |---|---|---|---|
-| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 648 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (174 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
+| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 699 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (174 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
 | `Dependency Review` | PR | **Kapi** | HIGH/CRITICAL zafiyetli bagimlilik getiren PR'i durdurur |
 | `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
 | `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |
@@ -1021,6 +1023,8 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `GEMINI_COOLDOWN` | `600` | 429/5xx sonrasi bekleme (sn) |
 | `GEMINI_TIMEOUT` | `60` | Istek zaman asimi (sn) |
 | `GEMINI_MAX_CHARS` | `12000` | Bu uzunlugun ustundeki kayit Gemini'ye gitmez |
+| `GEMINI_BATCH_CHARS` | `10000` | Yukseltme paketinin toplam karakter siniri (bir istekte birden cok kayit) |
+| `GEMINI_BATCH_MAX` | `15` | Yukseltme paketindeki en fazla kayit sayisi |
 | `RETRANSLATE_BATCH` | `100` | Retranslate turunda bolum basina taranan bekleyen kayit sayisi |
 | `RETRANSLATE_UPGRADE_BATCH` | `40` | Tur ve bolum basina yukseltme siniri (en yeni kayittan baslar) |
 | `RETRANSLATE_MAX_ATTEMPTS` | `5` | Bir kaydin icerik hatasiyla (saglayici reddetti / dogrulama gecmedi) kac kez denenecegi; esige ulasan kayit kuyruktan duser (`needs_translation` kalir) ve `/api/v1/status/` `translation_given_up` ile sayilir. Basarili cevirinin sayaci sifirlar. Sayaci elle sifirlamak (admin ya da shell) kaydi yeniden kuyruga alir |

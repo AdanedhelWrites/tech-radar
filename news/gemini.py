@@ -10,12 +10,16 @@ olarak gider, ayni anahtarlarla Turkce doner. Kota korumasi:
   - Beklenmeyen istisna (kod hatasi) -> devre kesici
 Hicbir istisna disari cikmaz; cevrilemeyen kayit icin None doner.
 XTRM yer tutucu korumasi ve turkish_post_process uygulanmaz: terimler prompt'la korunur.
+
+paket_cevir (spec 2026-11-02-ceviri-yayma G5): ayni kota kurallariyla TEK istekte birden cok kayit
+(kimlik -> alanlar). Butce istek basina sayilir; dogrulama kayit basina yapilir.
 """
 import json
 import os
 import re
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 from zoneinfo import ZoneInfo
 
 import requests
@@ -37,6 +41,9 @@ GEMINI_DAILY_BUDGET = int(os.environ.get('GEMINI_DAILY_BUDGET', '450'))
 GEMINI_COOLDOWN = int(os.environ.get('GEMINI_COOLDOWN', '600'))
 # Daha buyuk kayit 60 sn'de bitmiyor ve devre kesiciyi aciyor; LibreTranslate yolunda kalir
 GEMINI_MAX_CHARS = int(os.environ.get('GEMINI_MAX_CHARS', '12000'))
+# Paket sinirlari (G5): toplam karakter GEMINI_MAX_CHARS'in altinda kalir (60 sn zaman asimi)
+GEMINI_BATCH_CHARS = int(os.environ.get('GEMINI_BATCH_CHARS', '10000'))
+GEMINI_BATCH_MAX = int(os.environ.get('GEMINI_BATCH_MAX', '15'))
 # Kayittan bagimsiz 4xx: 401 anahtar gecersiz, 403 yetki/proje, 404 model adi yanlis
 SISTEMIK_HTTP = (401, 403, 404)
 # 400 de sistemik olabilir: Generative Language API gecersiz/iptal/suresi dolmus anahtari
@@ -54,11 +61,22 @@ _TURKCE_HARF = re.compile('[çğıöşüÇĞİÖŞÜ]')
 # uydurulmustur (2026-10-21 canli olcum: 'sunarken' -> 'sերerken'). Orijinalde varsa (ozel ad) serbest.
 _YABANCI_YAZI = re.compile('[Ͱ-ϿЀ-ӿ԰-֏֐-׿؀-ۿ'
                            '぀-ヿ一-鿿가-힯]')
+# Paket capalari (bkz. _capalar): ceviride AYNEN kalmasi gereken belirtecler. Iki parcali ondalik
+# (9.8) bilerek yok: Turkce '9,8' yazilabilir.
+_CAPA_DESENLERI = (
+    re.compile(r'\bCVE-\d{4}-\d{4,}\b', re.IGNORECASE),
+    re.compile(r'\bGHSA(?:-[0-9a-z]+)+', re.IGNORECASE),
+    re.compile(r'`[^`\n]+`'),                                   # kod parcasi (ters tirnaklariyla)
+    re.compile(r'\bv?\d+(?:\.\d+){2,}\b', re.IGNORECASE),        # 2.4.1, v1.31.0
+    re.compile(r'\bv\d+\.\d+(?!\.?\d)', re.IGNORECASE),          # v1.31
+)
+_URL = re.compile(r'https?://\S+', re.IGNORECASE)
+_URL_SONU = '.,;:!?)]}>\'"`'
 
 # Proje kurali "kod ASCII Turkce" bu metne UYGULANMAZ: talimat modele gider ve model yazimini taklit
 # eder. 2026-10-16'ya kadar diakritiksiz yazilmisti; Gemini cevirilerinin yarisi (CVE'de %53) Turkce
 # karaktersiz geldi ('kimligi dogrulanmamis saldirgan'). Ornekler ve kural bu yuzden duzgun Turkcedir.
-SISTEM_TALIMATI = (
+_TALIMAT_GOVDESI = (
     "Sen teknik haber ve güvenlik bültenleri çeviren bir çevirmensin. Verilen JSON nesnesindeki "
     "her alanın İngilizce metnini doğal ve anlaşılır Türkçeye çevir; aynı anahtarlarla bir JSON nesnesi döndür.\n"
     "Kurallar:\n"
@@ -73,8 +91,15 @@ SISTEM_TALIMATI = (
     "- Özetleme, ekleme, yorum yapma; metnin tamamını çevir.\n"
     "- Güvenlik terimlerini teknik anlamıyla çevir (örn. 'unauthenticated attacker' -> "
     "'kimliği doğrulanmamış saldırgan', 'remote code execution' -> 'uzaktan kod çalıştırma').\n"
-    "- Yalnızca JSON döndür."
 )
+_TALIMAT_SONU = "- Yalnızca JSON döndür."
+SISTEM_TALIMATI = _TALIMAT_GOVDESI + _TALIMAT_SONU
+# Paket talimati ayridir: tek kayit yolunun girdisi kimlik anahtarli degil, onun talimati degismez
+PAKET_KURALI = (
+    "- Girdi, kimlik anahtarlı kayıtlardan oluşan bir JSON nesnesidir; her kaydı ayrı çevir, aynı kimlik "
+    "ve alan anahtarlarıyla döndür. Kayıtları birleştirme, sırasını ya da kimliğini değiştirme.\n"
+)
+PAKET_TALIMATI = _TALIMAT_GOVDESI + PAKET_KURALI + _TALIMAT_SONU
 
 _gate = None
 _butce = None
@@ -242,51 +267,47 @@ def _alan_sorunu(orijinal: str, ceviri) -> Optional[str]:
     return None
 
 
-def _istek_govdesi(alanlar: Dict[str, str]) -> dict:
+def _alan_semasi(alanlar) -> dict:
+    """Alan adlari -> STRING; hepsi zorunlu."""
     return {
-        'systemInstruction': {'parts': [{'text': SISTEM_TALIMATI}]},
-        'contents': [{'role': 'user', 'parts': [{'text': json.dumps(alanlar, ensure_ascii=False)}]}],
+        'type': 'OBJECT',
+        'properties': {ad: {'type': 'STRING'} for ad in alanlar},
+        'required': list(alanlar),
+    }
+
+
+def _paket_semasi(kayitlar: Dict[str, Dict[str, str]]) -> dict:
+    """Her kimlik icin ic ice OBJECT (kendi alanlariyla); kimlikler ve alanlar zorunlu."""
+    return {
+        'type': 'OBJECT',
+        'properties': {kimlik: _alan_semasi(alanlar) for kimlik, alanlar in kayitlar.items()},
+        'required': list(kayitlar),
+    }
+
+
+def _istek_govdesi(veri: dict, sema: dict, talimat: str) -> dict:
+    return {
+        'systemInstruction': {'parts': [{'text': talimat}]},
+        'contents': [{'role': 'user', 'parts': [{'text': json.dumps(veri, ensure_ascii=False)}]}],
         'generationConfig': {
             'temperature': 0.2,
             'responseMimeType': 'application/json',
-            'responseSchema': {
-                'type': 'OBJECT',
-                'properties': {ad: {'type': 'STRING'} for ad in alanlar},
-                'required': list(alanlar),
-            },
+            'responseSchema': sema,
         },
     }
 
 
-def _yaniti_coz(yanit) -> Optional[dict]:
-    try:
-        aday = yanit.json()['candidates'][0]
-        if aday.get('finishReason') not in (None, 'STOP'):
-            log.warning(f"  [Gemini] yanit tamamlanmadi ({aday.get('finishReason')}).")
-            return None
-        cikti = json.loads(aday['content']['parts'][0]['text'])
-    except Exception as hata:  # ValueError/KeyError/IndexError/TypeError/AttributeError vb.
-        log.warning(f"  [Gemini] yanit cozulemedi ({type(hata).__name__}).")
-        return None
-    if not isinstance(cikti, dict):
-        log.warning("  [Gemini] yanit JSON nesnesi degil.")
-        return None
-    return cikti
+def _istek_at(govde: dict, etiket: str = 'genel kaydi', kayit_sayisi: int = 1) -> Optional[requests.Response]:
+    """Kota kurallariyla tek istek atar. 200 yanitini ya da None doner (sebep loglandi).
 
-
-def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optional[Dict[str, str]]:
-    """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi).
-
-    bolum yalniz log metni icindir; tavan tum bolumler icin aynidir."""
-    alanlar = {ad: metin for ad, metin in alanlar.items() if isinstance(metin, str) and metin.strip()}
-    if not alanlar or not hazir():
-        return None
-
+    hazir() kontrolu cagirana aittir. Butce istek ONCESI artar; tavan asildiysa istek atilmaz.
+    429 / 5xx / ag hatasi / beklenmeyen istisna -> devre kesici, butce geri alinmaz.
+    Diger 200 disi yanitlar -> butce geri alinir; sistemikse (_sistemik_hata) devre kesici de acilir.
+    etiket ve kayit_sayisi yalniz log icindir (kayit_sayisi >= 2 olan istegin 4xx'i WARNING)."""
     butce, anahtar = _get_butce(), butce_anahtari()
     if butce.artir(anahtar) > butce_tavani():
         butce.azalt(anahtar)
-        log.warning(f"  [Gemini] gunluk butce doldu ({butce_tavani()}); "
-                    f"{bolum or 'genel'} kaydi cevrilmedi.")
+        log.warning(f"  [Gemini] gunluk butce doldu ({butce_tavani()}); {etiket} cevrilmedi.")
         return None
 
     _get_gate().wait_for_slot(GEMINI_MIN_INTERVAL)
@@ -294,7 +315,7 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
         yanit = requests.post(
             GEMINI_URL.format(model=GEMINI_MODEL),
             headers={'x-goog-api-key': _anahtar(), 'Content-Type': 'application/json'},
-            json=_istek_govdesi(alanlar),
+            json=govde,
             timeout=GEMINI_TIMEOUT,
         )
     except requests.RequestException as hata:
@@ -319,17 +340,197 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
             _devre_kesici(sistemik)
             return None
         # Kayda ozgu istek sorunu (400 gecersiz govde vb.): devre kesici acilmaz
-        log.info(f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {str(yanit.text)[:200]}")
+        # Paket duzeyi 4xx (sema/govde cok buyuk vb.) gorunur olmali; tek kayitlik istek sessiz kalir
+        log.log(logging.WARNING if kayit_sayisi >= 2 else logging.INFO,
+                f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {str(yanit.text)[:200]}")
         return None
+    return yanit
 
-    cikti = _yaniti_coz(yanit)
-    if cikti is None:
-        return None
+
+def _aday_ciktisi(yanit):
+    """(cikti, finishReason). cikti None: yanit tamamlanmadi ya da JSON nesnesi cozulemedi. ASLA firlatmaz."""
+    sebep = None
+    try:
+        aday = yanit.json()['candidates'][0]
+        sebep = aday.get('finishReason')
+        if sebep not in (None, 'STOP'):
+            log.warning(f"  [Gemini] yanit tamamlanmadi ({sebep}).")
+            return None, sebep
+        cikti = json.loads(aday['content']['parts'][0]['text'])
+    except Exception as hata:  # ValueError/KeyError/IndexError/TypeError/AttributeError vb.
+        log.warning(f"  [Gemini] yanit cozulemedi ({type(hata).__name__}).")
+        return None, sebep
+    if not isinstance(cikti, dict):
+        log.warning("  [Gemini] yanit JSON nesnesi degil.")
+        return None, sebep
+    return cikti, sebep
+
+
+def _yaniti_coz(yanit) -> Optional[dict]:
+    return _aday_ciktisi(yanit)[0]
+
+
+def _dolu_alanlar(alanlar) -> Dict[str, str]:
+    if not isinstance(alanlar, dict):
+        return {}
+    return {ad: metin for ad, metin in alanlar.items() if isinstance(metin, str) and metin.strip()}
+
+
+def _kayit_cevirisi(alanlar: Dict[str, str], cikti: dict, onek: str = '') -> Optional[Dict[str, str]]:
+    """Kaydin tum alanlari dogrulamadan gecerse cevirileri (hepsi ya da hicbiri), yoksa None.
+    Istenmeyen alanlar yok sayilir. onek yalniz log icindir (paket kimligi)."""
     sonuc = {}
     for ad, orijinal in alanlar.items():
         sorun = _alan_sorunu(orijinal, cikti.get(ad))
         if sorun:
-            log.warning(f"  [Gemini] dogrulama basarisiz ({ad}: {sorun}).")
+            log.warning(f"  [Gemini] dogrulama basarisiz ({onek}{ad}: {sorun}).")
             return None
         sonuc[ad] = cikti[ad].strip()
+    return sonuc
+
+
+def _capalar(metin: str) -> Set[str]:
+    """Ceviride aynen kalmasi gereken belirtecler, buyuk harfe normalize: CVE/GHSA kimlikleri, URL'ler
+    (sondaki noktalama atilir), ters tirnakli kod parcalari, >=3 parcali ya da v onekli surumler."""
+    capalar = {eslesme.upper() for desen in _CAPA_DESENLERI for eslesme in desen.findall(metin)}
+    capalar.update(url.rstrip(_URL_SONU).upper() for url in _URL.findall(metin))
+    capalar.discard('')
+    return capalar
+
+
+def _gecis_araliklari(metin: str, capalar: Set[str]) -> list:
+    """Capalarin metindeki tum gecislerinin [bas, son) araliklari."""
+    araliklar = []
+    for capa in capalar:
+        bas = metin.find(capa)
+        while bas != -1:
+            araliklar.append((bas, bas + len(capa)))
+            bas = metin.find(capa, bas + 1)
+    return araliklar
+
+
+def _acikta_geciyor(metin: str, capa: str, maskeli: list) -> bool:
+    """capa metinde, tamami maskeli bir araligin icinde kalmayan bir gecisle var mi."""
+    bas = metin.find(capa)
+    while bas != -1:
+        son = bas + len(capa)
+        if not any(m_bas <= bas and son <= m_son for m_bas, m_son in maskeli):
+            return True
+        bas = metin.find(capa, bas + 1)
+    return False
+
+
+def _capa_sorunu(capalar: Dict[str, Set[str]], kimlik: str, ceviri: str) -> Optional[str]:
+    """Paket icinde kimlik karismasi: ceviri baska kaydin capasini tasiyor ya da (>=2 capali kayitta)
+    kendi capalarinin hicbirini tasimiyor. Ayni bicimli yer degisimini _alan_sorunu yakalayamaz.
+    Duz alt dize testi: Turkce ek kesmeden sonra gelir ('2.4.1'den')."""
+    kendi = capalar[kimlik]
+    metin = ceviri.upper()
+    kendi_araliklari = _gecis_araliklari(metin, kendi)
+    for diger, onlarin in capalar.items():
+        if diger == kimlik:
+            continue
+        for capa in onlarin - kendi:
+            # Yalniz kendi capasinin icinde kalan gecis (1.2.3.4 icindeki 1.2.3) karisma sayilmaz;
+            # kendi capasini asan gecis (kendi 1.2.3, metinde 1.2.3.4) sayilir
+            if _acikta_geciyor(metin, capa, kendi_araliklari):
+                return f'capa karisti ({diger} kaydinin capasi)'
+    if len(kendi) >= 2 and not any(capa in metin for capa in kendi):
+        return 'capalar kayip'
+    return None
+
+
+def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optional[Dict[str, str]]:
+    """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi).
+
+    bolum yalniz log metni icindir; tavan tum bolumler icin aynidir."""
+    alanlar = _dolu_alanlar(alanlar)
+    if not alanlar or not hazir():
+        return None
+    yanit = _istek_at(_istek_govdesi(alanlar, _alan_semasi(alanlar), SISTEM_TALIMATI),
+                      f"{bolum or 'genel'} kaydi")
+    if yanit is None:
+        return None
+    cikti = _yaniti_coz(yanit)
+    if cikti is None:
+        return None
+    return _kayit_cevirisi(alanlar, cikti)
+
+
+@dataclass
+class PaketSonucu:
+    """paket_cevir sonucu.
+
+    istek_hatasi: istek gitmedi (hazir degil / butce) ya da istek duzeyinde basarisiz oldu (ag, 429,
+      5xx, 200 disi yanit); hicbir kaydin sucu degil.
+    kesildi: yanit MAX_TOKENS ile yarim kaldi; paket boyu sorunudur (cagiran bolup yeniden dener).
+    yanit_bozuk: yanitin tamami kullanilamaz (SAFETY/RECITATION vb. tamamlanmamis, cozulemeyen ya da
+      nesne olmayan JSON); sucun hangi kayitta oldugu bilinmez (cagiran bolup yeniden dener, tek
+      kayitta o kaydin icerik hatasidir).
+    Bu ucunden biri True ise ceviriler ve reddedilen bostur. Hepsi False ise her girdi kimligi
+    ya ceviriler'de ya reddedilen'dedir (icerik hatasi: dogrulama, eksik kimlik, capa karismasi)."""
+    ceviriler: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    reddedilen: Set[str] = field(default_factory=set)
+    istek_hatasi: bool = False
+    kesildi: bool = False
+    yanit_bozuk: bool = False
+
+
+def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None) -> PaketSonucu:
+    """Birden cok kaydi TEK istekte cevirir (spec G5). Anahtarlar kimlik ('k0', 'k1'...), degerler
+    alanlar ({'title': ..., 'description': ...}). Butce istek basina bir artar.
+
+    Bos alanlar istege girmez; tum alanlari bos kayit gonderilmez ve reddedilir. Modelin kimligi
+    dusurdugu, nesne olmayan deger dondurdugu ya da bir alani dogrulamadan gecemeyen kayit yalniz
+    kendisi reddedilir; digerleri cevrilir. Ayni bicimli yer degisimi icin capa capraz denetimi
+    (_capa_sorunu): cevirisi baska kaydin CVE/GHSA/URL/kod/surum capasini tasiyan ya da >=2 capali
+    olup hicbirini tasimayan kayit reddedilir; capasiz kayitlar etkilenmez.
+    finishReason MAX_TOKENS -> kesildi; diger tamamlanmamis
+    (SAFETY vb.) ya da cozulemeyen yanit -> yanit_bozuk (tek bir kayit tum paketi yakmasin; cagiran
+    boler). Hicbir istisna disari cikmaz."""
+    gonderilecek, bos = {}, set()
+    for kimlik, alanlar in kayitlar.items():
+        dolu = _dolu_alanlar(alanlar)
+        if dolu:
+            gonderilecek[kimlik] = dolu
+        else:
+            bos.add(kimlik)
+    if not gonderilecek:
+        return PaketSonucu(reddedilen=bos)
+    if not hazir():
+        return PaketSonucu(istek_hatasi=True)
+
+    etiket = f"{bolum or 'genel'} paketi ({len(gonderilecek)} kayit)"
+    yanit = _istek_at(_istek_govdesi(gonderilecek, _paket_semasi(gonderilecek), PAKET_TALIMATI), etiket,
+                      len(gonderilecek))
+    if yanit is None:
+        return PaketSonucu(istek_hatasi=True)
+    cikti, sebep = _aday_ciktisi(yanit)
+    if sebep == 'MAX_TOKENS':
+        return PaketSonucu(kesildi=True)
+    if cikti is None:
+        return PaketSonucu(yanit_bozuk=True)
+
+    sonuc = PaketSonucu(reddedilen=bos)
+    for kimlik, alanlar in gonderilecek.items():
+        deger = cikti.get(kimlik)
+        if not isinstance(deger, dict):
+            log.warning(f"  [Gemini] dogrulama basarisiz ({kimlik}: "
+                        f"{'yanitta yok' if deger is None else 'nesne degil'}).")
+            sonuc.reddedilen.add(kimlik)
+            continue
+        ceviri = _kayit_cevirisi(alanlar, deger, f'{kimlik}/')
+        if ceviri is None:
+            sonuc.reddedilen.add(kimlik)
+        else:
+            sonuc.ceviriler[kimlik] = ceviri
+
+    # Capa capraz denetimi: tum paketin orijinalleri burada elde; reddedilenlerin capalari da sayilir
+    capalar = {kimlik: _capalar('\n'.join(alanlar.values())) for kimlik, alanlar in gonderilecek.items()}
+    for kimlik, ceviri in list(sonuc.ceviriler.items()):
+        sorun = _capa_sorunu(capalar, kimlik, '\n'.join(ceviri.values()))
+        if sorun:
+            log.warning(f"  [Gemini] dogrulama basarisiz ({kimlik}: {sorun}).")
+            del sonuc.ceviriler[kimlik]
+            sonuc.reddedilen.add(kimlik)
     return sonuc
