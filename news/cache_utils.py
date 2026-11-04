@@ -3,10 +3,9 @@
 Alti fetch task'i ve retranslate gorevi liste cache'ini buradan kurar.
 /api/v1/ uc noktalari bu cache'i hic kullanmaz (spec C2).
 
-C5 — Bilincli sinir: liste cache'i yalnizca en yeni CACHE_LISTE_SINIRI kaydi
-tutar; veritabaninda daha fazlasi olabilir (2026-09-12: 651 CVE). Frontend'de
-gorunmeyen kayitlar kayip degildir; tum kayitlar /api/v1/ delta uc noktalarindan
-alinir.
+C5 (eski) — Liste cache'i yalnizca en yeni CACHE_LISTE_SINIRI kaydi tutar. Frontend
+artik bu cache'i okumaz: listeler veritabanindan filtre, siralama ve sayfalama
+ile sunulur (news/liste_sorgusu.py); cache yalnizca geriye uyumluluk icin kurulur.
 """
 from datetime import datetime
 

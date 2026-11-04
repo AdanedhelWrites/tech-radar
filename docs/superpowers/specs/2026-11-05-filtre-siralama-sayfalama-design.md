@@ -2,7 +2,7 @@
 
 > Tarih: 2026-11-05. Kaynak: brainstorming oturumu, görsel taslak
 > `CyberNews/.superpowers/brainstorm/940-1793828793/content/filtre-sayfalama.html` (repo dışı).
-> Durum: taslak, onay bekliyor.
+> Durum: uygulandi (dal feat/filtre-sayfalama).
 
 ## 1. Amaç ve neden
 
