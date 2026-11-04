@@ -25,7 +25,11 @@ export default function SayfaCubugu({ sayfa, sayfaSayisi, onSayfa }) {
   if (!sayfaSayisi || sayfaSayisi <= 1) return null
 
   const git = (hedef) => {
-    if (hedef !== sayfa && hedef >= 1 && hedef <= sayfaSayisi) onSayfa(hedef)
+    if (hedef !== sayfa && hedef >= 1 && hedef <= sayfaSayisi) {
+      onSayfa(hedef)
+      // Cubuk listenin altinda: yeni sayfa en basindan okunur (scrollTo olmayan ortamda atlanir)
+      if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }
 
   return (

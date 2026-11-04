@@ -57,4 +57,26 @@ describe('SayfaCubugu', () => {
     fireEvent.click(screen.getByRole('button', { name: '6' }))
     expect(onSayfa).not.toHaveBeenCalled()
   })
+
+  it('sayfa_degisince_liste_basina_kaydirir', () => {
+    const kaydir = vi.fn()
+    vi.stubGlobal('scrollTo', kaydir)
+    render(<SayfaCubugu sayfa={2} sayfaSayisi={5} onSayfa={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Sonraki ›' }))
+    expect(kaydir).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+    // Gecerli sayfaya tiklamak kaydirmaz
+    kaydir.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: '2' }))
+    expect(kaydir).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('scrollTo_yoksa_sessizce_gecer', () => {
+    vi.stubGlobal('scrollTo', undefined)
+    const onSayfa = vi.fn()
+    render(<SayfaCubugu sayfa={2} sayfaSayisi={5} onSayfa={onSayfa} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Sonraki ›' }))
+    expect(onSayfa).toHaveBeenCalledWith(3)
+    vi.unstubAllGlobals()
+  })
 })

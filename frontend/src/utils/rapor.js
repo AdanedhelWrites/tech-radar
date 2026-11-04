@@ -15,12 +15,19 @@ const sayi = (n) => Number(n || 0).toLocaleString('tr-TR')
 // cektigi icin devam etmek ayni kayitlari tekrar eklerdi.
 export async function raporKayitlariniGetir(getir, istek) {
   const kayitlar = []
+  const goruldu = new Set()
   let toplam = 0
   for (let sayfa = 1; sayfa <= RAPOR_EN_FAZLA_SAYFA; sayfa++) {
     const { data: veri } = await getir({ ...istek, sayfa, boyut: RAPOR_SAYFA_BOYUTU })
     if (!veri?.success) throw new Error(veri?.message || 'Rapor kayıtları alınamadı')
     const sayfadakiler = veri.data || []
-    kayitlar.push(...sayfadakiler)
+    // Sayfalar arasinda yeni kayit gelirse kayma ayni kaydi iki sayfada dondurur: id ile tekillestir
+    for (const kayit of sayfadakiler) {
+      if (!goruldu.has(kayit.id)) {
+        goruldu.add(kayit.id)
+        kayitlar.push(kayit)
+      }
+    }
     toplam = veri.toplam ?? kayitlar.length
     if (sayfadakiler.length === 0 || sayfa >= (veri.sayfa_sayisi ?? 1)) break
   }

@@ -60,6 +60,8 @@ const TANIM = {
     boslukKorunur: true,
   },
   ekAnahtarlar: ['kategori'],
+  // Gecersiz ?kategori= istege gitmez (Tumu sayilir)
+  ekDegerler: { kategori: Object.keys(KATEGORI) },
   ekFiltre: (ozellikler) => <KategoriFiltresi {...ozellikler} />,
   dagilim: (istatistik) => Object.entries(istatistik.by_category || {})
     .map(([kategori, adet]) => [KATEGORI[kategori] || kategori, adet]),

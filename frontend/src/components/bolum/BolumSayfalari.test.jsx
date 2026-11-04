@@ -274,6 +274,14 @@ describe('KubernetesComponent kategori filtresi', () => {
     await waitFor(() => expect(k8sApi.getK8s).toHaveBeenLastCalledWith(VARSAYILAN_ISTEK))
   })
 
+  it('k8s_gecersiz_kategori_tumu_sayilir_ve_gitmez', async () => {
+    ac(KubernetesComponent, '/bolum?kategori=uydurma')
+    await screen.findByText('Türkçe başlık 1')
+    const grup = screen.getByRole('group', { name: 'Kategori filtresi' })
+    expect(within(grup).getByRole('button', { name: 'Tümü' })).toHaveAttribute('aria-pressed', 'true')
+    expect(k8sApi.getK8s).toHaveBeenLastCalledWith(VARSAYILAN_ISTEK)
+  })
+
   it('son_secili_kaynak_kaldirilamaz', async () => {
     ac(KubernetesComponent, `/bolum?kaynak=${encodeURIComponent('CNCF Blog')}`)
     await screen.findByText('Türkçe başlık 1')

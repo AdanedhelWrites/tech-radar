@@ -85,6 +85,14 @@ describe('GenelBakis', () => {
     expect(screen.getByText('Zafiyet Durumu · Son 24 Saat')).toBeInTheDocument()
   })
 
+  it('gundem liste uclarini parametresiz cagirir', async () => {
+    sayfa()
+    expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
+    for (const cagri of [newsApi.getNews, k8sApi.getK8s, sreApi.getSRE, devtoolsApi.getDevTools, aiApi.getAINews]) {
+      expect(cagri).toHaveBeenCalledWith()
+    }
+  })
+
   it('kritik yoksa sakin cumle', async () => {
     ozetApi.getOzet.mockResolvedValue({ data: ozet({
       critical_count: 0, high_count: 0, kev_count: 0, priority: [], chart: [], unscored_count: 0,

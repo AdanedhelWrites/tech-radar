@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { raporHtml } from './rapor'
+import { describe, it, expect, vi } from 'vitest'
+import { raporHtml, raporKayitlariniGetir } from './rapor'
 
 const kayit = {
   id: 1,
@@ -36,5 +36,19 @@ describe('raporHtml', () => {
     // Kubernetes degisiklik gunlugu girintisi icin govdede white-space: pre-wrap
     expect(raporHtml({ ...temel, boslukKorunur: true })).toMatch(/\.article \.content \{[^}]*white-space: pre-wrap/)
     expect(raporHtml(temel)).not.toContain('pre-wrap')
+  })
+})
+
+describe('raporKayitlariniGetir', () => {
+  it('sayfalar_arasi_ayni_id_bir_kez_gelir', async () => {
+    // Sayfalar arasinda yeni kayit gelince kayma ayni kaydi iki sayfada dondurur
+    const yanitlar = [
+      { data: { success: true, data: [{ id: 1 }, { id: 2 }], toplam: 3, sayfa_sayisi: 2 } },
+      { data: { success: true, data: [{ id: 2 }, { id: 3 }], toplam: 3, sayfa_sayisi: 2 } },
+    ]
+    const getir = vi.fn().mockImplementation(async ({ sayfa }) => yanitlar[sayfa - 1])
+    const { kayitlar, toplam } = await raporKayitlariniGetir(getir, {})
+    expect(kayitlar.map(k => k.id)).toEqual([1, 2, 3])
+    expect(toplam).toBe(3)
   })
 })
