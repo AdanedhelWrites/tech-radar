@@ -1,5 +1,5 @@
 // API kayitlarini okuma panelinin ortak bicimine (OkumaKaydi) donusturur (spec 2026-10-31 G5, §6).
-import { kevOnekiAyir } from './okuma'
+import { kevOnekiAyir, markdownSadelestir } from './okuma'
 import { cveListeBasligi } from './cve'
 
 // Ceviri KEV onekini de Turkceye cevirir ("2026-10-20 tarihinde CISA KEV kataloguna eklendi; ... ."),
@@ -93,7 +93,7 @@ const kayitIskeleti = (kayit) => ({
 export const cveOkumaKaydi = (cve) => {
   const orijinal = kevOnekiAyir(metin(cve?.original_description))
   const tr = kevOnekiAyir(metin(cve?.turkish_description))
-  const trGovde = !tr.kevEklenme && orijinal.kevEklenme ? trKevOnekiAt(tr.govde) : tr.govde
+  const trGovde = markdownSadelestir(!tr.kevEklenme && orijinal.kevEklenme ? trKevOnekiAt(tr.govde) : tr.govde)
   const onek = orijinal.kevEklenme ? orijinal : tr
   const kevEklenme = cve?.kev_added_date || onek.kevEklenme
   const kevMeta = kevEklenme ? { kevEklenme, sonTarih: onek.sonTarih } : null
@@ -111,7 +111,7 @@ export const cveOkumaKaydi = (cve) => {
       ...cweler.map(c => ({ metin: String(c), tur: 'ur' })),
     ],
     govdeTr: trGovde,
-    govdeOrijinal: orijinal.govde,
+    govdeOrijinal: markdownSadelestir(orijinal.govde),
     kevMeta,
     tarih: metin(cve?.published_date),
     ekAlanlar: urunler ? [{ etiket: 'Etkilenen ürünler', deger: urunler }] : [],
