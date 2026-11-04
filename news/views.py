@@ -10,6 +10,7 @@ from .models import (
     NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
 )
 from .api_v1 import refresh
+from .liste_sorgusu import liste_yaniti
 from .serializers import (
     NewsArticleSerializer, FetchNewsRequestSerializer,
     CVEEntrySerializer, FetchCVERequestSerializer,
@@ -88,32 +89,8 @@ def _tetikle(request, bolum):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_news(request):
-    """Haberleri getir (cache veya database'den)"""
-    # Once cache'den dene
-    cached_news = cache.get('cybersecurity_news')
-    if cached_news:
-        return Response({
-            'success': True,
-            'data': cached_news,
-            'cached': True,
-            'count': len(cached_news)
-        })
-    
-    # Cache yoksa database'den cek
-    articles = NewsArticle.objects.all().order_by('-date')[:100]
-    serializer = NewsArticleSerializer(articles, many=True)
-    data = serializer.data
-    
-    # Cache'e kaydet
-    if data:
-        cache.set('cybersecurity_news', data, 3600)
-    
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """Haberleri suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'news')
 
 
 @api_view(['POST'])
@@ -194,32 +171,8 @@ def export_news(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_cves(request):
-    """CVE'leri getir (cache veya database'den)"""
-    # Once cache'den dene
-    cached_cves = cache.get('cve_entries')
-    if cached_cves:
-        return Response({
-            'success': True,
-            'data': cached_cves,
-            'cached': True,
-            'count': len(cached_cves)
-        })
-    
-    # Cache yoksa database'den cek
-    cves = CVEEntry.objects.all().order_by('-published_date')[:100]
-    serializer = CVEEntrySerializer(cves, many=True)
-    data = serializer.data
-    
-    # Cache'e kaydet
-    if data:
-        cache.set('cve_entries', data, 3600)
-    
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """CVE'leri suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'cve')
 
 
 @api_view(['POST'])
@@ -308,29 +261,8 @@ def export_cves(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_k8s(request):
-    """Kubernetes haberlerini getir (cache veya database'den)"""
-    cached_k8s = cache.get('k8s_entries')
-    if cached_k8s:
-        return Response({
-            'success': True,
-            'data': cached_k8s,
-            'cached': True,
-            'count': len(cached_k8s)
-        })
-
-    entries = KubernetesEntry.objects.all().order_by('-published_date')[:100]
-    serializer = KubernetesEntrySerializer(entries, many=True)
-    data = serializer.data
-
-    if data:
-        cache.set('k8s_entries', data, 3600)
-
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """Kubernetes haberlerini suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'kubernetes')
 
 
 @api_view(['POST'])
@@ -414,29 +346,8 @@ def export_k8s(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_sre(request):
-    """SRE haberlerini getir (cache veya database'den)"""
-    cached_sre = cache.get('sre_entries')
-    if cached_sre:
-        return Response({
-            'success': True,
-            'data': cached_sre,
-            'cached': True,
-            'count': len(cached_sre)
-        })
-
-    entries = SREEntry.objects.all().order_by('-published_date')[:100]
-    serializer = SREEntrySerializer(entries, many=True)
-    data = serializer.data
-
-    if data:
-        cache.set('sre_entries', data, 3600)
-
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """SRE haberlerini suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'sre')
 
 
 @api_view(['POST'])
@@ -513,29 +424,8 @@ def export_sre(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_devtools(request):
-    """DevTools guncellemelerini getir (cache veya database'den)"""
-    cached_devtools = cache.get('devtools_entries')
-    if cached_devtools:
-        return Response({
-            'success': True,
-            'data': cached_devtools,
-            'cached': True,
-            'count': len(cached_devtools)
-        })
-
-    entries = DevToolsEntry.objects.all().order_by('-published_date')[:100]
-    serializer = DevToolsEntrySerializer(entries, many=True)
-    data = serializer.data
-
-    if data:
-        cache.set('devtools_entries', data, 3600)
-
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """DevTools guncellemelerini suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'devtools')
 
 
 @api_view(['POST'])
@@ -618,29 +508,9 @@ def export_devtools(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_ai_news(request):
-    """AI Haberlerini getir (cache veya database'den)"""
-    cached_ai = cache.get('ai_entries')
-    if cached_ai:
-        return Response({
-            'success': True,
-            'data': cached_ai,
-            'cached': True,
-            'count': len(cached_ai)
-        })
+    """AI haberlerini suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'ai')
 
-    entries = AINewsEntry.objects.all().order_by('-published_date')[:100]
-    serializer = AINewsEntrySerializer(entries, many=True)
-    data = serializer.data
-
-    if data:
-        cache.set('ai_entries', data, 3600)
-
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
