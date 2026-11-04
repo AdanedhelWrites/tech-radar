@@ -1,23 +1,26 @@
-import toast from 'react-hot-toast';
-import { useState, useEffect, useMemo } from 'react'
-import { Form, Spinner, Alert, Dropdown } from 'react-bootstrap'
-import useAraliklaYenile from '../hooks/useAraliklaYenile'
+import { useMemo } from 'react'
+import useBolumVerisi from '../hooks/useBolumVerisi'
 import useSeciliKayit from '../hooks/useSeciliKayit'
-import { kacis, kacisliParagraf, guvenliHref } from '../utils/html'
 import { cveOkumaKaydi } from '../utils/okumaKaydi'
+import { skorSinifi } from '../utils/cve'
 import useZiyaretTabani from '../hooks/useZiyaretTabani'
 import { goreliZaman } from '../utils/zaman'
-import { ceviriEtiketiHtml } from './CeviriEtiketi'
 import OkumaPaneli from './okuma/OkumaPaneli'
 import CveSatiri from './cve/CveSatiri'
+import { BolumCubugu, HataUyarisi } from './bolum/BolumSayfasi'
+import SayfaCubugu from './bolum/SayfaCubugu'
+import { CVSS_SIRALAMASI, SIRALA_SECENEKLERI, sayimMetni } from './bolum/secenekler'
 import {
-  FaDownload, FaSync, FaTrash, FaFileExport, FaExclamationTriangle,
-  FaDatabase, FaGithub, FaShieldVirus, FaClock, FaFilter
+  FaExclamationTriangle, FaDatabase, FaGithub, FaShieldVirus, FaClock
 } from 'react-icons/fa'
-import { cveApi, istekHataMesaji } from '../services/api'
+import { cveApi } from '../services/api'
 
 // Zafiyetler sayfasi (spec 2026-10-31 G4): ustte kompakt filtre ve eylem cubugu, altinda tam
 // genislikte liste, detay ortak okuma panelinde (?kayit=<id>, hooks/useSeciliKayit).
+// 2026-11-05 (filtre/sayfalama spec G4): donem, siralama (En yuksek CVSS dahil), kaynak ve onem
+// sunucuda suzulur/siralanir, liste sayfalanir (adreste, ?onem=kritik&sirala=cvss&sayfa=2). Veri ve
+// eylemler bes haber bolumuyle ortak hooks/useBolumVerisi'nde; satir (CveSatiri) ve onem dugmeleri
+// bu sayfaya ozgu.
 
 const sources = [
   { id: 'source1', name: 'NVD', value: 'NVD', icon: FaDatabase },
@@ -28,15 +31,17 @@ const sources = [
   { id: 'source6', name: 'CISA KEV', value: 'CISA KEV', icon: FaExclamationTriangle },
 ]
 
-const severityOptions = [
-  { value: 'all', label: 'Tümü' },
-  { value: 'critical', label: 'Kritik', min: 9.0, max: 10.0 },
-  { value: 'high', label: 'Yüksek', min: 7.0, max: 8.9 },
-  { value: 'medium', label: 'Orta', min: 4.0, max: 6.9 },
-  { value: 'low', label: 'Düşük', min: 0, max: 3.9 },
+// Onem (CVSS araligi, sunucuda): >=9, 7-8.9, 4-6.9, 0-3.9; skorsuz kayit yalniz Tumu'de.
+// deger adrese yazilir ('' = Tumu); renk tema.css .siddet-dugmesi.<renk>
+const ONEM_SECENEKLERI = [
+  { deger: '', etiket: 'Tümü', renk: 'all' },
+  { deger: 'kritik', etiket: 'Kritik', renk: 'critical' },
+  { deger: 'yuksek', etiket: 'Yüksek', renk: 'high' },
+  { deger: 'orta', etiket: 'Orta', renk: 'medium' },
+  { deger: 'dusuk', etiket: 'Düşük', renk: 'low' },
 ]
 
-const GUN_SECENEKLERI = Array.from({ length: 15 }, (_, i) => i + 1)
+const SIRALAMALAR = [...SIRALA_SECENEKLERI, CVSS_SIRALAMASI]
 
 // Veritabani siddet dagilimi: once bilinen siralama, sonra digerleri
 const SIDDET_SIRASI = ['Kritik', 'Yüksek', 'Orta', 'Düşük', 'Bilinmiyor']
@@ -58,214 +63,96 @@ const getSeverityClass = (severity) => {
 
 const sayi = (n) => Number(n || 0).toLocaleString('tr-TR')
 
-function CVEComponent() {
-  const [cves, setCVEs] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [fetching, setFetching] = useState(false)
-  const [error, setError] = useState(null)
-  const [stats, setStats] = useState({
-    total: 0,
-    by_source: {},
-    by_severity: {},
-    last_update: null
-  })
-  const [days, setDays] = useState(7)
-  const [selectedSources, setSelectedSources] = useState(
-    sources.reduce((acc, s) => ({ ...acc, [s.value]: true }), {})
+// Rapor rozetleri ham metin (utils/rapor sablonda kacislar): CVE kimligi, CVSS (renk skorla), CISA KEV
+// (liste satiri ve okuma paneliyle ayni kural: utils/okumaKaydi)
+const raporRozetleri = (item) => {
+  const rozetler = []
+  if (item.cve_id) rozetler.push({ metin: item.cve_id, sinif: 'cveid' })
+  if (Number.isFinite(item.cvss_score)) {
+    rozetler.push({ metin: `CVSS ${item.cvss_score.toFixed(1)}`, sinif: skorSinifi(item.cvss_score) })
+  }
+  if (cveOkumaKaydi(item).rozetler.some(r => r.tur === 'kev')) rozetler.push({ metin: 'CISA KEV', sinif: 'kev' })
+  return rozetler
+}
+
+const TANIM = {
+  kaynaklar: sources,
+  api: {
+    liste: (params) => cveApi.getCVEs(params),
+    cek: (veri) => cveApi.fetchCVEs(veri),
+    temizle: () => cveApi.clearCache(),
+    istatistik: () => cveApi.getStats(),
+  },
+  metinler: {
+    yuklemeHatasi: 'CVE verileri yüklenirken hata oluştu',
+    cekimHatasi: 'CVE verileri getirilirken hata oluştu',
+    temizleOnayi: 'Tüm CVE verileri silinecek ve sıfırlanacak. Emin misiniz?',
+    cekimBasladi: 'CVE çekimi başladı! Kayıtlar otomatik olarak ekrana yansıyacak.',
+  },
+  rapor: {
+    belgeBasligi: 'CVE Zafiyet Raporu',
+    baslik: 'CVE Zafiyet Raporu',
+    birim: 'zafiyet',
+    dosyaOnEki: 'cve_zafiyet_raporu',
+    ekRozetler: raporRozetleri,
+  },
+  ekAnahtarlar: ['onem'],
+  siralaSecenekleri: SIRALAMALAR,
+  raporAciklamaEki: (sorgu) => ONEM_SECENEKLERI.find(o => o.deger && o.deger === sorgu.onem)?.etiket ?? '',
+}
+
+function OnemFiltresi({ onem, onDegis }) {
+  // Listede olmayan adres degeri sunucuda yok sayilir; Tumu secili gorunur
+  const gecerli = ONEM_SECENEKLERI.some(o => o.deger === onem) ? onem : ''
+  return (
+    <div className="filtre-grubu siddet-secici" role="group" aria-label="CVSS şiddet filtresi">
+      {ONEM_SECENEKLERI.map(opt => (
+        <button
+          key={opt.renk}
+          type="button"
+          className={`siddet-dugmesi ${opt.renk}${gecerli === opt.deger ? ' secili' : ''}`}
+          aria-pressed={gecerli === opt.deger}
+          onClick={() => onDegis(opt.deger)}
+        >
+          {opt.etiket}
+        </button>
+      ))}
+    </div>
   )
-  const [severityFilter, setSeverityFilter] = useState('all')
+}
+
+function CVEComponent() {
+  const veri = useBolumVerisi(TANIM)
+  const { liste, istatistik: stats } = veri
+  const { kayitlar, yukleniyor, sorgu } = liste
   // "Yeni" rozeti tabani: sekme basina (hooks/useZiyaretTabani, karar R9); bu sayfa yazmaz
   const sonZiyaret = useZiyaretTabani()
-  // Secim id ile cozulur: periyodik yenileme acik paneli kapatmaz, filtre degisince de acik kalir
-  const { secili, sec, kapat } = useSeciliKayit(cves)
+  // Secim id ile cozulur: periyodik yenileme, sayfa ya da filtre degisikligi acik paneli kapatmaz
+  const { secili, sec, kapat } = useSeciliKayit(kayitlar)
   const okumaKaydi = useMemo(() => (secili ? cveOkumaKaydi(secili) : null), [secili])
 
-  // Diger bes bilesenle ayni kalip: cekim surerken yeni kayitlar kendiliginden ekrana duser
-  // Sekme arka plandayken durur (hooks/useAraliklaYenile)
-  useAraliklaYenile(() => loadCVEs(true), 5000)
-
-  useEffect(() => {
-    loadCVEs()
-    loadStats()
-  }, [])
-
-  const loadCVEs = async (silent = false) => {
-    try {
-      if (!silent) setLoading(true)
-      const response = await cveApi.getCVEs()
-      if (response.data.success) {
-        setCVEs(response.data.data)
-      }
-    } catch (err) {
-      if (!silent) setError('CVE verileri yüklenirken hata oluştu')
-      console.error(err)
-    } finally {
-      if (!silent) setLoading(false)
-    }
-  }
-
-  const loadStats = async () => {
-    try {
-      const response = await cveApi.getStats()
-      if (response.data.success) {
-        setStats(response.data)
-      }
-    } catch (err) {
-      console.error('Stats yüklenirken hata:', err)
-    }
-  }
-
-  const handleFetchCVEs = async () => {
-    const activeSources = sources
-      .filter(s => selectedSources[s.value])
-      .map(s => s.value)
-
-    if (activeSources.length === 0) {
-      setError('Lütfen en az bir kaynak seçin!')
-      return
-    }
-
-    try {
-      setFetching(true)
-      setError(null)
-
-      // CVE'leri çek
-      const response = await cveApi.fetchCVEs({
-        days: parseInt(days),
-        sources: activeSources
-      })
-
-      if (response.data.success) {
-        loadStats()
-        toast.success("CVE çekimi başladı! Kayıtlar otomatik olarak ekrana yansıyacak.", { icon: "🚀", duration: 4000 })
-      } else {
-        setError(response.data.message)
-      }
-    } catch (err) {
-      setError(istekHataMesaji(err, 'CVE verileri getirilirken hata oluştu'))
-    } finally {
-      setFetching(false)
-    }
-  }
-
-  const handleClearCache = async () => {
-    if (!window.confirm('Tüm CVE verileri silinecek ve sıfırlanacak. Emin misiniz?')) return
-
-    try {
-      await cveApi.clearCache()
-      // Liste bosalinca acik kayit cozulemez, panel kendiliginden kapanir
-      setCVEs([])
-      loadStats()
-      toast.success("Veriler başarıyla temizlendi", { icon: "🗑️" })
-    } catch (err) {
-      setError(err.response?.status === 403
-        ? 'Sıfırlama için yönetici girişi gerekli: önce Django admin (/admin) üzerinden oturum açın.'
-        : 'Sıfırlama sırasında hata oluştu')
-    }
-  }
-
-  const handleExport = async () => {
-    try {
-      const response = await cveApi.exportCVEs()
-      if (response.data.success) {
-        const items = response.data.data
-        const date = new Date().toLocaleDateString('tr-TR')
-        const severityColor = (s) => {
-          const colors = { 'Kritik': '#dc3545', 'Yüksek': '#fd7e14', 'Orta': '#ffc107', 'Düşük': '#28a745' }
-          return colors[s] || '#6c757d'
-        }
-        const html = `<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8">
-<title>CVE Zafiyet Raporu - ${date}</title>
-<style>
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0a0f; color: #e0e0e0; max-width: 960px; margin: 0 auto; padding: 2rem; }
-  h1 { color: #5b86a7; border-bottom: 2px solid #1a1a24; padding-bottom: 0.5rem; }
-  .meta { color: #888; font-size: 0.85rem; margin-bottom: 2rem; }
-  .article { background: #111118; border: 1px solid #1a1a24; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
-  .article h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #e0e0e0; }
-  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; margin-right: 0.5rem; color: #fff; }
-  .article .date { color: #888; font-size: 0.8rem; }
-  .article .cveid { color: #5b86a7; font-weight: bold; font-size: 0.9rem; }
-  .article .content { margin-top: 0.75rem; line-height: 1.7; color: #ccc; }
-  .article a { color: #5b86a7; text-decoration: none; }
-  .article a:hover { text-decoration: underline; }
-  .score { font-weight: bold; font-size: 0.85rem; }
-  @media print { body { background: #fff; color: #000; } .article { border-color: #ddd; background: #f9f9f9; } .article h3, .article .content { color: #000; } h1 { color: #333; } }
-</style>
-</head>
-<body>
-<h1>CVE Zafiyet Raporu</h1>
-<p class="meta">${date} tarihinde oluşturuldu &mdash; ${items.length} zafiyet</p>
-${items.map(item => {
-          const content = kacisliParagraf(item.turkish_description || item.original_description || '')
-          return `<div class="article">
-  <span class="cveid">${kacis(item.cve_id || '')}</span>
-  <span class="badge" style="background:${severityColor(item.severity)}">${kacis(item.severity || 'Bilinmiyor')}</span>
-  ${ceviriEtiketiHtml(item)}
-  ${item.cvss_score ? `<span class="score">CVSS: ${kacis(item.cvss_score)}</span>` : ''}
-  <span class="date">${kacis(item.published_date || '')}</span>
-  <h3>${kacis(item.turkish_title || item.original_title || '')}</h3>
-  <div class="content">${content}</div>
-  <a href="${guvenliHref(item.link)}" target="_blank">Kaynağa Git &rarr;</a>
-</div>`
-        }).join('\n')}
-</body></html>`
-        const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `cve_zafiyet_raporu_${new Date().toISOString().split('T')[0]}.html`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      }
-    } catch (err) {
-      setError('Dışarı aktarma hatası')
-    }
-  }
-
-  const toggleSource = (value) => {
-    setSelectedSources(prev => ({
-      ...prev,
-      [value]: !prev[value]
-    }))
-  }
-
-  const filteredCVEs = severityFilter === 'all'
-    ? cves
-    : cves.filter(cve => {
-      const opt = severityOptions.find(o => o.value === severityFilter)
-      if (!opt || !cve.cvss_score) return false
-      return cve.cvss_score >= opt.min && cve.cvss_score <= opt.max
-    })
-
-  const seciliKaynakSayisi = sources.filter(s => selectedSources[s.value]).length
-  const bySource = stats.by_source || {}
-  // Secenekler disinda veritabaninda kaydi kalan kaynaklar (or. 2026-10-14'te cikarilan CIRCL)
-  const digerKaynaklar = Object.entries(bySource).filter(([ad]) => !sources.some(s => s.value === ad))
   const siddetDagilimi = Object.entries(stats.by_severity || {}).sort(([a], [b]) => {
     const sira = (s) => (SIDDET_SIRASI.includes(s) ? SIDDET_SIRASI.indexOf(s) : SIDDET_SIRASI.length)
     return sira(a) - sira(b)
   })
+  // Yuklenirken ya da yeni sorgu hatayla bittiyse eski sorgunun sayilari gosterilmez (bolum/BolumSayfasi)
+  const sonucVar = liste.guncel && !yukleniyor && kayitlar.length > 0
 
-  let liste
-  if (loading) {
-    liste = <p className="liste-bos">CVE kayıtları yükleniyor…</p>
-  } else if (filteredCVEs.length === 0) {
-    liste = (
+  let listeOgesi
+  if (yukleniyor) {
+    listeOgesi = <p className="liste-bos">CVE kayıtları yükleniyor…</p>
+  } else if (kayitlar.length === 0) {
+    listeOgesi = (
       <p className="liste-bos">
-        {cves.length === 0
-          ? 'CVE listesi boş. Kayıt almak için "Çek" düğmesini kullanın.'
-          : 'Bu filtreyle eşleşen CVE bulunamadı.'}
+        {Number(stats.total) > 0
+          ? 'Bu filtreyle eşleşen kayıt bulunamadı.'
+          : 'CVE listesi boş. Kayıt almak için "Çek" düğmesini kullanın.'}
       </p>
     )
   } else {
-    liste = (
+    listeOgesi = (
       <ul className="oncelikli-liste cve-listesi">
-        {filteredCVEs.map(item => (
+        {kayitlar.map(item => (
           <li key={item.id ?? item.cve_id}>
             <CveSatiri cve={item} sonZiyaret={sonZiyaret} onSec={c => sec(c.id)} />
           </li>
@@ -297,132 +184,25 @@ ${items.map(item => {
         </div>
       </div>
 
-      <section className="filtre-cubugu cam-kart" aria-label="Filtreler ve eylemler">
-        <div className="filtre-gruplari">
-          <label className="filtre-grubu">
-            <span className="filtre-etiketi">Dönem</span>
-            <Form.Select
-              size="sm"
-              className="cubuk-secim"
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              aria-label="Kaç günlük CVE çekilecek"
-            >
-              {GUN_SECENEKLERI.map(g => <option key={g} value={g}>{`Son ${g} gün`}</option>)}
-            </Form.Select>
-          </label>
-
-          <Dropdown autoClose="outside" className="filtre-grubu">
-            <Dropdown.Toggle variant="" size="sm" className="cubuk-dugme" id="cve-kaynaklari">
-              <FaFilter aria-hidden="true" />
-              {`Kaynaklar ${seciliKaynakSayisi}/${sources.length}`}
-            </Dropdown.Toggle>
-            <Dropdown.Menu className="kaynak-menusu">
-              {sources.map(source => {
-                const IconComp = source.icon
-                return (
-                  <Form.Check
-                    key={source.id}
-                    type="checkbox"
-                    id={source.id}
-                    className="kaynak-secenegi"
-                    checked={selectedSources[source.value]}
-                    onChange={() => toggleSource(source.value)}
-                    label={
-                      <>
-                        <IconComp aria-hidden="true" />
-                        <span className="kaynak-adi">{source.name}</span>
-                        <span className="kaynak-sayisi">{sayi(bySource[source.value])}</span>
-                      </>
-                    }
-                  />
-                )
-              })}
-              {digerKaynaklar.length > 0 && (
-                <p className="kaynak-diger">
-                  {`Diğer kayıtlar: ${digerKaynaklar.map(([ad, n]) => `${ad} ${sayi(n)}`).join(', ')}`}
-                </p>
-              )}
-            </Dropdown.Menu>
-          </Dropdown>
-
-          <div className="filtre-grubu siddet-secici" role="group" aria-label="CVSS şiddet filtresi">
-            {severityOptions.map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                className={`siddet-dugmesi ${opt.value}${severityFilter === opt.value ? ' secili' : ''}`}
-                aria-pressed={severityFilter === opt.value}
-                onClick={() => setSeverityFilter(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="eylem-gruplari">
-          <button
-            type="button"
-            className="cubuk-dugme"
-            onClick={() => loadCVEs()}
-            disabled={loading}
-            title="Listeyi yenile"
-          >
-            <FaSync aria-hidden="true" />Yenile
-          </button>
-          <button
-            type="button"
-            className="cubuk-dugme"
-            onClick={handleExport}
-            title="CVE zafiyetlerini HTML rapor olarak indir"
-          >
-            <FaFileExport aria-hidden="true" />HTML rapor
-          </button>
-          <button
-            type="button"
-            className="cubuk-dugme tehlike"
-            onClick={handleClearCache}
-            title="Tüm CVE verilerini sil ve sıfırla"
-          >
-            <FaTrash aria-hidden="true" />Önbelleği temizle
-          </button>
-          <button
-            type="button"
-            className="cubuk-dugme birincil"
-            onClick={handleFetchCVEs}
-            disabled={fetching}
-            title={`Seçili kaynaklardan son ${days} günün CVE kayıtlarını çek`}
-          >
-            {fetching
-              ? <><Spinner size="sm" aria-hidden="true" />Çekiliyor…</>
-              : <><FaDownload aria-hidden="true" />Çek</>}
-          </button>
-        </div>
-      </section>
+      <BolumCubugu
+        kimlik="cve"
+        {...veri.cubukOzellikleri(kapat)}
+        ekFiltre={<OnemFiltresi onem={sorgu.onem} onDegis={(onem) => liste.degistir({ onem })} />}
+      />
 
       <p className="liste-sayaci" aria-live="polite">
-        {severityFilter === 'all'
-          ? `${cves.length} CVE gösteriliyor`
-          : `${filteredCVEs.length} / ${cves.length} CVE gösteriliyor`}
+        {sonucVar
+          ? sayimMetni({ gun: sorgu.gun, toplam: liste.toplam, sayfa: liste.sayfa, boyut: liste.boyut, adet: kayitlar.length })
+          : ''}
       </p>
 
-      {liste}
+      {listeOgesi}
+
+      {sonucVar && <SayfaCubugu sayfa={liste.sayfa} sayfaSayisi={liste.sayfaSayisi} onSayfa={liste.sayfayaGit} />}
 
       <OkumaPaneli kayit={okumaKaydi} onKapat={kapat} />
 
-      {/* Error Alert */}
-      {error && (
-        <Alert
-          variant="danger"
-          className="position-fixed top-0 end-0 m-3"
-          style={{ zIndex: 9999, minWidth: '300px' }}
-          dismissible
-          onClose={() => setError(null)}
-        >
-          {error}
-        </Alert>
-      )}
+      <HataUyarisi metin={veri.hata} onKapat={veri.hatayiKapat} />
     </div>
   )
 }

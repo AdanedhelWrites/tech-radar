@@ -205,11 +205,18 @@ describe('GenelBakis', () => {
   it('oncelikli satir paneli acar', async () => {
     sayfa()
     const baslik = await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
-    expect(screen.getByRole('link', { name: 'Tümünü görüntüle →' })).toHaveAttribute('href', '/cve')
+    expect(screen.getByRole('link', { name: 'Tümünü görüntüle →' })).toHaveAttribute('href', '/cve?sirala=cvss')
     fireEvent.click(baslik.closest('button'))
     const panel = await screen.findByRole('dialog')
     expect(within(panel).getByText('CVE-2026-1001')).toBeInTheDocument()
     expect(within(panel).getByText('Yönetim arayüzü internete açık kurulumlar etkileniyor.')).toBeInTheDocument()
+  })
+
+  it('tumunu_goruntule_cvss_siralamasina_gider', async () => {
+    // spec 2026-11-05 G4: Zafiyetler'in Donem varsayilani 7 gun, ana sayfanin "son 7 gun" penceresiyle ortusur
+    sayfa()
+    await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
+    expect(screen.getByRole('link', { name: 'Tümünü görüntüle →' })).toHaveAttribute('href', '/cve?sirala=cvss')
   })
 
   it('gundem kaydi paneli acar', async () => {

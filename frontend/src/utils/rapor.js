@@ -2,7 +2,8 @@ import { kacis, kacisliParagraf, guvenliHref } from './html'
 
 // Bolum HTML raporu (spec 2026-11-05 G4, §7): gecerli filtre ve siralamayla, sayfadan bagimsiz.
 // Liste ucundan boyut=100 ile sirayla en fazla 5 sayfa (500 kayit) alinir; toplam daha buyukse
-// raporun basina "Ilk 500 kayit (toplam N)" notu konur. Govde utils/html ile kacislanir.
+// raporun basina "Ilk 500 kayit (toplam N)" notu konur. Govde ve rozetler utils/html ile kacislanir.
+// boslukKorunur: govdede white-space: pre-wrap (Kubernetes degisiklik gunlugunun girintisi).
 
 export const RAPOR_SAYFA_BOYUTU = 100
 export const RAPOR_EN_FAZLA_SAYFA = 5
@@ -29,13 +30,18 @@ export async function raporKayitlariniGetir(getir, istek) {
 // Varsayilanlar haber disindaki bolumlerin alanlari; Siber Guvenlik tarih/icerik'i kendisi verir
 const varsayilanTarih = (k) => k.published_date || ''
 const varsayilanIcerik = (k) => k.turkish_description || k.original_description || ''
-// Ek rozet kacislanmis HTML dondurur (surum; Zafiyetler'de or. CVSS)
-const varsayilanEkRozet = (k) => (k.version ? `<span class="ek-rozet">${kacis(k.version)}</span>` : '')
+// Ek rozetler ham metin dondurur: [{ metin, sinif? }] (surum; Zafiyetler'de CVE kimligi, CVSS, KEV).
+// Kacis sablonda yapilir, cagiran unutamaz.
+const varsayilanEkRozetler = (k) => (k.version ? [{ metin: k.version }] : [])
+
+const rozetHtml = ({ metin, sinif = '' }) =>
+  `<span class="ek-rozet${sinif ? ` ${kacis(sinif)}` : ''}">${kacis(metin)}</span>`
 
 export function raporHtml({
   belgeBasligi, baslik, birim, aciklama = '', vurgu = '#5b86a7',
   kayitlar, toplam,
-  tarih = varsayilanTarih, icerik = varsayilanIcerik, ekRozet = varsayilanEkRozet,
+  tarih = varsayilanTarih, icerik = varsayilanIcerik, ekRozetler = varsayilanEkRozetler,
+  boslukKorunur = false,
 }) {
   const gun = new Date().toLocaleDateString('tr-TR')
   const kesildi = toplam > kayitlar.length
@@ -53,8 +59,13 @@ export function raporHtml({
   .article h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #e0e0e0; }
   .article .source { display: inline-block; background: ${vurgu}; color: #fff; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; margin-right: 0.5rem; }
   .article .ek-rozet { display: inline-block; background: #1a1a24; color: ${vurgu}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace; margin-right: 0.5rem; }
+  .article .ek-rozet.cveid { background: transparent; padding-left: 0; font-weight: bold; font-size: 0.9rem; }
+  .article .ek-rozet.kritik { background: #dc3545; color: #fff; }
+  .article .ek-rozet.yuksek { background: #fd7e14; color: #fff; }
+  .article .ek-rozet.orta { background: #ffc107; color: #000; }
+  .article .ek-rozet.kev { background: #7a1f2b; color: #fff; }
   .article .date { color: #888; font-size: 0.8rem; }
-  .article .content { margin-top: 0.75rem; line-height: 1.7; color: #ccc; }
+  .article .content { margin-top: 0.75rem; line-height: 1.7; color: #ccc;${boslukKorunur ? ' white-space: pre-wrap;' : ''} }
   .article a { color: ${vurgu}; text-decoration: none; }
   .article a:hover { text-decoration: underline; }
   @media print { body { background: #fff; color: #000; } .article { border-color: #ddd; background: #f9f9f9; } .article h3, .article .content { color: #000; } h1 { color: #333; } }
@@ -64,7 +75,7 @@ export function raporHtml({
 <h1>${kacis(baslik)}</h1>
 <p class="meta">${gun} tarihinde oluşturuldu &mdash; ${sayi(kayitlar.length)} ${kacis(birim)}${aciklama ? ` &mdash; ${kacis(aciklama)}` : ''}</p>
 ${kesildi ? `<p class="not">İlk ${sayi(kayitlar.length)} kayıt (toplam ${sayi(toplam)})</p>\n` : ''}${kayitlar.map(item => `<div class="article">
-  <span class="source">${kacis(item.source || '')}</span>${ekRozet(item)}<span class="date">${kacis(tarih(item))}</span>
+  <span class="source">${kacis(item.source || '')}</span>${ekRozetler(item).map(rozetHtml).join('')}<span class="date">${kacis(tarih(item))}</span>
   <h3>${kacis(item.turkish_title || item.original_title || '')}</h3>
   <div class="content">${kacisliParagraf(icerik(item))}</div>
   <a href="${guvenliHref(item.link)}" target="_blank">Kaynağa Git &rarr;</a>

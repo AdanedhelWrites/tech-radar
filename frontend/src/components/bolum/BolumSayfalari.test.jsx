@@ -286,6 +286,92 @@ describe('KubernetesComponent kategori filtresi', () => {
   })
 })
 
+describe('Ortak bolum davranisi (NewsComponent uzerinden)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    kur(newsApi, 'getNews', [kayit(1), kayit(2)])
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('bilinmeyen_kaynak_listeye_ve_ceke_gitmez', async () => {
+    newsApi.fetchNews.mockResolvedValue({ data: { success: true } })
+    ac(NewsComponent, `/bolum?kaynak=${encodeURIComponent('Uydurma,The Hacker News')}`)
+    await screen.findByText('Türkçe başlık 1')
+    expect(newsApi.getNews).toHaveBeenLastCalledWith({ ...VARSAYILAN_ISTEK, kaynak: 'The Hacker News' })
+    expect(newsApi.getNews.mock.calls.every(([p]) => !String(p.kaynak).includes('Uydurma'))).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: /^Çek/ }))
+    await waitFor(() => expect(newsApi.fetchNews).toHaveBeenCalledTimes(1))
+    expect(newsApi.fetchNews.mock.calls[0][0].sources).toEqual(['The Hacker News'])
+    await waitFor(() => expect(newsApi.getStats).toHaveBeenCalledTimes(2))
+  })
+
+  it('cvss_siralamasi_haber_bolumlerinde_yok', async () => {
+    ac(NewsComponent)
+    await screen.findByText('Türkçe başlık 1')
+    const sirala = screen.getByRole('combobox', { name: 'Sırala' })
+    expect(within(sirala).getAllByRole('option').map(o => o.textContent)).toEqual(['En yeni', 'En eski'])
+  })
+
+  it('yalniz_bilinmeyen_kaynak_hepsi_sayilir', async () => {
+    newsApi.fetchNews.mockResolvedValue({ data: { success: true } })
+    ac(NewsComponent, '/bolum?kaynak=Uydurma')
+    await screen.findByText('Türkçe başlık 1')
+    expect(newsApi.getNews).toHaveBeenLastCalledWith(VARSAYILAN_ISTEK)
+    expect(screen.getByRole('button', { name: 'Kaynaklar 12/12' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Çek/ }))
+    await waitFor(() => expect(newsApi.fetchNews).toHaveBeenCalledTimes(1))
+    expect(newsApi.fetchNews.mock.calls[0][0].sources).toHaveLength(12)
+    await waitFor(() => expect(newsApi.getStats).toHaveBeenCalledTimes(2))
+  })
+
+  it('hata_sonrasi_sayim_ve_sayfa_cubugu_eski_toplamla_karismaz', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const yirmiBes = Array.from({ length: 25 }, (_, i) => kayit(i + 1))
+    newsApi.getNews.mockImplementation(async (params) => {
+      if (params.sayfa === 2) throw new Error('Network Error')
+      return { data: { success: true, data: yirmiBes, toplam: 1234, sayfa: params.sayfa, sayfa_sayisi: 50, boyut: 25 } }
+    })
+    ac(NewsComponent)
+    expect(await screen.findByText('Son 7 günde 1.234 kayıt · 1–25 gösteriliyor')).toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Sayfalar' })).getByRole('button', { name: 'Sonraki ›' }))
+    expect(await screen.findByText('Siber güvenlik haberleri yüklenirken hata oluştu')).toBeInTheDocument()
+    // Eski sorgunun toplami yeni sayfanin araligiyla gosterilmez ("26–50"), sayfa cubugu da gizli
+    expect(screen.queryByText(/gösteriliyor/)).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Sayfalar' })).toBeNull()
+  })
+
+  it('rapor_hazirlanirken_ikinci_tiklama_yok_sayilir', async () => {
+    const raporlar = []
+    vi.stubGlobal('Blob', class {
+      constructor(parcalar) { raporlar.push(parcalar.join('')) }
+    })
+    URL.createObjectURL = vi.fn(() => 'blob:rapor')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    let coz
+    newsApi.getNews.mockImplementation((params) => {
+      if (params.boyut !== 100) return Promise.resolve({ data: { success: true, data: [kayit(1)] } })
+      return new Promise(r => { coz = () => r({ data: { success: true, data: [kayit(1)], toplam: 1, sayfa: 1, sayfa_sayisi: 1, boyut: 100 } }) })
+    })
+    ac(NewsComponent)
+    await screen.findByText('Türkçe başlık 1')
+    const dugme = screen.getByTitle(/HTML rapor olarak indir/)
+    fireEvent.click(dugme)
+    expect(dugme).toBeDisabled()
+    fireEvent.click(dugme)
+    const raporCagrilari = () => newsApi.getNews.mock.calls.filter(([p]) => p.boyut === 100)
+    expect(raporCagrilari()).toHaveLength(1)
+    await act(async () => { coz() })
+    await waitFor(() => expect(raporlar).toHaveLength(1))
+    expect(dugme).not.toBeDisabled()
+    expect(raporCagrilari()).toHaveLength(1)
+  })
+})
+
 describe('DevToolsComponent kayit turu', () => {
   it('surum ve kayit turu rozetleri, tur dagilimi baslikta', async () => {
     vi.clearAllMocks()

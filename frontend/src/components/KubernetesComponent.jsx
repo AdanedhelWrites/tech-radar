@@ -56,6 +56,8 @@ const TANIM = {
     birim: 'haber',
     dosyaOnEki: 'kubernetes_raporu',
     vurgu: '#326ce5',
+    // Degisiklik gunlugunun girintisi raporda korunur
+    boslukKorunur: true,
   },
   ekAnahtarlar: ['kategori'],
   ekFiltre: (ozellikler) => <KategoriFiltresi {...ozellikler} />,

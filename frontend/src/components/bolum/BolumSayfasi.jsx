@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Form, Spinner, Dropdown } from 'react-bootstrap'
+import { Alert, Form, Spinner, Dropdown } from 'react-bootstrap'
 import { FaDownload, FaSync, FaTrash, FaFileExport, FaFilter } from 'react-icons/fa'
 import useSeciliKayit from '../../hooks/useSeciliKayit'
 import { haberOkumaKaydi, haberRozetleri, cevrilmediMi } from '../../utils/okumaKaydi'
@@ -51,7 +51,9 @@ function HaberSatiri({ kayit, bolum, onSec }) {
 
 // Filtre/eylem cubugu: donem, siralama, kaynak acilir menusu, bolume ozgu ek filtre (ekFiltre),
 // Yenile, HTML rapor, onbellegi temizle, Cek. Donem ve kaynaklar hem listeyi suzer hem Cek'i belirler
-// (Cek en fazla 15 gun). Cek suresince dugme doner (eski tam ekran bekleme penceresi yok).
+// (Cek en fazla 15 gun). Cek suresince dugme doner (eski tam ekran bekleme penceresi yok); HTML rapor
+// hazirlanirken (raporHazirlaniyor) rapor dugmesi devre disi. Ozelliklerin cogu hooks/useBolumVerisi
+// cubukOzellikleri'nden gelir.
 // gun: sayi ya da null (Tumu); gunSecenekleri: secenekler.js DONEM_SECENEKLERI;
 // siralaSecenekleri: [{deger, etiket}] (secenekler.js SIRALA_SECENEKLERI, Zafiyetler'de + CVSS).
 export function BolumCubugu({
@@ -59,7 +61,7 @@ export function BolumCubugu({
   sirala, siralaSecenekleri, onSiralaDegis,
   kaynaklar, seciliKaynaklar, onKaynakDegis, kaynakSayilari = {},
   ekFiltre = null,
-  yukleniyor, cekiliyor, onYenile, onRapor, onTemizle, onCek,
+  yukleniyor, cekiliyor, raporHazirlaniyor = false, onYenile, onRapor, onTemizle, onCek,
 }) {
   const seciliSayisi = kaynaklar.filter(k => seciliKaynaklar[k.value]).length
   // Secenekler disinda veritabaninda kaydi kalan kaynaklar (or. 2026-10-14'te cikarilan kaynaklar)
@@ -142,7 +144,14 @@ export function BolumCubugu({
         <button type="button" className="cubuk-dugme" onClick={onYenile} disabled={yukleniyor} title="Listeyi yenile">
           <FaSync aria-hidden="true" />Yenile
         </button>
-        <button type="button" className="cubuk-dugme" onClick={onRapor} title="Kayıtları HTML rapor olarak indir">
+        <button
+          type="button"
+          className="cubuk-dugme"
+          onClick={onRapor}
+          disabled={raporHazirlaniyor}
+          aria-busy={raporHazirlaniyor}
+          title="Kayıtları HTML rapor olarak indir"
+        >
           <FaFileExport aria-hidden="true" />HTML rapor
         </button>
         <button type="button" className="cubuk-dugme tehlike" onClick={onTemizle} title="Bu bölümün bütün kayıtlarını sil ve sıfırla">
@@ -166,17 +175,19 @@ export function BolumCubugu({
 
 // cubuk: oge ya da ({ kapat }) => oge. Islev bicimi bolume okuma panelini kapatma yolu verir
 // (or. onbellek temizlenince; secili kayit listeden dusse de panel acik kalir, bkz. useSeciliKayit).
-// toplam/sayfa/sayfaSayisi/boyut: useListeSorgusu'ndan; gun: sayi ya da null (Tumu); onSayfa(n).
+// toplam/sayfa/sayfaSayisi/boyut/guncel: useListeSorgusu'ndan; gun: sayi ya da null (Tumu); onSayfa(n).
 export default function BolumSayfasi({
   bolum, baslik, kayitlar, yukleniyor, cubuk,
   istatistik = null, dagilim = [],
   toplam = kayitlar.length, sayfa = 1, sayfaSayisi = 1, boyut = 25, gun = null, onSayfa = () => {},
+  guncel = true,
 }) {
   // Secim tum liste uzerinden cozulur: periyodik yenileme, sayfa ya da filtre degisikligi acik paneli kapatmaz
   const { secili, sec, kapat } = useSeciliKayit(kayitlar)
   const okumaKaydi = useMemo(() => (secili ? haberOkumaKaydi(secili, bolum) : null), [secili, bolum])
-  // Yeni sorgu yuklenirken eski sayilar ve sayfa cubugu gosterilmez (yanlis aralik titremesin)
-  const sonucVar = !yukleniyor && kayitlar.length > 0
+  // Yeni sorgu yuklenirken ya da hatayla bittiyse (guncel degil) eski sorgunun toplami yeni
+  // donem/sayfayla karismasin: sayim satiri ve sayfa cubugu gosterilmez
+  const sonucVar = guncel && !yukleniyor && kayitlar.length > 0
 
   let liste
   if (yukleniyor) {
@@ -236,5 +247,21 @@ export default function BolumSayfasi({
 
       <OkumaPaneli kayit={okumaKaydi} onKapat={kapat} />
     </div>
+  )
+}
+
+// Bolum hata uyarisi (sag ustte, kapatilabilir); metin yoksa hicbir sey cizmez
+export function HataUyarisi({ metin, onKapat }) {
+  if (!metin) return null
+  return (
+    <Alert
+      variant="danger"
+      className="position-fixed top-0 end-0 m-3"
+      style={{ zIndex: 9999, minWidth: '300px' }}
+      dismissible
+      onClose={onKapat}
+    >
+      {metin}
+    </Alert>
   )
 }

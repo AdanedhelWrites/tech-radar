@@ -22,11 +22,11 @@ const sahteGetir = () => vi.fn(async (params) => zarf(params))
 
 // Kanca ile birlikte adres de okunur: sorgu durumu yalniz adreste tutulur
 // durumlar: her render'daki yukleniyor degeri (sessiz yenilemenin onu hic degistirmedigini gormek icin)
-const kur = (giris, getir = sahteGetir(), ekAnahtarlar) => {
+const kur = (giris, getir = sahteGetir(), ekAnahtarlar, kaynaklar) => {
   const durumlar = []
   const sonuc = renderHook(
     () => {
-      const r = { ...useListeSorgusu({ getir, ekAnahtarlar }), konum: useLocation() }
+      const r = { ...useListeSorgusu({ getir, ekAnahtarlar, kaynaklar }), konum: useLocation() }
       durumlar.push(r.yukleniyor)
       return r
     },
@@ -202,6 +202,39 @@ describe('useListeSorgusu', () => {
     expect(result.current.hata).toBeInstanceOf(Error)
     expect(result.current.hata.message).toBe('bozuk')
     expect(result.current.kayitlar).toEqual([])
+  })
+
+  it('bilinmeyen_kaynak_istege_gitmez', async () => {
+    // Bolumun kaynak listesinde olmayan adres degerleri istege (ve Cek'e) gitmez
+    const { result, getir } = kur('/cve?kaynak=Uydurma,NVD,%3Cx%3E', undefined, [], ['NVD', 'GitHub Advisory'])
+    expect(result.current.sorgu.kaynak).toEqual(['NVD'])
+    await yuklendi(result)
+    expect(getir).toHaveBeenLastCalledWith({ gun: 7, sirala: 'yeni', sayfa: 1, boyut: 25, kaynak: 'NVD' })
+    // Yalniz bilinmeyen adlar: bos secim = hepsi, kaynak gonderilmez
+    const ikinci = kur('/cve?kaynak=Uydurma', undefined, [], ['NVD', 'GitHub Advisory'])
+    expect(ikinci.result.current.sorgu.kaynak).toEqual([])
+    await yuklendi(ikinci.result)
+    expect(ikinci.getir).toHaveBeenLastCalledWith({ gun: 7, sirala: 'yeni', sayfa: 1, boyut: 25 })
+  })
+
+  it('guncel_yalniz_gecerli_sorgunun_yanitinda', async () => {
+    const getir = vi.fn(async (params) => {
+      if (params.sayfa === 2) throw new Error('500')
+      return zarf(params)
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { result } = kur('/news', getir)
+    expect(result.current.guncel).toBe(false)
+    await yuklendi(result)
+    expect(result.current.guncel).toBe(true)
+    // Yeni sayfanin istegi basarisiz: eldeki toplam/kayitlar eski sorgunun, guncel degil
+    act(() => result.current.sayfayaGit(2))
+    await waitFor(() => expect(result.current.hata).toBeInstanceOf(Error))
+    expect(result.current.yukleniyor).toBe(false)
+    expect(result.current.guncel).toBe(false)
+    act(() => result.current.sayfayaGit(1))
+    await waitFor(() => expect(result.current.guncel).toBe(true))
+    vi.restoreAllMocks()
   })
 
   it('istek_gecerli_parametreleri_dondurur', async () => {

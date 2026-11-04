@@ -30,7 +30,12 @@ const sayfaOku = (ham) => {
 
 const siralaOku = (ham) => (SIRALAMALAR.includes(ham) ? ham : VARSAYILAN_SIRALA)
 
-const kaynakOku = (ham) => (ham ? ham.split(',').filter(Boolean) : [])
+// bilinenler: bolumun kaynak listesi (verilirse). Listede olmayan adres degerleri atilir: istege ve
+// Cek'e yalniz secenek listesindeki adlar gider; hepsi bilinmiyorsa secim bos (= butun kaynaklar) kalir.
+const kaynakOku = (ham, bilinenler) => {
+  const adlar = ham ? ham.split(',').filter(Boolean) : []
+  return bilinenler ? adlar.filter(ad => bilinenler.includes(ad)) : adlar
+}
 
 // Tek bir sorgu alanini adrese yazar; varsayilan ya da bos deger parametreyi siler
 const adreseYaz = (parametreler, ad, deger) => {
@@ -48,22 +53,24 @@ const adreseYaz = (parametreler, ad, deger) => {
   else parametreler.delete(ad)
 }
 
-export default function useListeSorgusu({ getir, ekAnahtarlar = [] }) {
+// kaynaklar: bolumun bilinen kaynak adlari (istege bagli; verilmezse adres degerleri suzulmez)
+export default function useListeSorgusu({ getir, ekAnahtarlar = [], kaynaklar = null }) {
   const [parametreler, setParametreler] = useSearchParams()
-  // Cagiran her render'da yeni dizi gecebilir; anahtar metniyle sabitlenir
+  // Cagiran her render'da yeni dizi gecebilir; anahtar metniyle sabitlenir (kaynak adlarinda virgul yok)
   const ekAnahtarMetni = ekAnahtarlar.join(',')
+  const kaynakMetni = kaynaklar ? kaynaklar.join(',') : null
 
   const sorgu = useMemo(() => {
     const sonuc = {
       gun: gunOku(parametreler.get('gun')),
       sirala: siralaOku(parametreler.get('sirala')),
-      kaynak: kaynakOku(parametreler.get('kaynak')),
+      kaynak: kaynakOku(parametreler.get('kaynak'), kaynakMetni === null ? null : kaynakMetni.split(',')),
     }
     for (const ad of ekAnahtarMetni.split(',').filter(Boolean)) {
       sonuc[ad] = parametreler.get(ad) || ''
     }
     return sonuc
-  }, [parametreler, ekAnahtarMetni])
+  }, [parametreler, ekAnahtarMetni, kaynakMetni])
   const istenenSayfa = sayfaOku(parametreler.get('sayfa'))
 
   // API parametreleri: gun (Tumu disinda) ve varsayilanlar her zaman, bos filtreler hic gonderilmez.
@@ -167,10 +174,13 @@ export default function useListeSorgusu({ getir, ekAnahtarlar = [] }) {
     })
   }, [setParametreler])
 
-  // Yanit gecerli sorguya aitse sunucunun sayfasi (asiri sayfa son sayfaya cekilir), degilse istenen
+  // guncel: eldeki yanit gecerli sorguya ait. Degilse (ilk yanittan once, yeni sorgu beklenirken ya da
+  // yeni sorgu hatayla bittiyse) toplam/sayfaSayisi eski sorgunundur: sayim satiri ve sayfa cubugu
+  // yalniz guncel iken gosterilmeli. Sayfa: guncelse sunucunun (asiri sayfa son sayfaya cekilir), degilse istenen.
   const guncel = sonuc.anahtar === istekAnahtari
   return {
     istek,
+    guncel,
     kayitlar: sonuc.kayitlar,
     toplam: sonuc.toplam,
     sayfa: guncel ? sonuc.sayfa : istenenSayfa,
