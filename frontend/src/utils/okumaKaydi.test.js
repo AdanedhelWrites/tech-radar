@@ -23,6 +23,16 @@ const kevCve = (ek = {}) => ({
 })
 
 describe('cveOkumaKaydi', () => {
+  it('GitHub Advisory Markdown govdesini duz metne cevirir', () => {
+    const k = cveOkumaKaydi({
+      cve_id: 'CVE-2026-115905', source: 'GitHub Advisory',
+      original_description: '## Summary\nA flaw in the `zip` crate.\n### Impact\n**High** impact.',
+      turkish_description: '## Özet\n`zip` kütüphanesinde bir açık.\n### Etki\n**Yüksek** etki.',
+    })
+    expect(k.govdeOrijinal).toBe('A flaw in the zip crate.\n\nImpact\n\nHigh impact.')
+    expect(k.govdeTr).toBe('zip kütüphanesinde bir açık.\n\nEtki\n\nYüksek etki.')
+  })
+
   it('cve kev onekini govdeden ayirir ve tum referanslari alir', () => {
     const k = cveOkumaKaydi(kevCve())
     expect(k.govdeOrijinal).toBe('A command injection vulnerability allows remote code execution.')

@@ -401,7 +401,9 @@ class GitHubAdvisoryScraper(CVEScraper):
                     cve = {
                         'cve_id': cve_id,
                         'source': 'GitHub Advisory',
-                        'original_title': f"{cve_id} - {summary[:80]}" if summary else f"{cve_id} - Güvenlik Açığı",
+                        # 2026-11-04: ozet 80 karakterde kelime ortasindan kesiliyordu ("... Dual-Header Inco");
+                        # GHSA ozetleri kisadir, tamami saklanir. Eski kayitlar API'de duzeltilir (cve_basligi).
+                        'original_title': f"{cve_id} - {summary.strip()}" if summary else f"{cve_id} - Güvenlik Açığı",
                         'original_description': description[:4000] if description else 'Açıklama bulunamadı',
                         'severity': severity,
                         'cvss_score': cvss_score,

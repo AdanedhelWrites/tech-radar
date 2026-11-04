@@ -30,11 +30,15 @@ const noktaKonumu = (cveId, skor) => {
   return { x: MERKEZ + r * Math.cos(aci), y: MERKEZ + r * Math.sin(aci) }
 }
 
-export default function CvssGrafigi({ noktalar, skorsuz }) {
+// sayilar: bantlarin son 7 gundeki gercek sayilari (api/ozet chart_counts). Noktalar bu dagilimla orantili
+// bir ornektir (en fazla 40); sayi yoksa (eski yanit) cizilen noktalar sayilir.
+export default function CvssGrafigi({ noktalar, skorsuz, sayilar }) {
   const cizilen = noktalar
     .filter(n => Number.isFinite(n?.cvss_score) && skorSinifi(n.cvss_score))
     .map(n => ({ ...n, sinif: skorSinifi(n.cvss_score), ...noktaKonumu(n.cve_id, n.cvss_score) }))
-  const say = (sinif) => cizilen.filter(n => n.sinif === sinif).length
+  const say = (sinif) => (Number.isFinite(sayilar?.[sinif])
+    ? sayilar[sinif]
+    : cizilen.filter(n => n.sinif === sinif).length)
   const ozet = `CVSS dağılımı, son 7 gün: ${say('kritik')} kritik, ${say('yuksek')} yüksek, ${say('orta')} orta`
 
   return (
@@ -51,9 +55,9 @@ export default function CvssGrafigi({ noktalar, skorsuz }) {
         ))}
       </div>
       <div className="cvss-lejant">
-        <span><i className="kritik" aria-hidden="true" />Kritik</span>
-        <span><i className="yuksek" aria-hidden="true" />Yüksek</span>
-        <span><i className="orta" aria-hidden="true" />Orta</span>
+        <span><i className="kritik" aria-hidden="true" />{`Kritik ${say('kritik')}`}</span>
+        <span><i className="yuksek" aria-hidden="true" />{`Yüksek ${say('yuksek')}`}</span>
+        <span><i className="orta" aria-hidden="true" />{`Orta ${say('orta')}`}</span>
         {skorsuz > 0 && <span className="skorsuz">{`${skorsuz} skorsuz`}</span>}
       </div>
     </div>

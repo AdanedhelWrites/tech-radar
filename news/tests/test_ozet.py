@@ -116,6 +116,36 @@ class OzetUcuTests(V1TestCase):
         self.assertEqual(skorlar, sorted(skorlar, reverse=True))
         self.assertEqual(g['unscored_count'], 1)
 
+    def test_chart_bantlari_gercek_dagilimla_orantili_orneklenir(self):
+        # 2026-11-04: en yuksek 40 skor alinca haftalik 200+ kritik grafigi tek renge boyuyordu
+        for i in range(50):
+            _cve(9.5)
+        for i in range(30):
+            _cve(8.0)
+        for i in range(20):
+            _cve(5.0)
+
+        g = self.client.get('/api/ozet/').json()
+
+        self.assertEqual(g['chart_counts'], {'kritik': 50, 'yuksek': 30, 'orta': 20})
+        self.assertEqual(len(g['chart']), 40)
+        siniflar = [('kritik' if p['cvss_score'] >= 9 else 'yuksek' if p['cvss_score'] >= 7 else 'orta')
+                    for p in g['chart']]
+        self.assertEqual((siniflar.count('kritik'), siniflar.count('yuksek'), siniflar.count('orta')), (20, 12, 8))
+        skorlar = [p['cvss_score'] for p in g['chart']]
+        self.assertEqual(skorlar, sorted(skorlar, reverse=True))
+
+    def test_chart_kucuk_bant_en_az_bir_nokta_alir(self):
+        for i in range(100):
+            _cve(9.8)
+        _cve(5.0)
+
+        g = self.client.get('/api/ozet/').json()
+
+        self.assertEqual(len(g['chart']), 40)
+        self.assertEqual(sum(1 for p in g['chart'] if p['cvss_score'] < 7), 1)
+        self.assertEqual(g['chart_counts'], {'kritik': 100, 'yuksek': 0, 'orta': 1})
+
     def test_chart_esit_skorda_yeni_once_sonra_cve_kimligi(self):
         eski = _cve(8.0, saat_once=5)
         yeni_b = _cve(8.0, saat_once=1)

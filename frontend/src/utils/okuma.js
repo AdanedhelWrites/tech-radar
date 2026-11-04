@@ -10,6 +10,48 @@ const gecerliTarih = (s) => {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s ? s : null
 }
 
+// GitHub Advisory/CIRCL aciklamalari Markdown gelir (2026-11-04: ~900 CVE "## Summary", "### Impact", kod
+// bloklari, **kalin**, [baglanti](url)). Liste ve okuma paneli duz metin gosterir: isaretler atilir, basliklar
+// kendi paragrafi olur, kod blogu satirlari korunur. Metnin ilk satiri kisa bir baslik ("## Summary",
+// "## Özet") ise tamamen atilir; ozet satiri ilk paragraf olarak onun yerine gecer.
+const MD_BASLIK = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/
+const MD_CIT = /^\s{0,3}(```|~~~)/
+const ILK_BASLIK_AZAMI_KELIME = 4
+
+const satirIciSadelestir = (satir) => satir
+  .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1')
+  // Yalniz **kalin**: __kalin__ bicimi Python adlarini (__init__) bozar
+  .replace(/\*\*(?=\S)([^*\n]+?)\*\*/g, '$1')
+  .replace(/`([^`\n]+)`/g, '$1')
+
+export const markdownSadelestir = (metin) => {
+  const satirlar = (metin || '').split(/\r?\n/)
+  const cikti = []
+  let kodda = false
+  let ilkSatir = true
+  for (const satir of satirlar) {
+    if (MD_CIT.test(satir)) {
+      kodda = !kodda
+      cikti.push('')
+      continue
+    }
+    if (kodda) {
+      cikti.push(satir)
+      continue
+    }
+    const baslik = MD_BASLIK.exec(satir)
+    if (baslik) {
+      const yazi = satirIciSadelestir(baslik[1])
+      const kisa = yazi.split(/\s+/).filter(Boolean).length <= ILK_BASLIK_AZAMI_KELIME
+      if (!(ilkSatir && kisa) && yazi) cikti.push('', yazi, '')
+    } else {
+      cikti.push(satirIciSadelestir(satir))
+    }
+    if (satir.trim()) ilkSatir = false
+  }
+  return cikti.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 export const paragraflar = (metin) =>
   (metin || '').split(/\r?\n\s*\r?\n/).map(p => p.trim()).filter(Boolean)
 

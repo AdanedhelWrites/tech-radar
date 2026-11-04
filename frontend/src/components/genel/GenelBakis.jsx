@@ -119,7 +119,7 @@ export default function GenelBakis() {
     <div className="genel-bakis">
       <section className={grafikVar ? 'genel-kafa' : 'genel-kafa grafiksiz'}>
         <DurumOzeti ozet={ozet} hata={ozetHata} />
-        {grafikVar && <CvssGrafigi noktalar={ozet?.chart || []} skorsuz={ozet?.unscored_count || 0} />}
+        {grafikVar && <CvssGrafigi noktalar={ozet?.chart || []} skorsuz={ozet?.unscored_count || 0} sayilar={ozet?.chart_counts} />}
       </section>
 
       <div className="genel-izgara">
