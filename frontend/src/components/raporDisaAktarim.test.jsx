@@ -80,7 +80,9 @@ describe('HTML rapor disa aktarimi', () => {
   })
 
   it.each(BOLUMLER)('%s raporunda govde kacislanir, satir sonu <br> olur', async (_ad, Bilesen, api, liste, aktarim) => {
-    api[liste].mockResolvedValue({ data: { success: true, data: [] } })
+    // 2026-11-05: alti bolum raporu da liste ucundan (gecerli filtreyle, boyut=100) alir;
+    // disa aktarim ucu da ayni zararli kaydi dondurur (kullanilmamali ama kullanilsa da kacislanmali).
+    api[liste].mockResolvedValue({ data: { success: true, data: [kayit] } })
     api.getStats.mockResolvedValue({ data: {
       success: true, total: 0, by_source: {}, by_severity: {}, by_category: {}, last_update: null,
     } })
@@ -94,5 +96,23 @@ describe('HTML rapor disa aktarimi', () => {
     expect(html).not.toMatch(/<script/i)
     expect(html).not.toMatch(/<img/i)
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;<br>ikinci satir &lt;img')
+    // 500'u asmayan raporda kesme notu yok
+    expect(html).not.toContain('İlk 500 kayıt')
+    expect(api[liste]).toHaveBeenCalledWith(expect.objectContaining({ sayfa: 1, boyut: 100 }))
+    expect(api[aktarim]).not.toHaveBeenCalled()
+  })
+
+  it('k8s_rapor_govdesinde_girinti_korunur', async () => {
+    // Degisiklik gunlugu girintisi (2026-11-05 oncesi K8s raporundaki white-space: pre-wrap)
+    for (const [Bilesen, api, liste] of [[KubernetesComponent, k8sApi, 'getK8s'], [NewsComponent, newsApi, 'getNews']]) {
+      api[liste].mockResolvedValue({ data: { success: true, data: [kayit] } })
+      api.getStats.mockResolvedValue({ data: { success: true, total: 0, by_source: {}, last_update: null } })
+      const { unmount } = render(<MemoryRouter><Bilesen /></MemoryRouter>)
+      fireEvent.click(await screen.findByTitle(/HTML rapor olarak indir/))
+      await waitFor(() => expect(raporlar).toHaveLength(Bilesen === KubernetesComponent ? 1 : 2))
+      unmount()
+    }
+    expect(raporlar[0]).toMatch(/\.article \.content \{[^}]*white-space: pre-wrap/)
+    expect(raporlar[1]).not.toContain('pre-wrap')
   })
 })

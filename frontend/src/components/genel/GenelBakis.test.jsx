@@ -85,6 +85,14 @@ describe('GenelBakis', () => {
     expect(screen.getByText('Zafiyet Durumu · Son 24 Saat')).toBeInTheDocument()
   })
 
+  it('gundem liste uclarini parametresiz cagirir', async () => {
+    sayfa()
+    expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
+    for (const cagri of [newsApi.getNews, k8sApi.getK8s, sreApi.getSRE, devtoolsApi.getDevTools, aiApi.getAINews]) {
+      expect(cagri).toHaveBeenCalledWith()
+    }
+  })
+
   it('kritik yoksa sakin cumle', async () => {
     ozetApi.getOzet.mockResolvedValue({ data: ozet({
       critical_count: 0, high_count: 0, kev_count: 0, priority: [], chart: [], unscored_count: 0,
@@ -205,11 +213,18 @@ describe('GenelBakis', () => {
   it('oncelikli satir paneli acar', async () => {
     sayfa()
     const baslik = await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
-    expect(screen.getByRole('link', { name: 'Tümünü görüntüle →' })).toHaveAttribute('href', '/cve')
+    expect(screen.getByRole('link', { name: 'Tümünü görüntüle →' })).toHaveAttribute('href', '/cve?sirala=cvss')
     fireEvent.click(baslik.closest('button'))
     const panel = await screen.findByRole('dialog')
     expect(within(panel).getByText('CVE-2026-1001')).toBeInTheDocument()
     expect(within(panel).getByText('Yönetim arayüzü internete açık kurulumlar etkileniyor.')).toBeInTheDocument()
+  })
+
+  it('tumunu_goruntule_cvss_siralamasina_gider', async () => {
+    // spec 2026-11-05 G4: Zafiyetler'in Donem varsayilani 7 gun, ana sayfanin "son 7 gun" penceresiyle ortusur
+    sayfa()
+    await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
+    expect(screen.getByRole('link', { name: 'Tümünü görüntüle →' })).toHaveAttribute('href', '/cve?sirala=cvss')
   })
 
   it('gundem kaydi paneli acar', async () => {
