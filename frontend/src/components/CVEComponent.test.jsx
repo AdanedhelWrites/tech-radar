@@ -202,6 +202,24 @@ describe('CVEComponent', () => {
     await waitFor(() => expect(cveApi.getStats).toHaveBeenCalledTimes(2))
   })
 
+  it('gecersiz_onem_istege_gitmez', async () => {
+    sayfa('/cve?onem=uydurma&sirala=cvss')
+    await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
+    expect(cveApi.getCVEs).toHaveBeenCalledTimes(1)
+    expect(cveApi.getCVEs).toHaveBeenCalledWith({ gun: 7, sirala: 'cvss', sayfa: 1, boyut: 25 })
+    const grup = screen.getByRole('group', { name: 'CVSS şiddet filtresi' })
+    expect(within(grup).getByRole('button', { name: 'Tümü' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('cubuk_basliklari_zafiyetlere_ozgu', async () => {
+    sayfa('/cve?gun=30')
+    await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
+    expect(screen.getByRole('button', { name: /HTML rapor/ })).toHaveAttribute('title', 'CVE zafiyetlerini HTML rapor olarak indir')
+    expect(screen.getByRole('button', { name: /Önbelleği temizle/ })).toHaveAttribute('title', 'Tüm CVE verilerini sil ve sıfırla')
+    // Cek en fazla 15 gun ceker; baslik da bunu soyler
+    expect(screen.getByRole('button', { name: /^Çek/ })).toHaveAttribute('title', 'Seçili kaynaklardan son 15 günün CVE kayıtlarını çek')
+  })
+
   it('hata_sonrasi_sayim_gizlenir', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     cveApi.getCVEs.mockImplementation(async (params) => {
@@ -237,9 +255,15 @@ describe('CVEComponent', () => {
     URL.createObjectURL = vi.fn(() => 'blob:rapor')
     URL.revokeObjectURL = vi.fn()
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    const kev = cve(5, 'CVE-2026-0005', 8.8, { source: 'CISA KEV', severity: 'Yüksek' })
+    // kev: ceviri bekliyor (saglayici yok); skorsuz: severity metni; dusuk: CVSS < 4 de renkli
+    const kev = cve(5, 'CVE-2026-0005', 8.8, {
+      source: 'CISA KEV', severity: 'Yüksek', needs_translation: true, translation_provider: null,
+    })
+    const skorsuz = cve(6, 'CVE-2026-0006', null, { severity: 'Bilinmiyor' })
+    const dusuk = cve(7, 'CVE-2026-0007', 3.1, { severity: 'Düşük', translation_provider: 'libretranslate' })
+    const raporKayitlari = [KAYITLAR[0], kev, skorsuz, dusuk]
     cveApi.getCVEs.mockImplementation(async (params) => ({
-      data: { success: true, data: params.boyut === 100 ? [KAYITLAR[0], kev] : KAYITLAR, toplam: 2, sayfa: 1, sayfa_sayisi: 1, boyut: params.boyut },
+      data: { success: true, data: params.boyut === 100 ? raporKayitlari : KAYITLAR, toplam: 4, sayfa: 1, sayfa_sayisi: 1, boyut: params.boyut },
     }))
     sayfa('/cve?onem=yuksek&sirala=cvss&sayfa=3')
     await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
@@ -252,8 +276,16 @@ describe('CVEComponent', () => {
     expect(html).toContain('<span class="ek-rozet yuksek">CVSS 8.8</span>')
     expect(html).toContain('<span class="ek-rozet kev">CISA KEV</span>')
     expect(html).toContain('<span class="ek-rozet kritik">CVSS 9.8</span>')
+    expect(html).toContain('<span class="ek-rozet skorsuz">Bilinmiyor</span>')
+    expect(html).toContain('<span class="ek-rozet dusuk">CVSS 3.1</span>')
+    // Ceviri etiketi (2026-11-05 oncesi CVE raporundaki ceviriEtiketiHtml karsiligi)
+    expect(html).toContain('<span class="ek-rozet ceviri">Çeviri: Gemini</span>')
+    expect(html).toContain('<span class="ek-rozet ceviri cevrilmedi">Çevrilmedi: orijinal metin</span>')
+    expect(html).toContain('<span class="ek-rozet ceviri uyari">Makine çevirisi: LibreTranslate</span>')
+    expect(html).toMatch(/\.ek-rozet\.ceviri \{/)
+    expect(html).toMatch(/\.ek-rozet\.dusuk \{/)
     expect(html).toContain('Son 7 gün · En yüksek CVSS · Yüksek')
-    expect(html.match(/class="article"/g)).toHaveLength(2)
+    expect(html.match(/class="article"/g)).toHaveLength(4)
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })

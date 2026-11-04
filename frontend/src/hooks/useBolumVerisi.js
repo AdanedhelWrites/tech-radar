@@ -11,9 +11,11 @@ import { DONEM_SECENEKLERI, SIRALA_SECENEKLERI, cekimGunu, donemEtiketi } from '
 // tanim:
 //   kaynaklar: [{id, name, value, icon}]
 //   api: { liste(params), cek({days, sources}), temizle(), istatistik() }
-//   metinler: { yuklemeHatasi, cekimHatasi, temizleOnayi, cekimBasladi? }
+//   metinler: { yuklemeHatasi, cekimHatasi, temizleOnayi, cekimBasladi?,
+//               raporBasligi?, temizleBasligi?, cekBasligi?(gun) }  (son ucu: cubuk dugme title'lari)
 //   rapor: utils/rapor raporHtml secenekleri + dosyaOnEki
-//   istege bagli: ekAnahtarlar: ['kategori'], siralaSecenekleri (varsayilan En yeni / En eski),
+//   istege bagli: ekAnahtarlar: ['kategori'], ekDegerler: { onem: [...] } (izinli ek filtre degerleri),
+//                 siralaSecenekleri (varsayilan En yeni / En eski),
 //                 raporAciklamaEki(sorgu) -> rapor meta satirina eklenen metin ('' = yok)
 
 const YONETICI_GEREKLI = 'Sıfırlama için yönetici girişi gerekli: önce Django admin (/admin) üzerinden oturum açın.'
@@ -21,11 +23,12 @@ const CEKIM_BASLADI = 'Haber çekimi başladı! Haberler otomatik olarak ekrana 
 
 export default function useBolumVerisi({
   kaynaklar, api, metinler, rapor,
-  ekAnahtarlar = [], siralaSecenekleri = SIRALA_SECENEKLERI, raporAciklamaEki = null,
+  ekAnahtarlar = [], ekDegerler = null, siralaSecenekleri = SIRALA_SECENEKLERI, raporAciklamaEki = null,
 }) {
   const tumKaynaklar = kaynaklar.map(k => k.value)
-  // Adresteki bilinmeyen kaynak adlari hook'ta atilir: liste istegi de Cek de ayni kumeyi kullanir
-  const liste = useListeSorgusu({ getir: api.liste, ekAnahtarlar, kaynaklar: tumKaynaklar })
+  // Adresteki bilinmeyen kaynak adlari ve izinsiz ek filtre degerleri hook'ta atilir: liste istegi de
+  // Cek de ayni kumeyi kullanir
+  const liste = useListeSorgusu({ getir: api.liste, ekAnahtarlar, kaynaklar: tumKaynaklar, ekDegerler })
   const { sorgu, degistir } = liste
 
   const [istatistik, setIstatistik] = useState({ total: 0, by_source: {}, last_update: null })
@@ -141,6 +144,11 @@ export default function useBolumVerisi({
     onRapor: raporAl,
     onTemizle: () => temizle(kapat),
     onCek: cek,
+    basliklar: {
+      rapor: metinler.raporBasligi,
+      temizle: metinler.temizleBasligi,
+      cek: metinler.cekBasligi,
+    },
   })
 
   return {

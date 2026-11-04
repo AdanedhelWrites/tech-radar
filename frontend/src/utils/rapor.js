@@ -63,7 +63,12 @@ export function raporHtml({
   .article .ek-rozet.kritik { background: #dc3545; color: #fff; }
   .article .ek-rozet.yuksek { background: #fd7e14; color: #fff; }
   .article .ek-rozet.orta { background: #ffc107; color: #000; }
+  .article .ek-rozet.dusuk { background: #28a745; color: #fff; }
+  .article .ek-rozet.skorsuz { background: #6c757d; color: #fff; }
   .article .ek-rozet.kev { background: #7a1f2b; color: #fff; }
+  .article .ek-rozet.ceviri { background: #6c757d; color: #fff; font-family: inherit; }
+  .article .ek-rozet.ceviri.uyari { background: #ffc107; color: #212529; }
+  .article .ek-rozet.ceviri.cevrilmedi { background: #e9ecef; color: #212529; }
   .article .date { color: #888; font-size: 0.8rem; }
   .article .content { margin-top: 0.75rem; line-height: 1.7; color: #ccc;${boslukKorunur ? ' white-space: pre-wrap;' : ''} }
   .article a { color: ${vurgu}; text-decoration: none; }

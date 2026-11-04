@@ -56,12 +56,14 @@ function HaberSatiri({ kayit, bolum, onSec }) {
 // cubukOzellikleri'nden gelir.
 // gun: sayi ya da null (Tumu); gunSecenekleri: secenekler.js DONEM_SECENEKLERI;
 // siralaSecenekleri: [{deger, etiket}] (secenekler.js SIRALA_SECENEKLERI, Zafiyetler'de + CVSS).
+// basliklar: { rapor?, temizle?, cek?(gun) } bolume ozgu dugme title'lari (or. Zafiyetler'de "CVE ...").
 export function BolumCubugu({
   kimlik, gun, gunSecenekleri, onGunDegis,
   sirala, siralaSecenekleri, onSiralaDegis,
   kaynaklar, seciliKaynaklar, onKaynakDegis, kaynakSayilari = {},
   ekFiltre = null,
   yukleniyor, cekiliyor, raporHazirlaniyor = false, onYenile, onRapor, onTemizle, onCek,
+  basliklar = {},
 }) {
   const seciliSayisi = kaynaklar.filter(k => seciliKaynaklar[k.value]).length
   // Secenekler disinda veritabaninda kaydi kalan kaynaklar (or. 2026-10-14'te cikarilan kaynaklar)
@@ -150,11 +152,11 @@ export function BolumCubugu({
           onClick={onRapor}
           disabled={raporHazirlaniyor}
           aria-busy={raporHazirlaniyor}
-          title="Kayıtları HTML rapor olarak indir"
+          title={basliklar.rapor || 'Kayıtları HTML rapor olarak indir'}
         >
           <FaFileExport aria-hidden="true" />HTML rapor
         </button>
-        <button type="button" className="cubuk-dugme tehlike" onClick={onTemizle} title="Bu bölümün bütün kayıtlarını sil ve sıfırla">
+        <button type="button" className="cubuk-dugme tehlike" onClick={onTemizle} title={basliklar.temizle || 'Bu bölümün bütün kayıtlarını sil ve sıfırla'}>
           <FaTrash aria-hidden="true" />Önbelleği temizle
         </button>
         <button
@@ -162,7 +164,9 @@ export function BolumCubugu({
           className="cubuk-dugme birincil"
           onClick={onCek}
           disabled={cekiliyor}
-          title={`Seçili kaynaklardan son ${cekimGunu(gun)} günün kayıtlarını çek`}
+          title={basliklar.cek
+            ? basliklar.cek(cekimGunu(gun))
+            : `Seçili kaynaklardan son ${cekimGunu(gun)} günün kayıtlarını çek`}
         >
           {cekiliyor
             ? <><Spinner size="sm" aria-hidden="true" />Çekiliyor…</>

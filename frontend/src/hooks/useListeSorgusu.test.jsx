@@ -22,11 +22,11 @@ const sahteGetir = () => vi.fn(async (params) => zarf(params))
 
 // Kanca ile birlikte adres de okunur: sorgu durumu yalniz adreste tutulur
 // durumlar: her render'daki yukleniyor degeri (sessiz yenilemenin onu hic degistirmedigini gormek icin)
-const kur = (giris, getir = sahteGetir(), ekAnahtarlar, kaynaklar) => {
+const kur = (giris, getir = sahteGetir(), ekAnahtarlar, kaynaklar, ekDegerler) => {
   const durumlar = []
   const sonuc = renderHook(
     () => {
-      const r = { ...useListeSorgusu({ getir, ekAnahtarlar, kaynaklar }), konum: useLocation() }
+      const r = { ...useListeSorgusu({ getir, ekAnahtarlar, kaynaklar, ekDegerler }), konum: useLocation() }
       durumlar.push(r.yukleniyor)
       return r
     },
@@ -215,6 +215,18 @@ describe('useListeSorgusu', () => {
     expect(ikinci.result.current.sorgu.kaynak).toEqual([])
     await yuklendi(ikinci.result)
     expect(ikinci.getir).toHaveBeenLastCalledWith({ gun: 7, sirala: 'yeni', sayfa: 1, boyut: 25 })
+  })
+
+  it('gecersiz_ek_filtre_istege_gitmez', async () => {
+    // ekDegerler verilen ek anahtarda listede olmayan adres degeri bos (= Tumu) sayilir
+    const izinli = { onem: ['kritik', 'yuksek', 'orta', 'dusuk'] }
+    const { result, getir } = kur('/cve?onem=uydurma', undefined, ['onem'], undefined, izinli)
+    expect(result.current.sorgu.onem).toBe('')
+    await yuklendi(result)
+    expect(getir).toHaveBeenLastCalledWith({ gun: 7, sirala: 'yeni', sayfa: 1, boyut: 25 })
+    const ikinci = kur('/cve?onem=orta', undefined, ['onem'], undefined, izinli)
+    await yuklendi(ikinci.result)
+    expect(ikinci.getir).toHaveBeenLastCalledWith({ gun: 7, sirala: 'yeni', sayfa: 1, boyut: 25, onem: 'orta' })
   })
 
   it('guncel_yalniz_gecerli_sorgunun_yanitinda', async () => {

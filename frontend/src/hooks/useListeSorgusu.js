@@ -54,11 +54,14 @@ const adreseYaz = (parametreler, ad, deger) => {
 }
 
 // kaynaklar: bolumun bilinen kaynak adlari (istege bagli; verilmezse adres degerleri suzulmez)
-export default function useListeSorgusu({ getir, ekAnahtarlar = [], kaynaklar = null }) {
+// ekDegerler: { <ek anahtar>: [izinli degerler] } (istege bagli); listede olmayan adres degeri bos
+// (= Tumu) sayilir ve istege gitmez (or. ?onem=uydurma)
+export default function useListeSorgusu({ getir, ekAnahtarlar = [], kaynaklar = null, ekDegerler = null }) {
   const [parametreler, setParametreler] = useSearchParams()
-  // Cagiran her render'da yeni dizi gecebilir; anahtar metniyle sabitlenir (kaynak adlarinda virgul yok)
+  // Cagiran her render'da yeni dizi/nesne gecebilir; metin anahtarla sabitlenir (kaynak adlarinda virgul yok)
   const ekAnahtarMetni = ekAnahtarlar.join(',')
   const kaynakMetni = kaynaklar ? kaynaklar.join(',') : null
+  const ekDegerMetni = JSON.stringify(ekDegerler ?? {})
 
   const sorgu = useMemo(() => {
     const sonuc = {
@@ -66,11 +69,13 @@ export default function useListeSorgusu({ getir, ekAnahtarlar = [], kaynaklar = 
       sirala: siralaOku(parametreler.get('sirala')),
       kaynak: kaynakOku(parametreler.get('kaynak'), kaynakMetni === null ? null : kaynakMetni.split(',')),
     }
+    const izinliler = JSON.parse(ekDegerMetni)
     for (const ad of ekAnahtarMetni.split(',').filter(Boolean)) {
-      sonuc[ad] = parametreler.get(ad) || ''
+      const deger = parametreler.get(ad) || ''
+      sonuc[ad] = izinliler[ad] && !izinliler[ad].includes(deger) ? '' : deger
     }
     return sonuc
-  }, [parametreler, ekAnahtarMetni, kaynakMetni])
+  }, [parametreler, ekAnahtarMetni, kaynakMetni, ekDegerMetni])
   const istenenSayfa = sayfaOku(parametreler.get('sayfa'))
 
   // API parametreleri: gun (Tumu disinda) ve varsayilanlar her zaman, bos filtreler hic gonderilmez.

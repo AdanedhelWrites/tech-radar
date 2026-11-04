@@ -7,6 +7,7 @@ import useZiyaretTabani from '../hooks/useZiyaretTabani'
 import { goreliZaman } from '../utils/zaman'
 import OkumaPaneli from './okuma/OkumaPaneli'
 import CveSatiri from './cve/CveSatiri'
+import { ceviriRozeti } from './CeviriEtiketi'
 import { BolumCubugu, HataUyarisi } from './bolum/BolumSayfasi'
 import SayfaCubugu from './bolum/SayfaCubugu'
 import { CVSS_SIRALAMASI, SIRALA_SECENEKLERI, sayimMetni } from './bolum/secenekler'
@@ -63,15 +64,20 @@ const getSeverityClass = (severity) => {
 
 const sayi = (n) => Number(n || 0).toLocaleString('tr-TR')
 
-// Rapor rozetleri ham metin (utils/rapor sablonda kacislar): CVE kimligi, CVSS (renk skorla), CISA KEV
-// (liste satiri ve okuma paneliyle ayni kural: utils/okumaKaydi)
+// Rapor rozetleri ham metin (utils/rapor sablonda kacislar): CVE kimligi, CVSS (renk skorla; 4 alti
+// dusuk; skorsuzda saklanan severity metni), CISA KEV (liste satiri ve okuma paneliyle ayni kural:
+// utils/okumaKaydi) ve ceviri etiketi (CeviriEtiketi ile ayni kural)
 const raporRozetleri = (item) => {
   const rozetler = []
   if (item.cve_id) rozetler.push({ metin: item.cve_id, sinif: 'cveid' })
   if (Number.isFinite(item.cvss_score)) {
-    rozetler.push({ metin: `CVSS ${item.cvss_score.toFixed(1)}`, sinif: skorSinifi(item.cvss_score) })
+    rozetler.push({ metin: `CVSS ${item.cvss_score.toFixed(1)}`, sinif: skorSinifi(item.cvss_score) || 'dusuk' })
+  } else {
+    rozetler.push({ metin: item.severity || 'Bilinmiyor', sinif: 'skorsuz' })
   }
   if (cveOkumaKaydi(item).rozetler.some(r => r.tur === 'kev')) rozetler.push({ metin: 'CISA KEV', sinif: 'kev' })
+  const ceviri = ceviriRozeti(item)
+  if (ceviri) rozetler.push(ceviri)
   return rozetler
 }
 
@@ -88,6 +94,9 @@ const TANIM = {
     cekimHatasi: 'CVE verileri getirilirken hata oluştu',
     temizleOnayi: 'Tüm CVE verileri silinecek ve sıfırlanacak. Emin misiniz?',
     cekimBasladi: 'CVE çekimi başladı! Kayıtlar otomatik olarak ekrana yansıyacak.',
+    raporBasligi: 'CVE zafiyetlerini HTML rapor olarak indir',
+    temizleBasligi: 'Tüm CVE verilerini sil ve sıfırla',
+    cekBasligi: (gun) => `Seçili kaynaklardan son ${gun} günün CVE kayıtlarını çek`,
   },
   rapor: {
     belgeBasligi: 'CVE Zafiyet Raporu',
@@ -97,13 +106,14 @@ const TANIM = {
     ekRozetler: raporRozetleri,
   },
   ekAnahtarlar: ['onem'],
+  // Gecersiz ?onem= istege gitmez (Tumu sayilir)
+  ekDegerler: { onem: ONEM_SECENEKLERI.map(o => o.deger).filter(Boolean) },
   siralaSecenekleri: SIRALAMALAR,
   raporAciklamaEki: (sorgu) => ONEM_SECENEKLERI.find(o => o.deger && o.deger === sorgu.onem)?.etiket ?? '',
 }
 
-function OnemFiltresi({ onem, onDegis }) {
-  // Listede olmayan adres degeri sunucuda yok sayilir; Tumu secili gorunur
-  const gecerli = ONEM_SECENEKLERI.some(o => o.deger === onem) ? onem : ''
+// onem: hook'ta dogrulanmis deger ('' = Tumu)
+function OnemFiltresi({ onem: gecerli, onDegis }) {
   return (
     <div className="filtre-grubu siddet-secici" role="group" aria-label="CVSS şiddet filtresi">
       {ONEM_SECENEKLERI.map(opt => (
