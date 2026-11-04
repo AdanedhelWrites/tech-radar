@@ -10,6 +10,9 @@ const api = axios.create({
   // Django admin oturumu acikken POST isteklerinde CSRF token'i gonder
   xsrfCookieName: 'csrftoken',
   xsrfHeaderName: 'X-CSRFToken',
+  // Asili kalan istek hata ile biter: liste yenilemesi (useListeSorgusu) yanit beklerken tur
+  // atladigi icin zaman asimi olmasa tek bir takilan istek otomatik yenilemeyi kalici durdururdu
+  timeout: 30000,
 })
 
 // Liste uclari (getNews, getCVEs ...) istege bagli sorgu parametresi alir (2026-11-05):

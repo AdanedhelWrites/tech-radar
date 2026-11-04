@@ -80,7 +80,9 @@ describe('HTML rapor disa aktarimi', () => {
   })
 
   it.each(BOLUMLER)('%s raporunda govde kacislanir, satir sonu <br> olur', async (_ad, Bilesen, api, liste, aktarim) => {
-    api[liste].mockResolvedValue({ data: { success: true, data: [] } })
+    // 2026-11-05: bes bolum raporu liste ucundan (gecerli filtreyle, boyut=100) alir; CVE henuz
+    // disa aktarim ucundan. Ikisi de ayni zararli kaydi dondurur.
+    api[liste].mockResolvedValue({ data: { success: true, data: [kayit] } })
     api.getStats.mockResolvedValue({ data: {
       success: true, total: 0, by_source: {}, by_severity: {}, by_category: {}, last_update: null,
     } })
@@ -94,5 +96,7 @@ describe('HTML rapor disa aktarimi', () => {
     expect(html).not.toMatch(/<script/i)
     expect(html).not.toMatch(/<img/i)
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;<br>ikinci satir &lt;img')
+    // 500'u asmayan raporda kesme notu yok
+    expect(html).not.toContain('İlk 500 kayıt')
   })
 })

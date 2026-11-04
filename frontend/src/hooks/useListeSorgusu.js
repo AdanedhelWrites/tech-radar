@@ -80,6 +80,8 @@ export default function useListeSorgusu({ getir, ekAnahtarlar = [] }) {
     }
     return JSON.stringify(istek)
   }, [sorgu, istenenSayfa, ekAnahtarMetni])
+  // Gecerli istek parametreleri; disari da verilir (rapor ayni filtre ve siralamayla kendi sayfalarini ister)
+  const istek = useMemo(() => JSON.parse(istekAnahtari), [istekAnahtari])
 
   const [sonuc, setSonuc] = useState({
     anahtar: null, kayitlar: [], toplam: 0, sayfa: 1, sayfaSayisi: 1, boyut: SAYFA_BOYUTU,
@@ -99,13 +101,19 @@ export default function useListeSorgusu({ getir, ekAnahtarlar = [] }) {
   const yukle = useCallback(async (sessiz = false) => {
     const no = ++sonIstek.current
     bekleyen.current = true
-    if (!sessiz) setYukleniyor(true)
+    if (!sessiz) {
+      setYukleniyor(true)
+      // Yeni sorgu basladi: onceki sorgunun hatasi yanit beklenirken asili kalmaz
+      setHata(null)
+    }
     try {
-      const istek = JSON.parse(istekAnahtari)
       const yanit = await getirRef.current(istek)
       if (no !== sonIstek.current) return
       const veri = yanit.data
-      if (veri?.success) {
+      if (!veri?.success) {
+        // Basarisiz zarf (success: false) da hatadir; sessiz yenilemede ekran bozulmaz
+        if (!sessiz) setHata(new Error(veri?.message || 'Liste yanıtı başarısız'))
+      } else {
         const kayitlar = veri.data || []
         setSonuc({
           anahtar: istekAnahtari,
@@ -128,7 +136,7 @@ export default function useListeSorgusu({ getir, ekAnahtarlar = [] }) {
         setYukleniyor(false)
       }
     }
-  }, [istekAnahtari])
+  }, [istek, istekAnahtari])
 
   useEffect(() => {
     yukle()
@@ -162,6 +170,7 @@ export default function useListeSorgusu({ getir, ekAnahtarlar = [] }) {
   // Yanit gecerli sorguya aitse sunucunun sayfasi (asiri sayfa son sayfaya cekilir), degilse istenen
   const guncel = sonuc.anahtar === istekAnahtari
   return {
+    istek,
     kayitlar: sonuc.kayitlar,
     toplam: sonuc.toplam,
     sayfa: guncel ? sonuc.sayfa : istenenSayfa,

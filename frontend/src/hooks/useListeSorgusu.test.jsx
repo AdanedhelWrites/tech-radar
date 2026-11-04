@@ -177,4 +177,37 @@ describe('useListeSorgusu', () => {
     expect(ikinci.result.current.hata).toBeInstanceOf(Error)
     expect(ikinci.result.current.kayitlar).toEqual([])
   })
+
+  it('yeni_istek_eski_hatayi_temizler', async () => {
+    let coz
+    const getir = vi.fn()
+      .mockRejectedValueOnce(new Error('500'))
+      .mockImplementation((params) => new Promise(r => { coz = () => r(zarf(params)) }))
+    const { result } = kur('/sre', getir)
+    await yuklendi(result)
+    expect(result.current.hata).toBeInstanceOf(Error)
+    // Yeni sorgu baslar baslamaz eski hata kalkar (yanit beklenirken eski uyari asili kalmaz)
+    act(() => result.current.degistir({ gun: 1 }))
+    await waitFor(() => expect(getir).toHaveBeenCalledTimes(2))
+    expect(result.current.yukleniyor).toBe(true)
+    expect(result.current.hata).toBeNull()
+    await act(async () => { coz() })
+    expect(result.current.hata).toBeNull()
+  })
+
+  it('basarisiz_yanit_hata_sayilir', async () => {
+    const getir = vi.fn(async () => ({ data: { success: false, message: 'bozuk' } }))
+    const { result } = kur('/devtools', getir)
+    await yuklendi(result)
+    expect(result.current.hata).toBeInstanceOf(Error)
+    expect(result.current.hata.message).toBe('bozuk')
+    expect(result.current.kayitlar).toEqual([])
+  })
+
+  it('istek_gecerli_parametreleri_dondurur', async () => {
+    // Rapor ayni filtreyle sayfa sayfa ister: gecerli istek parametreleri disari verilir
+    const { result } = kur('/k8s?gun=tumu&kaynak=A&kategori=security&sayfa=2', undefined, ['kategori'])
+    await yuklendi(result)
+    expect(result.current.istek).toEqual({ sirala: 'yeni', sayfa: 2, boyut: 25, kaynak: 'A', kategori: 'security' })
+  })
 })

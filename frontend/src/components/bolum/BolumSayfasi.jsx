@@ -6,11 +6,17 @@ import { haberOkumaKaydi, haberRozetleri, cevrilmediMi } from '../../utils/okuma
 import { goreliZaman } from '../../utils/zaman'
 import CeviriEtiketi from '../CeviriEtiketi'
 import OkumaPaneli from '../okuma/OkumaPaneli'
+import SayfaCubugu from './SayfaCubugu'
+import { cekimGunu, donemEtiketi, sayimMetni } from './secenekler'
 
 // Bes haber bolumunun ortak iskeleti (spec 2026-10-31 G4-G5): sayfa basligi ve veritabani ozeti,
 // kompakt filtre/eylem cubugu yuvasi, tam genislikte liste, detay ortak okuma panelinde
 // (?kayit=<id>, hooks/useSeciliKayit). Zafiyetler sayfasiyla (CVEComponent) ayni siniflar.
-// Veri yukleme, cekme/temizleme/rapor ve bolume ozgu filtreler bolum bileseninde kalir.
+// 2026-11-05 (filtre/sayfalama spec G4): liste sunucuda suzulmus tek sayfadir; sayim satiri gercek
+// toplami ve gosterilen araligi, listenin altindaki SayfaCubugu sayfalari verir. Veri yukleme,
+// cekme/temizleme/rapor bolum/HaberBolumu'nda.
+
+const TUMU_DEGERI = 'tumu'
 
 const sayi = (n) => Number(n || 0).toLocaleString('tr-TR')
 const metin = (d) => (typeof d === 'string' ? d : '')
@@ -43,10 +49,14 @@ function HaberSatiri({ kayit, bolum, onSec }) {
   )
 }
 
-// Filtre/eylem cubugu: donem, kaynak acilir menusu, bolume ozgu ek filtre (ekFiltre), Yenile,
-// HTML rapor, onbellegi temizle, Cek. Cek suresince dugme doner (eski tam ekran bekleme penceresi yok).
+// Filtre/eylem cubugu: donem, siralama, kaynak acilir menusu, bolume ozgu ek filtre (ekFiltre),
+// Yenile, HTML rapor, onbellegi temizle, Cek. Donem ve kaynaklar hem listeyi suzer hem Cek'i belirler
+// (Cek en fazla 15 gun). Cek suresince dugme doner (eski tam ekran bekleme penceresi yok).
+// gun: sayi ya da null (Tumu); gunSecenekleri: secenekler.js DONEM_SECENEKLERI;
+// siralaSecenekleri: [{deger, etiket}] (secenekler.js SIRALA_SECENEKLERI, Zafiyetler'de + CVSS).
 export function BolumCubugu({
   kimlik, gun, gunSecenekleri, onGunDegis,
+  sirala, siralaSecenekleri, onSiralaDegis,
   kaynaklar, seciliKaynaklar, onKaynakDegis, kaynakSayilari = {},
   ekFiltre = null,
   yukleniyor, cekiliyor, onYenile, onRapor, onTemizle, onCek,
@@ -54,6 +64,8 @@ export function BolumCubugu({
   const seciliSayisi = kaynaklar.filter(k => seciliKaynaklar[k.value]).length
   // Secenekler disinda veritabaninda kaydi kalan kaynaklar (or. 2026-10-14'te cikarilan kaynaklar)
   const digerKaynaklar = Object.entries(kaynakSayilari).filter(([ad]) => !kaynaklar.some(k => k.value === ad))
+  // Bu bolumde olmayan siralama (or. adresten sirala=cvss) sunucuda varsayilana duser; ayni gorunur
+  const gecerliSirala = siralaSecenekleri.some(s => s.deger === sirala) ? sirala : siralaSecenekleri[0].deger
 
   return (
     <section className="filtre-cubugu cam-kart" aria-label="Filtreler ve eylemler">
@@ -63,11 +75,26 @@ export function BolumCubugu({
           <Form.Select
             size="sm"
             className="cubuk-secim"
-            value={gun}
-            onChange={(e) => onGunDegis(Number(e.target.value))}
-            aria-label="Kaç günlük kayıt çekilecek"
+            value={gun ?? TUMU_DEGERI}
+            onChange={(e) => onGunDegis(e.target.value === TUMU_DEGERI ? null : Number(e.target.value))}
+            aria-label="Dönem"
           >
-            {gunSecenekleri.map(g => <option key={g} value={g}>{`Son ${g} gün`}</option>)}
+            {gunSecenekleri.map(g => (
+              <option key={g ?? TUMU_DEGERI} value={g ?? TUMU_DEGERI}>{donemEtiketi(g)}</option>
+            ))}
+          </Form.Select>
+        </label>
+
+        <label className="filtre-grubu">
+          <span className="filtre-etiketi">Sırala</span>
+          <Form.Select
+            size="sm"
+            className="cubuk-secim"
+            value={gecerliSirala}
+            onChange={(e) => onSiralaDegis(e.target.value)}
+            aria-label="Sırala"
+          >
+            {siralaSecenekleri.map(s => <option key={s.deger} value={s.deger}>{s.etiket}</option>)}
           </Form.Select>
         </label>
 
@@ -79,13 +106,16 @@ export function BolumCubugu({
           <Dropdown.Menu className="kaynak-menusu">
             {kaynaklar.map(kaynak => {
               const Ikon = kaynak.icon
+              const secili = !!seciliKaynaklar[kaynak.value]
               return (
                 <Form.Check
                   key={kaynak.id}
                   type="checkbox"
                   id={kaynak.id}
                   className="kaynak-secenegi"
-                  checked={seciliKaynaklar[kaynak.value]}
+                  checked={secili}
+                  // Bos kaynak secimi "hepsi" demek: son secili kaynak kaldirilamaz
+                  disabled={secili && seciliSayisi === 1}
                   onChange={() => onKaynakDegis(kaynak.value)}
                   label={
                     <>
@@ -123,7 +153,7 @@ export function BolumCubugu({
           className="cubuk-dugme birincil"
           onClick={onCek}
           disabled={cekiliyor}
-          title={`Seçili kaynaklardan son ${gun} günün kayıtlarını çek`}
+          title={`Seçili kaynaklardan son ${cekimGunu(gun)} günün kayıtlarını çek`}
         >
           {cekiliyor
             ? <><Spinner size="sm" aria-hidden="true" />Çekiliyor…</>
@@ -134,30 +164,35 @@ export function BolumCubugu({
   )
 }
 
+// cubuk: oge ya da ({ kapat }) => oge. Islev bicimi bolume okuma panelini kapatma yolu verir
+// (or. onbellek temizlenince; secili kayit listeden dusse de panel acik kalir, bkz. useSeciliKayit).
+// toplam/sayfa/sayfaSayisi/boyut: useListeSorgusu'ndan; gun: sayi ya da null (Tumu); onSayfa(n).
 export default function BolumSayfasi({
   bolum, baslik, kayitlar, yukleniyor, cubuk,
-  istatistik = null, dagilim = [], filtre = null,
+  istatistik = null, dagilim = [],
+  toplam = kayitlar.length, sayfa = 1, sayfaSayisi = 1, boyut = 25, gun = null, onSayfa = () => {},
 }) {
-  // Secim tum liste uzerinden cozulur: periyodik yenileme de filtre degisikligi de acik paneli kapatmaz
+  // Secim tum liste uzerinden cozulur: periyodik yenileme, sayfa ya da filtre degisikligi acik paneli kapatmaz
   const { secili, sec, kapat } = useSeciliKayit(kayitlar)
   const okumaKaydi = useMemo(() => (secili ? haberOkumaKaydi(secili, bolum) : null), [secili, bolum])
-  const gosterilenler = filtre ? kayitlar.filter(filtre) : kayitlar
+  // Yeni sorgu yuklenirken eski sayilar ve sayfa cubugu gosterilmez (yanlis aralik titremesin)
+  const sonucVar = !yukleniyor && kayitlar.length > 0
 
   let liste
   if (yukleniyor) {
     liste = <p className="liste-bos">Kayıtlar yükleniyor…</p>
-  } else if (gosterilenler.length === 0) {
+  } else if (kayitlar.length === 0) {
     liste = (
       <p className="liste-bos">
-        {kayitlar.length === 0
-          ? 'Liste boş. Kayıt almak için "Çek" düğmesini kullanın.'
-          : 'Bu filtreyle eşleşen kayıt bulunamadı.'}
+        {istatistik && Number(istatistik.total) > 0
+          ? 'Bu filtreyle eşleşen kayıt bulunamadı.'
+          : 'Liste boş. Kayıt almak için "Çek" düğmesini kullanın.'}
       </p>
     )
   } else {
     liste = (
       <ul className="oncelikli-liste">
-        {gosterilenler.map(kayit => (
+        {kayitlar.map(kayit => (
           <li key={kayit.id}>
             <HaberSatiri kayit={kayit} bolum={bolum} onSec={k => sec(k.id)} />
           </li>
@@ -189,15 +224,15 @@ export default function BolumSayfasi({
         )}
       </div>
 
-      {cubuk}
+      {typeof cubuk === 'function' ? cubuk({ kapat }) : cubuk}
 
       <p className="liste-sayaci" aria-live="polite">
-        {filtre
-          ? `${gosterilenler.length} / ${kayitlar.length} kayıt gösteriliyor`
-          : `${kayitlar.length} kayıt gösteriliyor`}
+        {sonucVar ? sayimMetni({ gun, toplam, sayfa, boyut, adet: kayitlar.length }) : ''}
       </p>
 
       {liste}
+
+      {sonucVar && <SayfaCubugu sayfa={sayfa} sayfaSayisi={sayfaSayisi} onSayfa={onSayfa} />}
 
       <OkumaPaneli kayit={okumaKaydi} onKapat={kapat} />
     </div>
