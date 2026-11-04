@@ -2,7 +2,7 @@ import { Badge } from 'react-bootstrap'
 
 // Her kayit hangi saglayiciyla cevrildigini gosterir (spec 2026-09-15, bolum 3.5).
 // LibreTranslate dusuk kalitelidir ve anlam hatasi icerebilir: sari uyari.
-// Gemini ve Google (eski kayitlar) notr gri bilgi rozeti. Bos/null: rozet yok.
+// Gemini, OpenRouter, DeepL ve Google (eski kayitlar) notr gri bilgi rozeti. Bos/null: rozet yok.
 const ROZETLER = {
   libretranslate: {
     metin: 'Makine çevirisi: LibreTranslate',
@@ -13,6 +13,17 @@ const ROZETLER = {
     metin: 'Çeviri: Gemini',
     bg: 'secondary', text: 'light', arka: '#6c757d', on: '#ffffff',
     aciklama: 'Gemini (gemini-3.5-flash-lite) ile çevrildi.',
+  },
+  // Yedek zincir (spec 2026-11-02 G6, PR-C): birincil Gemini kullanilamazken
+  openrouter: {
+    metin: 'Çeviri: OpenRouter',
+    bg: 'secondary', text: 'light', arka: '#6c757d', on: '#ffffff',
+    aciklama: 'OpenRouter ücretsiz modeliyle çevrildi.',
+  },
+  deepl: {
+    metin: 'Çeviri: DeepL',
+    bg: 'secondary', text: 'light', arka: '#6c757d', on: '#ffffff',
+    aciklama: 'DeepL API Free ile çevrildi.',
   },
   google: {
     metin: 'Çeviri: Google',

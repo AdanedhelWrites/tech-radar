@@ -20,7 +20,8 @@ class NewsArticle(models.Model):
     translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini'),
+                 ('openrouter', 'OpenRouter'), ('deepl', 'DeepL')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -60,7 +61,8 @@ class CVEEntry(models.Model):
     translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini'),
+                 ('openrouter', 'OpenRouter'), ('deepl', 'DeepL')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -101,7 +103,8 @@ class KubernetesEntry(models.Model):
     translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini'),
+                 ('openrouter', 'OpenRouter'), ('deepl', 'DeepL')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -132,7 +135,8 @@ class SREEntry(models.Model):
     translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini'),
+                 ('openrouter', 'OpenRouter'), ('deepl', 'DeepL')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -171,7 +175,8 @@ class DevToolsEntry(models.Model):
     translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini'),
+                 ('openrouter', 'OpenRouter'), ('deepl', 'DeepL')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')
@@ -202,7 +207,8 @@ class AINewsEntry(models.Model):
     translation_attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Ceviri Deneme Sayisi')
     translation_provider = models.CharField(
         max_length=20, blank=True, default='',
-        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini')],
+        choices=[('google', 'Google'), ('libretranslate', 'LibreTranslate'), ('gemini', 'Gemini'),
+                 ('openrouter', 'OpenRouter'), ('deepl', 'DeepL')],
         verbose_name='Ceviri Saglayicisi')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Guncellenme Tarihi')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Olusturulma Tarihi')

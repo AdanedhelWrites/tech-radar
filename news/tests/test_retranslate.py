@@ -1911,3 +1911,588 @@ class SilinenKayitTests(TransactionTestCase):
         self.assertEqual(basarisiz, 0, 'Silinen kayit icerik hatasi degildir')
         ikinci.refresh_from_db()
         self.assertEqual(ikinci.translation_provider, 'gemini')
+
+
+class SahteCevirmen:
+    """kayit_cevirmenleri arayuzunu (name, onek, hazir, kaydi_cevir, paket_cevir) ag olmadan uygular.
+
+    hazir: sabit bool ya da parametresiz fonksiyon. cevap: alanlari alan fonksiyon ya da None (reddeder).
+    paket: PaketSonucu listesi (sirayla) ya da kayitlari alan fonksiyon; verilmezse her kayda cevap
+    uygulanir. Kayitlar: paket_cagrilar (kimlik -> alanlar), tekil_cagrilar."""
+
+    def __init__(self, name, onek=None, hazir=True, cevap=None, paket=None):
+        self.name = name
+        self.onek = onek or name
+        self.log_adi = name
+        self._hazir = hazir
+        self.cevap = cevap if cevap is not None else (
+            lambda alanlar: {ad: f'{name.upper()} {metin}' for ad, metin in alanlar.items()})
+        self._senaryo = iter(paket) if isinstance(paket, (list, tuple)) else None
+        self._paket = paket
+        self.paket_cagrilar, self.tekil_cagrilar = [], []
+
+    def hazir(self):
+        return self._hazir() if callable(self._hazir) else self._hazir
+
+    def kaydi_cevir(self, alanlar, bolum=None):
+        self.tekil_cagrilar.append(dict(alanlar))
+        return self.cevap(alanlar)
+
+    def paket_cevir(self, kayitlar, bolum=None):
+        if not self.hazir():
+            return gemini.PaketSonucu(istek_hatasi=True)
+        self.paket_cagrilar.append({kimlik: dict(alanlar) for kimlik, alanlar in kayitlar.items()})
+        if self._senaryo is not None:
+            return next(self._senaryo)
+        if callable(self._paket):
+            return self._paket(kayitlar)
+        sonuc = gemini.PaketSonucu()
+        for kimlik, alanlar in kayitlar.items():
+            ceviri = self.cevap(alanlar)
+            if ceviri is None:
+                sonuc.reddedilen.add(kimlik)
+            else:
+                sonuc.ceviriler[kimlik] = ceviri
+        return sonuc
+
+    @property
+    def cagrildi(self):
+        return bool(self.paket_cagrilar or self.tekil_cagrilar)
+
+
+def _reddet(alanlar):
+    return None
+
+
+class YedekZincirTests(GeminiSahteMixin, SaglayiciZinciriMixin, RetranslateTestBase):
+    """Spec 2026-11-02 G6 (PR-C): retranslate kayit duzeyi yedek zinciri kullanir. Yedekler yalniz birincil
+    Gemini gercekten kullanilamazken (gunluk butce / devre kesici) devreye girer; tur payi bitmesi degil."""
+
+    def setUp(self):
+        super().setUp()
+        self.libre = self.saglayicilari_ayarla(SahteSaglayici('libretranslate', _libre))[0]
+
+    def yedekleri_ayarla(self, *cevirmenler):
+        from news import kayit_cevirmenleri
+        yama = mock.patch.object(kayit_cevirmenleri, 'YEDEKLER', tuple(cevirmenler))
+        yama.start()
+        self.addCleanup(yama.stop)
+        return cevirmenler
+
+    def _tur(self, pay):
+        from news import retranslate
+        return retranslate._Tur(pay=pay, baslangic=gemini.butce_kullanimi())
+
+    def _kayit(self, kayit):
+        kayit.refresh_from_db()
+        return kayit
+
+    def _bekleyen(self, slug='yb'):
+        return self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', slug)
+
+    def _adaylar(self, adet, onek='yz'):
+        return [_libre_kaydi(f'{onek}-{i}', baslik=f'Story number {i + 1} published') for i in range(adet)]
+
+    # --- _cevirmen_sec ---
+
+    def test_cevirmen_sec_kurallari(self):
+        from news import retranslate
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter'), SahteCevirmen('deepl'))
+        for asama in ('bekleyen', 'yukseltme'):
+            with self.subTest(asama=asama):
+                self.gemini_ayarla(_gemini_cevirisi)
+                self.assertIs(retranslate._cevirmen_sec(self._tur(3), asama), gemini.BIRINCIL)
+                self.assertIsNone(retranslate._cevirmen_sec(self._tur(0), asama),
+                                  'Pay bitti, birincil hazir: tur bekler, yedege gidilmez')
+                self.gemini_ayarla(_gemini_cevirisi, butce=False)
+                self.assertIs(retranslate._cevirmen_sec(self._tur(0), asama), openrouter)
+                self.gemini_ayarla(_gemini_cevirisi, hazir=False)
+                openrouter._hazir = False
+                self.assertIs(retranslate._cevirmen_sec(self._tur(3), asama), deepl)
+                deepl._hazir = False
+                self.assertIsNone(retranslate._cevirmen_sec(self._tur(3), asama))
+                openrouter._hazir = deepl._hazir = True
+
+    # --- Brief testleri ---
+
+    def test_birincil_hazirsa_yedek_cagrilmaz(self):
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter'), SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi)
+        bekleyen = self._bekleyen()
+        aday = self._adaylar(1)[0]
+
+        self._calistir()
+
+        self.assertFalse(openrouter.cagrildi or deepl.cagrildi)
+        self.assertEqual(self._kayit(bekleyen).translation_provider, 'gemini')
+        self.assertEqual(self._kayit(aday).translation_provider, 'gemini')
+
+    def test_birincil_butcesi_bitince_openrouter_kullanilir(self):
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter'), SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+        adaylar = self._adaylar(2)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertFalse(deepl.cagrildi)
+        self.assertEqual(len(openrouter.tekil_cagrilar), 1, 'Bekleyen kayit duzeyinde gider')
+        self.assertEqual(len(openrouter.paket_cagrilar), 1, 'Yukseltme paketli gider')
+        bekleyen = self._kayit(bekleyen)
+        self.assertEqual(bekleyen.translation_provider, 'openrouter')
+        self.assertFalse(bekleyen.needs_translation)
+        self.assertEqual(bekleyen.turkish_title, 'OPENROUTER Farmers adopt new sensors')
+        for kayit in map(self._kayit, adaylar):
+            self.assertEqual(kayit.translation_provider, 'openrouter')
+            self.assertEqual(kayit.turkish_title, 'OPENROUTER ' + kayit.original_title)
+        self.assertEqual(sonuc['by_provider'].get('openrouter'), 1)
+        self.assertEqual(sonuc['upgraded'], 2)
+        self.assertEqual(self.libre.cagrilar, [])
+
+    def test_birincil_devre_kesicisi_acikken_yedek_kullanilir(self):
+        openrouter, = self.yedekleri_ayarla(SahteCevirmen('openrouter'))
+        self.gemini_ayarla(_gemini_cevirisi, hazir=False)
+        aday = self._adaylar(1)[0]
+
+        self._calistir()
+
+        self.assertEqual(self._kayit(aday).translation_provider, 'openrouter')
+
+    def test_openrouter_da_yoksa_deepl(self):
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter', hazir=False), SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+        aday = self._adaylar(1)[0]
+
+        sonuc = self._calistir()
+
+        self.assertFalse(openrouter.cagrildi)
+        self.assertEqual(self._kayit(bekleyen).translation_provider, 'deepl')
+        self.assertEqual(self._kayit(aday).translation_provider, 'deepl')
+        self.assertEqual(sonuc['by_provider'].get('deepl'), 1)
+
+    def test_tur_payi_bitince_yedek_cagrilmaz(self):
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter'), SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, istek_say=True)
+        bekleyen = self._bekleyen()
+        aday = self._adaylar(1)[0]
+
+        sonuc = self._calistir(tur=self._tur(0))
+
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertFalse(openrouter.cagrildi or deepl.cagrildi, 'Pay bitmesi yedekleri tetiklemez (G6)')
+        self.assertEqual(self._kayit(bekleyen).translation_provider, 'libretranslate')
+        aday = self._kayit(aday)
+        self.assertEqual(aday.translation_provider, 'libretranslate')
+        self.assertEqual(aday.translation_attempts, 0)
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_tur_payi')
+
+    def test_orta_cve_yedege_gitmez(self):
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter'), SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = _cve_kaydi('7101', cvss=5.0, needs_translation=True)
+        skorsuz = _cve_kaydi('7102', needs_translation=True)
+        orta_aday = _cve_kaydi('7103', cvss=6.9)
+
+        self._calistir()
+
+        self.assertFalse(openrouter.cagrildi or deepl.cagrildi, 'G1 disi CVE hicbir ucretsiz saglayiciya gitmez')
+        self.assertEqual(self._kayit(bekleyen).translation_provider, 'libretranslate')
+        self.assertEqual(self._kayit(skorsuz).translation_provider, 'libretranslate')
+        orta_aday = self._kayit(orta_aday)
+        self.assertEqual(orta_aday.translation_provider, 'libretranslate')
+        self.assertEqual(orta_aday.translation_attempts, 0)
+
+    def test_yuksek_cve_yedege_gider(self):
+        openrouter, = self.yedekleri_ayarla(SahteCevirmen('openrouter'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        kayit = _cve_kaydi('7104', cvss=9.8)
+
+        self._calistir()
+
+        self.assertEqual(self._kayit(kayit).translation_provider, 'openrouter')
+
+    def test_yedek_cevirisi_sonradan_yukseltilmez(self):
+        self.gemini_ayarla(_gemini_cevirisi)
+        kayitlar = self._adaylar(2)
+        for kayit, saglayici in zip(kayitlar, ('openrouter', 'deepl')):
+            type(kayit).objects.filter(pk=kayit.pk).update(translation_provider=saglayici)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertEqual(sonuc['upgraded'], 0)
+        self.assertEqual([self._kayit(k).translation_provider for k in kayitlar], ['openrouter', 'deepl'])
+
+    def test_yedegin_reddettigi_kayit_ayni_turda_siradaki_yedege_gider(self):
+        """G6: yedegin ciktisi dogrulamadan gecmezse zincirde siradaki denenir. OpenRouter k0'i reddeder,
+        DeepL ayni turda cevirir: kayit sayilmaz (translation_attempts 0)."""
+        openrouter, deepl = self.yedekleri_ayarla(
+            SahteCevirmen('openrouter', paket=lambda kayitlar: _ceviri_paketi(kayitlar, reddet={'k0'})),
+            SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        adaylar = self._adaylar(2)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(len(openrouter.paket_cagrilar), 1)
+        reddedilen_alanlar = openrouter.paket_cagrilar[0]['k0']
+        self.assertEqual(deepl.paket_cagrilar, [{'k0': reddedilen_alanlar}], 'Yalniz reddedilen DeepL\'e gider')
+        saglayicilar = {}
+        for kayit in map(self._kayit, adaylar):
+            self.assertEqual(kayit.translation_attempts, 0)
+            saglayicilar[kayit.original_title] = kayit.translation_provider
+        self.assertEqual(saglayicilar.pop(reddedilen_alanlar['title']), 'deepl')
+        self.assertEqual(list(saglayicilar.values()), ['openrouter'])
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (2, 0))
+
+    def test_iki_yedek_de_reddederse_kayit_bir_kez_sayilir(self):
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter', cevap=_reddet),
+                                                  SahteCevirmen('deepl', cevap=_reddet))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        aday = self._adaylar(1)[0]
+
+        sonuc = self._calistir()
+
+        self.assertEqual((len(openrouter.paket_cagrilar), len(deepl.paket_cagrilar)), (1, 1))
+        aday = self._kayit(aday)
+        self.assertEqual((aday.translation_provider, aday.translation_attempts), ('libretranslate', 1))
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (0, 1))
+
+    def test_iki_yedegin_reddettigi_kayit_ardisik_seriye_bir_kez_girer(self):
+        """Seri yalniz son redle artar (kayit basina +1): sinir 2 iken uc kayittan ikisi sayilir, sonra durur.
+        Her red seriye girseydi ilk kayitta durulurdu; hic girmeseydi ucu de sayilirdi."""
+        from news import retranslate
+        yama = mock.patch.object(retranslate, 'ARDISIK_HATA_SINIRI', 2)
+        yama.start()
+        self.addCleanup(yama.stop)
+        self.yedekleri_ayarla(SahteCevirmen('openrouter', cevap=_reddet), SahteCevirmen('deepl', cevap=_reddet))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        self.paket_siniri(adet=1)
+        adaylar = self._adaylar(3)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(sorted(self._kayit(k).translation_attempts for k in adaylar), [0, 1, 1])
+        self.assertEqual(sonuc['sections']['ai']['stopped_reason'], 'ardisik_icerik_hatasi')
+        self.assertEqual(sonuc['failed'], 2)
+
+    def test_birincilin_reddettigi_kayit_hemen_sayilir_yedege_gitmez(self):
+        """Birincil hazirken yedekler kullanilmaz: birincilin reddi hemen icerik hatasidir."""
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter'), SahteCevirmen('deepl'))
+        self.gemini_ayarla(None)
+        aday = self._adaylar(1)[0]
+
+        sonuc = self._calistir()
+
+        self.assertEqual(len(self.paket_cagrilar), 1)
+        self.assertFalse(openrouter.cagrildi or deepl.cagrildi)
+        aday = self._kayit(aday)
+        self.assertEqual((aday.translation_provider, aday.translation_attempts), ('libretranslate', 1))
+        self.assertEqual(sonuc['failed'], 1)
+
+    def test_yedegin_isaret_bozdugu_yapisal_k8s_siradaki_yedege_gider(self):
+        govde = '===SECTION: Features===\n---ITEM---\nAdds a flag.\n<<<PR#123|@kisi|sig>>>'
+
+        def bozar(alanlar):
+            sonuc = {ad: 'OPENROUTER ' + metin for ad, metin in alanlar.items()}
+            sonuc['description'] = sonuc['description'].replace('<<<PR#123|@kisi|sig>>>', '')
+            return sonuc
+
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter', cevap=bozar), SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        kayit = KubernetesEntry.objects.create(
+            source='GitHub Releases', category='release', version='v1.35.0',
+            original_title='Kubernetes v1.35.0 released', turkish_title='LIBRE Kubernetes v1.35.0 released',
+            original_description=govde, turkish_description='LIBRE ' + govde,
+            link='https://ornek.test/k8s/yedek-zincir', published_date=date(2026, 9, 12),
+            needs_translation=False, translation_provider='libretranslate')
+
+        self._calistir()
+
+        self.assertEqual((len(openrouter.tekil_cagrilar), len(deepl.tekil_cagrilar)), (1, 1))
+        kayit = self._kayit(kayit)
+        self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('deepl', 0))
+
+    def test_yedegin_reddettigi_bekleyen_siradaki_yedekle_cevrilir(self):
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter', cevap=_reddet), SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+
+        self._calistir()
+
+        self.assertEqual((len(openrouter.tekil_cagrilar), len(deepl.tekil_cagrilar)), (1, 1))
+        bekleyen = self._kayit(bekleyen)
+        self.assertEqual((bekleyen.translation_provider, bekleyen.translation_attempts), ('deepl', 0))
+        self.assertEqual(self.libre.cagrilar, [])
+
+    def test_yedeklerin_reddettigi_bekleyen_libre_ile_cevrilir(self):
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter', cevap=_reddet),
+                                                  SahteCevirmen('deepl', cevap=_reddet))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+
+        self._calistir()
+
+        self.assertEqual((len(openrouter.tekil_cagrilar), len(deepl.tekil_cagrilar)), (1, 1))
+        bekleyen = self._kayit(bekleyen)
+        # (Ayni turun yukseltme asamasinda kayit aday olur, iki yedek yine reddeder: deneme sayaci orada artar.)
+        self.assertEqual((bekleyen.translation_provider, bekleyen.needs_translation), ('libretranslate', False))
+
+    def test_yedeklerin_reddettigi_bekleyen_zincir_kapaliyken_bir_kez_sayilir(self):
+        self.libre.hazir = False
+        openrouter, deepl = self.yedekleri_ayarla(SahteCevirmen('openrouter', cevap=_reddet),
+                                                  SahteCevirmen('deepl', cevap=_reddet))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+
+        sonuc = self._calistir()
+
+        self.assertEqual((len(openrouter.tekil_cagrilar), len(deepl.tekil_cagrilar)), (1, 1))
+        bekleyen = self._kayit(bekleyen)
+        self.assertTrue(bekleyen.needs_translation)
+        self.assertEqual(bekleyen.translation_attempts, 1)
+        self.assertEqual(sonuc['failed'], 1)
+        self.assertFalse(sonuc['stopped'])
+
+    def test_yedek_reddinden_sonra_siradaki_kapanirsa_red_sayilir(self):
+        """OpenRouter icerigi reddetti, DeepL istek hatasiyla kapandi, zincir kapali: son sonuc OpenRouter'in
+        reddidir, kayit bir kez sayilir (bolum durmaz)."""
+        self.libre.hazir = False
+        durum = {'hazir': True}
+
+        def kapanir(alanlar):
+            durum['hazir'] = False
+            return None
+
+        openrouter, deepl = self.yedekleri_ayarla(
+            SahteCevirmen('openrouter', cevap=_reddet),
+            SahteCevirmen('deepl', hazir=lambda: durum['hazir'], cevap=kapanir))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+
+        sonuc = self._calistir()
+
+        self.assertEqual((len(openrouter.tekil_cagrilar), len(deepl.tekil_cagrilar)), (1, 1))
+        self.assertEqual(self._kayit(bekleyen).translation_attempts, 1)
+        self.assertEqual(sonuc['failed'], 1)
+
+    def test_yedegin_reddettigi_bekleyen_zincir_kapaliyken_icerik_hatasi(self):
+        self.libre.hazir = False
+        openrouter, = self.yedekleri_ayarla(SahteCevirmen('openrouter', cevap=_reddet))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+
+        sonuc = self._calistir()
+
+        bekleyen = self._kayit(bekleyen)
+        self.assertTrue(bekleyen.needs_translation)
+        self.assertEqual(bekleyen.translation_attempts, 1)
+        self.assertFalse(sonuc['stopped'])
+
+    def test_yedek_istek_hatasinda_sonraki_yedek_ayni_paketi_alir(self):
+        """Istek duzeyi hata yedegi kapattiysa ayni paket siradakine gider; hicbir kayit sayilmaz."""
+        durum = {'hazir': True}
+
+        def kapanir(kayitlar):
+            durum['hazir'] = False  # devre kesici acildi
+            return gemini.PaketSonucu(istek_hatasi=True)
+
+        openrouter, deepl = self.yedekleri_ayarla(
+            SahteCevirmen('openrouter', hazir=lambda: durum['hazir'], paket=kapanir), SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        adaylar = self._adaylar(3)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(len(openrouter.paket_cagrilar), 1)
+        self.assertEqual(len(deepl.paket_cagrilar), 1)
+        self.assertEqual(openrouter.paket_cagrilar[0], deepl.paket_cagrilar[0], 'Ayni paket yeniden denenmeli')
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (3, 0))
+        for kayit in map(self._kayit, adaylar):
+            self.assertEqual(kayit.translation_provider, 'deepl')
+            self.assertEqual(kayit.translation_attempts, 0)
+
+    def test_bekleyende_yedek_istek_hatasinda_sonraki_yedek_dener(self):
+        durum = {'hazir': True}
+
+        def kapanir(alanlar):
+            durum['hazir'] = False
+            return None
+
+        openrouter, deepl = self.yedekleri_ayarla(
+            SahteCevirmen('openrouter', hazir=lambda: durum['hazir'], cevap=kapanir), SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+
+        self._calistir()
+
+        self.assertEqual(len(openrouter.tekil_cagrilar), 1)
+        self.assertEqual(len(deepl.tekil_cagrilar), 1)
+        bekleyen = self._kayit(bekleyen)
+        self.assertEqual((bekleyen.translation_provider, bekleyen.translation_attempts), ('deepl', 0))
+
+    def test_yedek_hazirken_istek_hatasi_paketi_boler(self):
+        """Kayda ozgu 4xx (yedek hazir kaldi): bugunku gibi paket ikiye bolunur, yeniden secilmez."""
+        senaryo = iter([gemini.PaketSonucu(istek_hatasi=True)])
+        openrouter, deepl = self.yedekleri_ayarla(
+            SahteCevirmen('openrouter', paket=lambda kayitlar: next(senaryo, None) or _ceviri_paketi(kayitlar)),
+            SahteCevirmen('deepl'))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        adaylar = self._adaylar(2)
+
+        self._calistir()
+
+        self.assertEqual([len(p) for p in openrouter.paket_cagrilar], [2, 1, 1])
+        self.assertFalse(deepl.cagrildi)
+        # _ceviri_paketi 'GEMINI ' onekli metin verir; yazilan saglayici adi yine secilen cevirmenindir
+        self.assertEqual([self._kayit(k).translation_provider for k in adaylar], ['openrouter', 'openrouter'])
+
+    def test_son_yedek_de_kapaninca_asama_durur_kayit_sayilmaz(self):
+        openrouter, = self.yedekleri_ayarla(
+            SahteCevirmen('openrouter', paket=[gemini.PaketSonucu(istek_hatasi=True)]))
+        openrouter._hazir = lambda: not openrouter.paket_cagrilar  # ilk istekten sonra kapanir
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        aday = self._adaylar(1)[0]
+
+        sonuc = self._calistir()
+
+        self.assertEqual(len(openrouter.paket_cagrilar), 1)
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_budget')
+        aday = self._kayit(aday)
+        self.assertEqual((aday.translation_provider, aday.translation_attempts), ('libretranslate', 0))
+
+    def test_yedek_tur_payini_harcamaz(self):
+        """Tur payi yalniz birincil icindir: yedek kendi sayaciyla sinirlidir (pay 1, uc paket)."""
+        openrouter, = self.yedekleri_ayarla(SahteCevirmen('openrouter'))
+        self.gemini_ayarla(_gemini_cevirisi, hazir=False)
+        self.paket_siniri(adet=1)
+        adaylar = self._adaylar(3)
+
+        sonuc = self._calistir(tur=self._tur(1))
+
+        self.assertEqual(len(openrouter.paket_cagrilar), 3)
+        self.assertEqual(sonuc['upgraded'], 3)
+        self.assertEqual({self._kayit(k).translation_provider for k in adaylar}, {'openrouter'})
+
+    def test_yapisal_k8s_yedekte_tekil_yoldan_isaret_denetimli(self):
+        govde = ('===SECTION: Features===\n---ITEM---\nAdds a flag.\n<<<PR#123|@kisi|sig>>>\n'
+                 '---ITEM---\nFix x.\n<<<PR#124|@kisi2|sig2>>>')
+
+        def cevap(alanlar):
+            sonuc = {ad: 'OPENROUTER ' + metin for ad, metin in alanlar.items()}
+            if 'v1.34.0' in alanlar.get('title', ''):
+                sonuc['description'] = sonuc['description'].replace('<<<PR#124|@kisi2|sig2>>>', '', 1)
+            return sonuc
+
+        openrouter, = self.yedekleri_ayarla(SahteCevirmen('openrouter', cevap=cevap))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        kayitlar = []
+        for surum in ('v1.33.0', 'v1.34.0'):
+            kayitlar.append(KubernetesEntry.objects.create(
+                source='GitHub Releases', category='release', version=surum,
+                original_title=f'Kubernetes {surum} released', turkish_title=f'LIBRE Kubernetes {surum} released',
+                original_description=govde, turkish_description='LIBRE ' + govde,
+                link=f'https://ornek.test/k8s/yedek-{surum}', published_date=date(2026, 9, 12),
+                needs_translation=False, translation_provider='libretranslate'))
+
+        self._calistir()
+
+        self.assertEqual(openrouter.paket_cagrilar, [], 'Yapisal K8s paketlenmez')
+        self.assertEqual(len(openrouter.tekil_cagrilar), 2)
+        saglam, bozuk = map(self._kayit, kayitlar)
+        self.assertEqual(saglam.translation_provider, 'openrouter')
+        self.assertEqual((bozuk.translation_provider, bozuk.translation_attempts), ('libretranslate', 1),
+                         'Isaret kaybi her cevirmende icerik hatasidir')
+
+    def test_hemen_yeniden_acilan_yedek_paketi_sonsuz_dondurmez(self):
+        """Duzeltme 2: hazir() her hatadan sonra bir kez False donup yeniden True olur. Ayni paket en cok
+        1 + len(YEDEKLER) kez denenir, sonra asama durur; hicbir kayit sayilmaz."""
+        durum = {'kapali': False}
+
+        def hazir():
+            if durum['kapali']:
+                durum['kapali'] = False   # devre kesici hemen kapandi
+                return False
+            return True
+
+        def kapanir(kayitlar):
+            durum['kapali'] = True
+            return gemini.PaketSonucu(istek_hatasi=True)
+
+        openrouter, = self.yedekleri_ayarla(SahteCevirmen('openrouter', hazir=hazir, paket=kapanir))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        adaylar = self._adaylar(2)
+
+        sonuc = self._calistir()
+
+        self.assertEqual(len(openrouter.paket_cagrilar), 2)
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (0, 0))
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_budget')
+        for kayit in map(self._kayit, adaylar):
+            self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('libretranslate', 0))
+
+    def _gercek_deepl(self, tavan=1000, kullanilan=950):
+        """Gercek DeepLCevirmen (anahtar sahte, kapi/sayac surec ici); kalan aylik pay kullanilan'dan sonrasi."""
+        from news import kayit_cevirmenleri as kc
+        ayar = override_settings(DEEPL_API_KEY='test-deepl-anahtari:fx')
+        ayar.enable()
+        self.addCleanup(ayar.disable)
+        deepl = kc.DeepLCevirmen(tavan=tavan, aralik=0.0)
+        deepl._gate, deepl._butce = tu._LocalGate(), gemini._LocalButce()
+        deepl._sayac().artir(deepl._donem_anahtari(), kullanilan)
+        self.yedekleri_ayarla(deepl)
+        return deepl
+
+    def test_deepl_kalan_karakteri_paketten_azsa_kayit_sayilmaz(self):
+        """Duzeltme 1: DeepL'in kalan aylik payi (50 kr) pakete yetmez: istek yok, red yok, DeepL kapanir."""
+        deepl = self._gercek_deepl()
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        adaylar = self._adaylar(2)
+
+        with mock.patch('news.gemini.requests.post') as post:
+            sonuc = self._calistir()
+
+        post.assert_not_called()
+        self.assertEqual((sonuc['upgraded'], sonuc['failed']), (0, 0))
+        self.assertFalse(deepl.hazir())
+        for kayit in map(self._kayit, adaylar):
+            self.assertEqual((kayit.translation_provider, kayit.translation_attempts), ('libretranslate', 0))
+
+    def test_deepl_kalan_karakteri_bekleyene_yetmezse_kayit_sayilmaz(self):
+        self.libre.hazir = False
+        deepl = self._gercek_deepl()
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+
+        with mock.patch('news.gemini.requests.post') as post:
+            sonuc = self._calistir()
+
+        post.assert_not_called()
+        self.assertEqual(sonuc['failed'], 0)
+        self.assertFalse(deepl.hazir())
+        bekleyen = self._kayit(bekleyen)
+        self.assertTrue(bekleyen.needs_translation)
+        self.assertEqual(bekleyen.translation_attempts, 0)
+
+    def test_anahtarsiz_kurulum_bugunku_gibi_calisir(self):
+        """YEDEKLER gercek (anahtarlar bos): hicbiri hazir degil, HTTP yok; sonuc bugunku zincirle ayni."""
+        from news import kayit_cevirmenleri, retranslate
+        self.assertTrue(all(not c.hazir() for c in kayit_cevirmenleri.YEDEKLER))
+        self.gemini_ayarla(_gemini_cevirisi, butce=False)
+        bekleyen = self._bekleyen()
+        aday = self._adaylar(1)[0]
+
+        with mock.patch('news.gemini.requests.post') as post:
+            self.assertIsNone(retranslate._cevirmen_sec(self._tur(5), 'yukseltme'))
+            sonuc = self._calistir()
+
+        post.assert_not_called()
+        self.assertEqual(self.gemini_cagrilar, [])
+        self.assertEqual(self._kayit(bekleyen).translation_provider, 'libretranslate')
+        aday = self._kayit(aday)
+        self.assertEqual((aday.translation_provider, aday.translation_attempts), ('libretranslate', 0))
+        self.assertEqual(sonuc['by_provider'], {'gemini': 0, 'libretranslate': 1})
+        self.assertEqual(sonuc['stopped_reason'], 'gemini_budget')
+        self.assertFalse(sonuc['stopped'])

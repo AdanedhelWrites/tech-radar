@@ -1,6 +1,6 @@
 # Çeviri Kapasitesi: Gemini'yi Tam ve Doğru Yaymak — Tasarım
 
-> Tarih: 2026-11-02. Kaynak: brainstorming oturumu (UI turu sonrası). Durum: PR-A ve PR-B uygulandi (dallar feat/ceviri-yayma-a, feat/ceviri-yayma-b); PR-C bekliyor.
+> Tarih: 2026-11-02. Kaynak: brainstorming oturumu (UI turu sonrası). Durum: PR-A, PR-B ve PR-C uygulandi; C2 (canli model secimi) kullanici anahtarlarini bekliyor.
 > Önceki tasarımlar: `2026-09-14-ceviri-saglayici-zinciri`, `2026-09-15-gemini-yukseltme-design.md`,
 > `2026-09-17-cve-saklama-ve-gemini-onceligi` (ADR-0005, CVE rezervi). Bu tasarım ADR-0005'teki CVE rezervinin
 > yerine önem sınıfına dayalı bir öncelik koyar.
@@ -152,6 +152,7 @@ Kurallar:
   (kullanıcının "token verme" kararı her ücretsiz sağlayıcı için geçerli).
 - **Doğrulama** her sağlayıcıya aynen uygulanır: Türkçe harf, yankı, oran, yabancı alfabe ve K8s işaret sayısı.
   Bir sağlayıcının çıktısı doğrulamadan geçmezse zincirde sıradaki denenir.
+  Birincil Gemini'nin kendi reddi ise hemen sayılır, çünkü birincil hazırken yedekler kullanılmaz.
 - LLM sağlayıcıları (Gemini, OpenRouter) aynı sistem talimatını ve paket biçimini kullanır.
 - **DeepL bir LLM değildir.** Ürün adı, CVE numarası ve kod gibi terimler, DeepL'in etiket koruma özelliğiyle
   ya da mevcut XTRM yer tutucularıyla korunur. Hangisi olacağı uygulayıcının kararı (bkz. §7).

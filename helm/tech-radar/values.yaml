@@ -348,6 +348,13 @@ config:
     geminiModel: "gemini-3.5-flash-lite"
     geminiBatchChars: "10000"
     geminiBatchMax: "15"
+    # chart 3.2.0: ucretsiz yedek ceviri zinciri (README "Ceviri Sistemi"); bos model = o yedek kapali
+    geminiFallbackModel: ""             # Gemini ikinci model (ayni anahtar, ayri Google kotasi)
+    geminiFallbackDailyBudget: "450"
+    openrouterModel: ""                 # adi ":free" ile bitmeli, aksi halde kullanilmaz
+    openrouterDailyBudget: "50"
+    openrouterMinInterval: "4"          # sn; istekler arasi en az
+    deeplMonthlyChars: "450000"         # DeepL API Free ayda 500.000; 50.000 guvenlik payi
     libretranslateTimeout: "60"
     libretranslateCooldown: "60"
     libretranslateChunkChars: "160"
@@ -366,7 +373,7 @@ config:
 secrets:
   # Doluysa chart Secret olusturmaz; bu adli mevcut Secret kullanilir (or. Vault Secrets
   # Operator'un yazdigi). Anahtarlar: SECRET_KEY, DB_USER, DB_PASSWORD, GEMINI_API_KEY;
-  # istege bagli (yoksa pod yine acilir): GITHUB_TOKEN, NVD_API_KEY.
+  # istege bagli (yoksa pod yine acilir): GITHUB_TOKEN, NVD_API_KEY, OPENROUTER_API_KEY, DEEPL_API_KEY.
   # Bu durumda asagidaki degerler ve `required` kontrolleri kullanilmaz.
   existingSecret: ""
   # Zorunlu (existingSecret bossa). Uretmek icin: openssl rand -hex 32
@@ -380,3 +387,7 @@ secrets:
   githubToken: ""
   # Istege bagli. NVD anonim 5 istek/30 sn; CVE turu 3 NVD istegi yapar. Yalniz services.nvd.nist.gov'a gider.
   nvdApiKey: ""
+  # Istege bagli (chart 3.2.0) ucretsiz yedek ceviri anahtarlari; bos -> o yedek kapali.
+  # OpenRouter yalniz openrouter.ai'ye, DeepL yalniz api-free.deepl.com'a gider.
+  openrouterApiKey: ""
+  deeplApiKey: ""

@@ -13,6 +13,12 @@ XTRM yer tutucu korumasi ve turkish_post_process uygulanmaz: terimler prompt'la 
 
 paket_cevir (spec 2026-11-02-ceviri-yayma G5): ayni kota kurallariyla TEK istekte birden cok kayit
 (kimlik -> alanlar). Butce istek basina sayilir; dogrulama kayit basina yapilir.
+
+Yedek zincir (spec 2026-11-02-ceviri-yayma G6): kota/HTTP kurallari ve paket akisi KayitCevirmeni
+tabanindadir; GeminiCevirmen(model, onek) her model icin kendi kapisini, devre kesicisini ve sayacini
+(<onek>:budget:<Pasifik gunu>) kullanir. Modul fonksiyonlari (hazir, kaydi_cevir, paket_cevir,
+butce_ozeti...) birincil model BIRINCIL'in (onek 'gemini') ince sarmalayicisidir; BIRINCIL durumunu
+modul globallerinden (_gate, _butce, GEMINI_*) okur. Diger cevirmenler: kayit_cevirmenleri.
 """
 import json
 import os
@@ -129,41 +135,43 @@ def _get_gate():
 
 
 class _LocalButce:
-    """Tek surec icin gunluk sayac (Redis yoksa ve testlerde)."""
+    """Tek surec icin sayac (Redis yoksa ve testlerde)."""
 
     def __init__(self):
         self.sayaclar = {}
 
-    def artir(self, anahtar: str) -> int:
-        self.sayaclar[anahtar] = self.sayaclar.get(anahtar, 0) + 1
+    def artir(self, anahtar: str, miktar: int = 1) -> int:
+        self.sayaclar[anahtar] = self.sayaclar.get(anahtar, 0) + miktar
         return self.sayaclar[anahtar]
 
-    def azalt(self, anahtar: str) -> None:
-        self.sayaclar[anahtar] = max(self.sayaclar.get(anahtar, 0) - 1, 0)
+    def azalt(self, anahtar: str, miktar: int = 1) -> None:
+        self.sayaclar[anahtar] = max(self.sayaclar.get(anahtar, 0) - miktar, 0)
 
     def oku(self, anahtar: str) -> int:
         return self.sayaclar.get(anahtar, 0)
 
 
 class _RedisButce:
-    """Tum worker sureclerinin paylastigi gunluk sayac; anahtar 48 saat sonra kendiliginden silinir."""
+    """Tum worker sureclerinin paylastigi sayac; anahtar ttl sn (gunluk sayacta 48 saat) sonra
+    kendiliginden silinir. miktar: istek basina 1 ya da (DeepL) karakter sayisi."""
 
-    def __init__(self, client, prefix: str = 'gemini'):
+    def __init__(self, client, prefix: str = 'gemini', ttl: int = 48 * 3600):
         self.client = client
         self.prefix = prefix
+        self.ttl = ttl
 
     def _tam(self, anahtar: str) -> str:
         return f'{self.prefix}:{anahtar}'
 
-    def artir(self, anahtar: str) -> int:
+    def artir(self, anahtar: str, miktar: int = 1) -> int:
         tam = self._tam(anahtar)
-        deger = int(self.client.incr(tam))
-        if deger == 1:
-            self.client.expire(tam, 48 * 3600)
+        deger = int(self.client.incrby(tam, miktar))
+        if deger == miktar:
+            self.client.expire(tam, self.ttl)
         return deger
 
-    def azalt(self, anahtar: str) -> None:
-        self.client.decr(self._tam(anahtar))
+    def azalt(self, anahtar: str, miktar: int = 1) -> None:
+        self.client.decrby(self._tam(anahtar), miktar)
 
     def oku(self, anahtar: str) -> int:
         return int(self.client.get(self._tam(anahtar)) or 0)
@@ -182,8 +190,10 @@ def butce_anahtari() -> str:
     return f'budget:{datetime.now(PASIFIK):%Y-%m-%d}'
 
 
+# --- Birincil modelin modul arayuzu (retranslate, views ve testler bunlari kullanir) ---
+
 def butce_kullanimi() -> int:
-    return _get_butce().oku(butce_anahtari())
+    return BIRINCIL.butce_kullanimi()
 
 
 def butce_tavani() -> int:
@@ -192,36 +202,21 @@ def butce_tavani() -> int:
 
 
 def butce_var() -> bool:
-    return butce_kullanimi() < butce_tavani()
+    return BIRINCIL.butce_var()
 
 
 def hazir() -> bool:
     """Anahtar dolu, devre kesici kapali ve gunluk butce var mi. Redis erisilemezse False."""
-    try:
-        return bool(_anahtar()) and not _get_gate().cooldown_active() and butce_var()
-    except Exception:
-        return False
+    return BIRINCIL.hazir()
 
 
 def butce_ozeti() -> dict:
-    """Anonim /api/saglik/ icin butce ozeti; ASLA firlatmaz ve anahtar/kimlik bilgisi icermez.
-
-    Redis erisilemezse used=0, available=False, cooldown=False doner (serit "bilinmiyor"u
-    sessizce gosterir, saglik ucu 500 vermez).
-    """
-    ozet = {'used': 0, 'limit': butce_tavani(), 'period': 'day', 'available': False, 'cooldown': False}
-    try:
-        ozet['used'] = butce_kullanimi()
-        ozet['cooldown'] = bool(_get_gate().cooldown_active())
-        ozet['available'] = hazir()
-    except Exception:
-        return {'used': 0, 'limit': butce_tavani(), 'period': 'day', 'available': False, 'cooldown': False}
-    return ozet
+    """Anonim /api/saglik/ icin butce ozeti; ASLA firlatmaz ve anahtar/kimlik bilgisi icermez."""
+    return BIRINCIL.butce_ozeti()
 
 
 def _devre_kesici(sebep: str) -> None:
-    log.warning(f"  [Gemini] erisilemiyor ({sebep}); {GEMINI_COOLDOWN} sn atlanacak.")
-    _get_gate().start_cooldown(GEMINI_COOLDOWN)
+    BIRINCIL._devre_kesici(sebep)
 
 
 def _sistemik_hata(yanit) -> Optional[str]:
@@ -298,70 +293,26 @@ def _istek_govdesi(veri: dict, sema: dict, talimat: str) -> dict:
 
 
 def _istek_at(govde: dict, etiket: str = 'genel kaydi', kayit_sayisi: int = 1) -> Optional[requests.Response]:
-    """Kota kurallariyla tek istek atar. 200 yanitini ya da None doner (sebep loglandi).
-
-    hazir() kontrolu cagirana aittir. Butce istek ONCESI artar; tavan asildiysa istek atilmaz.
-    429 / 5xx / ag hatasi / beklenmeyen istisna -> devre kesici, butce geri alinmaz.
-    Diger 200 disi yanitlar -> butce geri alinir; sistemikse (_sistemik_hata) devre kesici de acilir.
-    etiket ve kayit_sayisi yalniz log icindir (kayit_sayisi >= 2 olan istegin 4xx'i WARNING)."""
-    butce, anahtar = _get_butce(), butce_anahtari()
-    if butce.artir(anahtar) > butce_tavani():
-        butce.azalt(anahtar)
-        log.warning(f"  [Gemini] gunluk butce doldu ({butce_tavani()}); {etiket} cevrilmedi.")
-        return None
-
-    _get_gate().wait_for_slot(GEMINI_MIN_INTERVAL)
-    try:
-        yanit = requests.post(
-            GEMINI_URL.format(model=GEMINI_MODEL),
-            headers={'x-goog-api-key': _anahtar(), 'Content-Type': 'application/json'},
-            json=govde,
-            timeout=GEMINI_TIMEOUT,
-        )
-    except requests.RequestException as hata:
-        _devre_kesici(type(hata).__name__)
-        return None
-    except Exception as hata:  # beklenmeyen hata retranslate'i durdurmasin
-        # Kod hatasi her kayitta tekrarlar: kaydin sucu sayilmasin, devre kesici acilsin
-        log.warning(f"  [Gemini] beklenmeyen hata: {type(hata).__name__}")
-        _devre_kesici(type(hata).__name__)
-        return None
-
-    if yanit.status_code == 429 or yanit.status_code >= 500:
-        _devre_kesici(f'HTTP {yanit.status_code}')
-        return None
-    if yanit.status_code != 200:
-        butce.azalt(anahtar)  # 4xx: kota harcanmadi
-        sistemik = _sistemik_hata(yanit)
-        if sistemik:
-            # Anahtar iptal / yetki yok / hesap / model yok: her istek ayni yaniti alir. Devre kesici
-            # acilmazsa hazir() True kalir ve retranslate her adayi icerik hatasi sayip
-            # RETRANSLATE_MAX_ATTEMPTS turda tum yukseltme adaylarini kuyruktan dusururdu.
-            _devre_kesici(sistemik)
-            return None
-        # Kayda ozgu istek sorunu (400 gecersiz govde vb.): devre kesici acilmaz
-        # Paket duzeyi 4xx (sema/govde cok buyuk vb.) gorunur olmali; tek kayitlik istek sessiz kalir
-        log.log(logging.WARNING if kayit_sayisi >= 2 else logging.INFO,
-                f"  [Gemini] istek reddedildi (HTTP {yanit.status_code}): {str(yanit.text)[:200]}")
-        return None
-    return yanit
+    """Birincil modelle kota kurallariyla tek istek (bkz. KayitCevirmeni._istek_at)."""
+    return BIRINCIL._istek_at(govde, etiket, kayit_sayisi)
 
 
-def _aday_ciktisi(yanit):
-    """(cikti, finishReason). cikti None: yanit tamamlanmadi ya da JSON nesnesi cozulemedi. ASLA firlatmaz."""
+def _aday_ciktisi(yanit, log_adi: str = 'Gemini'):
+    """(cikti, finishReason). cikti None: yanit tamamlanmadi ya da JSON nesnesi cozulemedi. ASLA firlatmaz.
+    log_adi yalniz log icindir (ikinci model kendi adiyla loglar)."""
     sebep = None
     try:
         aday = yanit.json()['candidates'][0]
         sebep = aday.get('finishReason')
         if sebep not in (None, 'STOP'):
-            log.warning(f"  [Gemini] yanit tamamlanmadi ({sebep}).")
+            log.warning(f"  [{log_adi}] yanit tamamlanmadi ({sebep}).")
             return None, sebep
         cikti = json.loads(aday['content']['parts'][0]['text'])
     except Exception as hata:  # ValueError/KeyError/IndexError/TypeError/AttributeError vb.
-        log.warning(f"  [Gemini] yanit cozulemedi ({type(hata).__name__}).")
+        log.warning(f"  [{log_adi}] yanit cozulemedi ({type(hata).__name__}).")
         return None, sebep
     if not isinstance(cikti, dict):
-        log.warning("  [Gemini] yanit JSON nesnesi degil.")
+        log.warning(f"  [{log_adi}] yanit JSON nesnesi degil.")
         return None, sebep
     return cikti, sebep
 
@@ -376,14 +327,15 @@ def _dolu_alanlar(alanlar) -> Dict[str, str]:
     return {ad: metin for ad, metin in alanlar.items() if isinstance(metin, str) and metin.strip()}
 
 
-def _kayit_cevirisi(alanlar: Dict[str, str], cikti: dict, onek: str = '') -> Optional[Dict[str, str]]:
+def _kayit_cevirisi(alanlar: Dict[str, str], cikti: dict, onek: str = '',
+                    log_adi: str = 'Gemini') -> Optional[Dict[str, str]]:
     """Kaydin tum alanlari dogrulamadan gecerse cevirileri (hepsi ya da hicbiri), yoksa None.
-    Istenmeyen alanlar yok sayilir. onek yalniz log icindir (paket kimligi)."""
+    Istenmeyen alanlar yok sayilir. onek ve log_adi yalniz log icindir (paket kimligi, saglayici)."""
     sonuc = {}
     for ad, orijinal in alanlar.items():
         sorun = _alan_sorunu(orijinal, cikti.get(ad))
         if sorun:
-            log.warning(f"  [Gemini] dogrulama basarisiz ({onek}{ad}: {sorun}).")
+            log.warning(f"  [{log_adi}] dogrulama basarisiz ({onek}{ad}: {sorun}).")
             return None
         sonuc[ad] = cikti[ad].strip()
     return sonuc
@@ -444,17 +396,7 @@ def kaydi_cevir(alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optiona
     """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi).
 
     bolum yalniz log metni icindir; tavan tum bolumler icin aynidir."""
-    alanlar = _dolu_alanlar(alanlar)
-    if not alanlar or not hazir():
-        return None
-    yanit = _istek_at(_istek_govdesi(alanlar, _alan_semasi(alanlar), SISTEM_TALIMATI),
-                      f"{bolum or 'genel'} kaydi")
-    if yanit is None:
-        return None
-    cikti = _yaniti_coz(yanit)
-    if cikti is None:
-        return None
-    return _kayit_cevirisi(alanlar, cikti)
+    return BIRINCIL.kaydi_cevir(alanlar, bolum)
 
 
 @dataclass
@@ -488,6 +430,11 @@ def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None
     finishReason MAX_TOKENS -> kesildi; diger tamamlanmamis
     (SAFETY vb.) ya da cozulemeyen yanit -> yanit_bozuk (tek bir kayit tum paketi yakmasin; cagiran
     boler). Hicbir istisna disari cikmaz."""
+    return BIRINCIL.paket_cevir(kayitlar, bolum)
+
+
+def paketi_ayir(kayitlar: Dict[str, Dict[str, str]]):
+    """(gonderilecek, bos): bos alanlari atilmis kayitlar ve hicbir alani dolu olmayan kimlikler."""
     gonderilecek, bos = {}, set()
     for kimlik, alanlar in kayitlar.items():
         dolu = _dolu_alanlar(alanlar)
@@ -495,31 +442,24 @@ def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None
             gonderilecek[kimlik] = dolu
         else:
             bos.add(kimlik)
-    if not gonderilecek:
-        return PaketSonucu(reddedilen=bos)
-    if not hazir():
-        return PaketSonucu(istek_hatasi=True)
+    return gonderilecek, bos
 
-    etiket = f"{bolum or 'genel'} paketi ({len(gonderilecek)} kayit)"
-    yanit = _istek_at(_istek_govdesi(gonderilecek, _paket_semasi(gonderilecek), PAKET_TALIMATI), etiket,
-                      len(gonderilecek))
-    if yanit is None:
-        return PaketSonucu(istek_hatasi=True)
-    cikti, sebep = _aday_ciktisi(yanit)
-    if sebep == 'MAX_TOKENS':
-        return PaketSonucu(kesildi=True)
-    if cikti is None:
-        return PaketSonucu(yanit_bozuk=True)
 
-    sonuc = PaketSonucu(reddedilen=bos)
+def paket_ciktisini_dogrula(gonderilecek: Dict[str, Dict[str, str]], bos: Set[str], cikti: dict,
+                            log_adi: str = 'Gemini') -> PaketSonucu:
+    """Cozulmus paket ciktisini (kimlik -> alanlar) kayit basina dogrular; tum saglayicilar icin ortak.
+
+    Kimligi yanitta olmayan, nesne olmayan ya da bir alani _alan_sorunu'ndan gecemeyen kayit yalniz
+    kendisi reddedilir. Sonra capa capraz denetimi (_capa_sorunu): kimlik karismasi olan kayit reddedilir."""
+    sonuc = PaketSonucu(reddedilen=set(bos))
     for kimlik, alanlar in gonderilecek.items():
         deger = cikti.get(kimlik)
         if not isinstance(deger, dict):
-            log.warning(f"  [Gemini] dogrulama basarisiz ({kimlik}: "
+            log.warning(f"  [{log_adi}] dogrulama basarisiz ({kimlik}: "
                         f"{'yanitta yok' if deger is None else 'nesne degil'}).")
             sonuc.reddedilen.add(kimlik)
             continue
-        ceviri = _kayit_cevirisi(alanlar, deger, f'{kimlik}/')
+        ceviri = _kayit_cevirisi(alanlar, deger, f'{kimlik}/', log_adi)
         if ceviri is None:
             sonuc.reddedilen.add(kimlik)
         else:
@@ -530,7 +470,316 @@ def paket_cevir(kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None
     for kimlik, ceviri in list(sonuc.ceviriler.items()):
         sorun = _capa_sorunu(capalar, kimlik, '\n'.join(ceviri.values()))
         if sorun:
-            log.warning(f"  [Gemini] dogrulama basarisiz ({kimlik}: {sorun}).")
+            log.warning(f"  [{log_adi}] dogrulama basarisiz ({kimlik}: {sorun}).")
             del sonuc.ceviriler[kimlik]
             sonuc.reddedilen.add(kimlik)
     return sonuc
+
+
+class KayitCevirmeni:
+    """Kayit duzeyi cevirmen tabani (spec 2026-11-02-ceviri-yayma G6). Arayuz: name (DB degeri),
+    hazir(), kaydi_cevir(), paket_cevir(), butce_ozeti(). Hicbir istisna disari cikmaz.
+
+    Ortak kurallar: kendi aralik kapisi + devre kesicisi (<onek>:slot / <onek>:cooldown) ve sayaci
+    (<onek>:<_donem_anahtari()>); sayac istek ONCESI miktar kadar artar (_istek_at). Dogrulama
+    (_alan_sorunu, capa capraz denetimi) her saglayiciya aynen uygulanir.
+    Alt sinif verir: _anahtar, _donem_anahtari, _istek_adresi, _basliklar, _govde, _cikti."""
+
+    name = ''
+    log_adi = ''
+    donem = 'day'               # butce_ozeti()['period']
+    donem_metni = 'gunluk'      # log metni
+    sayac_ttl = 48 * 3600
+    zaman_asimi = 60.0
+    bekleme = 600               # devre kesici suresi (sn)
+    kesici_http = frozenset({429})      # + tum 5xx: devre kesici, kota harcanmis sayilir
+    sistemik_http = frozenset({401, 403, 404})  # kayittan bagimsiz: kota geri alinir + devre kesici
+
+    def __init__(self, onek: str, tavan: int, aralik: float):
+        self.onek = onek
+        self._tavan = tavan
+        self._aralik = aralik
+        self._gate = None
+        self._butce = None
+
+    @property
+    def _log(self):
+        return logging.getLogger(type(self).__module__)
+
+    # --- Durum ve ayarlar (birincil Gemini bunlari modul globallerine yonlendirir) ---
+
+    def _kapi(self):
+        if self._gate is None:
+            client = _redis_client()
+            self._gate = tu._RedisGate(client, prefix=self.onek) if client else tu._LocalGate()
+        return self._gate
+
+    def _sayac(self):
+        if self._butce is None:
+            client = _redis_client()
+            self._butce = _RedisButce(client, prefix=self.onek, ttl=self.sayac_ttl) if client else _LocalButce()
+        return self._butce
+
+    def tavan(self) -> int:
+        return self._tavan
+
+    def aralik(self) -> float:
+        return self._aralik
+
+    def _anahtar(self) -> str:
+        raise NotImplementedError
+
+    def _donem_anahtari(self) -> str:
+        raise NotImplementedError
+
+    def _kullanilabilir(self) -> bool:
+        """Ayar duzeyi on kosul (model adi vb.); anahtar dolu iken sorulur."""
+        return True
+
+    def _hazir_mi(self) -> bool:
+        """kaydi_cevir / paket_cevir / butce_ozeti'nin sordugu hazirlik."""
+        return self.hazir()
+
+    # --- Istek bicimi (alt sinif) ---
+
+    def _istek_adresi(self) -> str:
+        raise NotImplementedError
+
+    def _basliklar(self) -> dict:
+        raise NotImplementedError
+
+    def _govde(self, veri: dict, paket: bool):
+        """(govde, baglam). veri: alanlar (tek kayit) ya da kimlik -> alanlar (paket)."""
+        raise NotImplementedError
+
+    def _miktar(self, govde: dict) -> int:
+        """Istegin sayactan dusecegi miktar: varsayilan istek basina 1."""
+        return 1
+
+    def _cikti(self, yanit, veri: dict, paket: bool, baglam):
+        """(cikti, kesildi). cikti: veri ile ayni bicimde ceviri sozlugu ya da None (kullanilamaz).
+        kesildi: yanit uzunluk sinirinda yarim kaldi. ASLA firlatmaz."""
+        raise NotImplementedError
+
+    def _sistemik_hata(self, yanit) -> Optional[str]:
+        return f'HTTP {yanit.status_code}' if yanit.status_code in self.sistemik_http else None
+
+    def _kesici_yaniti(self, durum: int) -> None:
+        """kesici_http / 5xx yaniti alindi, devre kesici acilmak uzere (DeepL 456: sayaci doldurur)."""
+
+    # --- Kota ---
+
+    def butce_kullanimi(self) -> int:
+        return self._sayac().oku(self._donem_anahtari())
+
+    def butce_var(self) -> bool:
+        return self.butce_kullanimi() < self.tavan()
+
+    def hazir(self) -> bool:
+        """Anahtar dolu, on kosul tamam, devre kesici kapali ve sayac tavanin altinda. Redis erisilemezse False."""
+        try:
+            return (bool(self._anahtar()) and self._kullanilabilir()
+                    and not self._kapi().cooldown_active() and self.butce_var())
+        except Exception:
+            return False
+
+    def ayarli(self) -> bool:
+        """Anahtar dolu ve ayar duzeyi on kosul tamam mi (model adi vb.); sayac/devre kesiciye bakmaz.
+        /api/saglik/ yalniz ayarli yedegi listeler. ASLA firlatmaz."""
+        try:
+            return bool(self._anahtar()) and self._kullanilabilir()
+        except Exception:
+            return False
+
+    def butce_ozeti(self) -> dict:
+        """Anonim /api/saglik/ icin ozet; ASLA firlatmaz ve anahtar/kimlik bilgisi icermez.
+
+        Redis erisilemezse used=0, available=False, cooldown=False doner (serit "bilinmiyor"u
+        sessizce gosterir, saglik ucu 500 vermez)."""
+        bos = {'used': 0, 'limit': self.tavan(), 'period': self.donem, 'available': False, 'cooldown': False}
+        try:
+            ozet = dict(bos, used=self.butce_kullanimi(), cooldown=bool(self._kapi().cooldown_active()))
+            ozet['available'] = self._hazir_mi()
+        except Exception:
+            return bos
+        return ozet
+
+    def _devre_kesici(self, sebep: str) -> None:
+        self._log.warning(f"  [{self.log_adi}] erisilemiyor ({sebep}); {self.bekleme} sn atlanacak.")
+        self._kapi().start_cooldown(self.bekleme)
+
+    def _istek_at(self, govde: dict, etiket: str = 'genel kaydi', kayit_sayisi: int = 1,
+                  miktar: int = 1) -> Optional[requests.Response]:
+        """Kota kurallariyla tek istek atar. 200 yanitini ya da None doner (sebep loglandi).
+
+        hazir() kontrolu cagirana aittir. Sayac istek ONCESI miktar kadar artar; tavan asildiysa istek atilmaz.
+        kesici_http / 5xx / ag hatasi / beklenmeyen istisna -> devre kesici, sayac geri alinmaz.
+        Diger 200 disi yanitlar -> sayac geri alinir; sistemikse (_sistemik_hata) devre kesici de acilir.
+        etiket ve kayit_sayisi yalniz log icindir (kayit_sayisi >= 2 olan istegin 4xx'i WARNING)."""
+        butce, anahtar = self._sayac(), self._donem_anahtari()
+        if butce.artir(anahtar, miktar) > self.tavan():
+            butce.azalt(anahtar, miktar)
+            if miktar > 1:
+                # Miktar karakterse (DeepL) donemin kalani bu istege yetmedi. Sayac geri alinip birakilirsa
+                # hazir() True kalir ve retranslate istek atilmayan saglam kayitlari icerik hatasi sayip
+                # yukseltme kuyrugundan dusururdu. Sayac tavana doldurulur (456 gibi): hazir() donem
+                # degisene kadar False, cagiran yeniden secer. Istek basina 1 (Gemini/OpenRouter) etkilenmez.
+                eksik = self.tavan() - butce.oku(anahtar)
+                if eksik > 0:
+                    butce.artir(anahtar, eksik)
+            self._log.warning(f"  [{self.log_adi}] {self.donem_metni} butce doldu ({self.tavan()}); "
+                              f"{etiket} cevrilmedi.")
+            return None
+
+        self._kapi().wait_for_slot(self.aralik())
+        try:
+            yanit = requests.post(self._istek_adresi(), headers=self._basliklar(), json=govde,
+                                  timeout=self.zaman_asimi)
+        except requests.RequestException as hata:
+            self._devre_kesici(type(hata).__name__)
+            return None
+        except Exception as hata:  # beklenmeyen hata retranslate'i durdurmasin
+            # Kod hatasi her kayitta tekrarlar: kaydin sucu sayilmasin, devre kesici acilsin
+            self._log.warning(f"  [{self.log_adi}] beklenmeyen hata: {type(hata).__name__}")
+            self._devre_kesici(type(hata).__name__)
+            return None
+
+        if yanit.status_code in self.kesici_http or yanit.status_code >= 500:
+            self._kesici_yaniti(yanit.status_code)
+            self._devre_kesici(f'HTTP {yanit.status_code}')
+            return None
+        if yanit.status_code != 200:
+            butce.azalt(anahtar, miktar)  # 4xx: kota harcanmadi
+            sistemik = self._sistemik_hata(yanit)
+            if sistemik:
+                # Anahtar iptal / yetki yok / hesap / model yok: her istek ayni yaniti alir. Devre kesici
+                # acilmazsa hazir() True kalir ve retranslate her adayi icerik hatasi sayip
+                # RETRANSLATE_MAX_ATTEMPTS turda tum yukseltme adaylarini kuyruktan dusururdu.
+                self._devre_kesici(sistemik)
+                return None
+            # Kayda ozgu istek sorunu (400 gecersiz govde vb.): devre kesici acilmaz
+            # Paket duzeyi 4xx (sema/govde cok buyuk vb.) gorunur olmali; tek kayitlik istek sessiz kalir
+            self._log.log(logging.WARNING if kayit_sayisi >= 2 else logging.INFO,
+                          f"  [{self.log_adi}] istek reddedildi (HTTP {yanit.status_code}): "
+                          f"{str(yanit.text)[:200]}")
+            return None
+        return yanit
+
+    # --- Ceviri ---
+
+    def kaydi_cevir(self, alanlar: Dict[str, str], bolum: Optional[str] = None) -> Optional[Dict[str, str]]:
+        """Kaydin cevrilecek alanlarini tek istekle cevirir. None: cevrilemedi (sebep loglandi)."""
+        alanlar = _dolu_alanlar(alanlar)
+        if not alanlar or not self._hazir_mi():
+            return None
+        govde, baglam = self._govde(alanlar, False)
+        yanit = self._istek_at(govde, f"{bolum or 'genel'} kaydi", miktar=self._miktar(govde))
+        if yanit is None:
+            return None
+        cikti, _ = self._cikti(yanit, alanlar, False, baglam)
+        if cikti is None:
+            return None
+        return _kayit_cevirisi(alanlar, cikti, log_adi=self.log_adi)
+
+    def paket_cevir(self, kayitlar: Dict[str, Dict[str, str]], bolum: Optional[str] = None) -> PaketSonucu:
+        """Birden cok kaydi TEK istekte cevirir; kurallar ve sonuc bayraklari modul paket_cevir'deki gibi."""
+        gonderilecek, bos = paketi_ayir(kayitlar)
+        if not gonderilecek:
+            return PaketSonucu(reddedilen=bos)
+        if not self._hazir_mi():
+            return PaketSonucu(istek_hatasi=True)
+
+        etiket = f"{bolum or 'genel'} paketi ({len(gonderilecek)} kayit)"
+        govde, baglam = self._govde(gonderilecek, True)
+        yanit = self._istek_at(govde, etiket, len(gonderilecek), self._miktar(govde))
+        if yanit is None:
+            return PaketSonucu(istek_hatasi=True)
+        cikti, kesildi = self._cikti(yanit, gonderilecek, True, baglam)
+        if kesildi:
+            return PaketSonucu(kesildi=True)
+        if cikti is None:
+            return PaketSonucu(yanit_bozuk=True)
+        return paket_ciktisini_dogrula(gonderilecek, bos, cikti, self.log_adi)
+
+
+class GeminiCevirmen(KayitCevirmeni):
+    """Bir Gemini modeli. Google kotasi model basinadir: her model kendi kapisi, devre kesicisi ve
+    gunluk sayaciyla (<onek>:budget:<Pasifik gunu>) calisir; anahtar (GEMINI_API_KEY) ortaktir.
+    DB'ye iki model de 'gemini' olarak yazilir; model ayrimi log ve sayactadir."""
+
+    name = 'gemini'
+
+    def __init__(self, model: str, onek: str = 'gemini', tavan: Optional[int] = None,
+                 aralik: Optional[float] = None):
+        super().__init__(onek, GEMINI_DAILY_BUDGET if tavan is None else tavan,
+                         GEMINI_MIN_INTERVAL if aralik is None else aralik)
+        self.model = (model or '').strip()
+        self.log_adi = 'Gemini' if onek == 'gemini' else f'Gemini-2 {self.model}'
+
+    @property
+    def zaman_asimi(self):
+        return GEMINI_TIMEOUT
+
+    @property
+    def bekleme(self):
+        return GEMINI_COOLDOWN
+
+    def model_adi(self) -> str:
+        return self.model
+
+    def _anahtar(self) -> str:
+        return _anahtar()
+
+    def _kullanilabilir(self) -> bool:
+        return bool(self.model_adi())
+
+    def _donem_anahtari(self) -> str:
+        return butce_anahtari()
+
+    def _istek_adresi(self) -> str:
+        return GEMINI_URL.format(model=self.model_adi())
+
+    def _basliklar(self) -> dict:
+        return {'x-goog-api-key': self._anahtar(), 'Content-Type': 'application/json'}
+
+    def _govde(self, veri: dict, paket: bool):
+        if paket:
+            return _istek_govdesi(veri, _paket_semasi(veri), PAKET_TALIMATI), None
+        return _istek_govdesi(veri, _alan_semasi(veri), SISTEM_TALIMATI), None
+
+    def _cikti(self, yanit, veri: dict, paket: bool, baglam):
+        cikti, sebep = _aday_ciktisi(yanit, self.log_adi)
+        return cikti, sebep == 'MAX_TOKENS'
+
+    def _sistemik_hata(self, yanit) -> Optional[str]:
+        return _sistemik_hata(yanit)
+
+
+class _BirincilGemini(GeminiCevirmen):
+    """GEMINI_MODEL, onek 'gemini'. Durumu ve ayarlari her cagrida modul globallerinden okur: cagiranlar
+    ve testlerin yamalari (gemini._gate, gemini._butce, GEMINI_DAILY_BUDGET, GEMINI_MIN_INTERVAL,
+    gemini.hazir) bugunku gibi etkili kalir; Redis anahtarlari degismez (gemini:budget:<gun>)."""
+
+    def __init__(self):
+        super().__init__(GEMINI_MODEL, onek='gemini')
+
+    def model_adi(self) -> str:
+        return GEMINI_MODEL
+
+    def _kapi(self):
+        return _get_gate()
+
+    def _sayac(self):
+        return _get_butce()
+
+    def tavan(self) -> int:
+        return GEMINI_DAILY_BUDGET
+
+    def aralik(self) -> float:
+        return GEMINI_MIN_INTERVAL
+
+    def _hazir_mi(self) -> bool:
+        return hazir()  # modul fonksiyonu (yamalanabilir); o da KayitCevirmeni.hazir'i calistirir
+
+
+BIRINCIL = _BirincilGemini()
