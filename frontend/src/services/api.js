@@ -12,9 +12,12 @@ const api = axios.create({
   xsrfHeaderName: 'X-CSRFToken',
 })
 
+// Liste uclari (getNews, getCVEs ...) istege bagli sorgu parametresi alir (2026-11-05):
+// {gun, sirala, sayfa, boyut, kaynak, onem, kategori}; parametresiz cagri en yeni 25 kaydi dondurur.
+
 // News API
 export const newsApi = {
-  getNews: () => api.get('/news/'),
+  getNews: (params) => api.get('/news/', { params }),
   fetchNews: (data) => api.post('/fetch/', data),
   clearCache: () => api.post('/clear/'),
   getStats: () => api.get('/stats/'),
@@ -23,7 +26,7 @@ export const newsApi = {
 
 // CVE API
 export const cveApi = {
-  getCVEs: () => api.get('/cve/'),
+  getCVEs: (params) => api.get('/cve/', { params }),
   fetchCVEs: (data) => api.post('/cve/fetch/', data),
   clearCache: () => api.post('/cve/clear/'),
   getStats: () => api.get('/cve/stats/'),
@@ -32,7 +35,7 @@ export const cveApi = {
 
 // Kubernetes API
 export const k8sApi = {
-  getK8s: () => api.get('/k8s/'),
+  getK8s: (params) => api.get('/k8s/', { params }),
   fetchK8s: (data) => api.post('/k8s/fetch/', data),
   clearCache: () => api.post('/k8s/clear/'),
   getStats: () => api.get('/k8s/stats/'),
@@ -41,7 +44,7 @@ export const k8sApi = {
 
 // SRE API
 export const sreApi = {
-  getSRE: () => api.get('/sre/'),
+  getSRE: (params) => api.get('/sre/', { params }),
   fetchSRE: (data) => api.post('/sre/fetch/', data),
   clearCache: () => api.post('/sre/clear/'),
   getStats: () => api.get('/sre/stats/'),
@@ -50,7 +53,7 @@ export const sreApi = {
 
 // DevTools API
 export const devtoolsApi = {
-  getDevTools: () => api.get('/devtools/'),
+  getDevTools: (params) => api.get('/devtools/', { params }),
   fetchDevTools: (data) => api.post('/devtools/fetch/', data),
   clearCache: () => api.post('/devtools/clear/'),
   getStats: () => api.get('/devtools/stats/'),
@@ -59,7 +62,7 @@ export const devtoolsApi = {
 
 // AI API
 export const aiApi = {
-  getAINews: () => api.get('/ai/'),
+  getAINews: (params) => api.get('/ai/', { params }),
   fetchAINews: (data) => api.post('/ai/fetch/', data),
   clearCache: () => api.post('/ai/clear/'),
   getStats: () => api.get('/ai/stats/'),
