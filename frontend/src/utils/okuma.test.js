@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { paragraflar, kevOnekiAyir, cevrilmemisMi, okumaIcerigi, prParcalari } from './okuma'
+import { paragraflar, kevOnekiAyir, cevrilmemisMi, okumaIcerigi, prParcalari, markdownSadelestir } from './okuma'
 
 const EN_UZUN = 'The vulnerability allows an attacker to execute arbitrary code on the server.'
 
@@ -74,5 +74,32 @@ describe('prParcalari', () => {
   it('bos metinde bos dizi doner', () => {
     expect(prParcalari('')).toEqual([])
     expect(prParcalari(null)).toEqual([])
+  })
+})
+
+describe('markdownSadelestir', () => {
+  it('ilk kisa basligi atar, satir ici isaretleri sadelestirir', () => {
+    const md = '## Özet\n`zip` kütüphanesinde (`<= 9.0.4`) **kritik** bir açık var.'
+    expect(markdownSadelestir(md)).toBe('zip kütüphanesinde (<= 9.0.4) kritik bir açık var.')
+  })
+  it('sonraki basliklari kendi paragrafi yapar', () => {
+    const md = '### Summary\nIlk paragraf.\n### Impact\nEtki metni.'
+    expect(paragraflar(markdownSadelestir(md))).toEqual(['Ilk paragraf.', 'Impact', 'Etki metni.'])
+  })
+  it('uzun ilk basligi atmaz, isaretini kaldirir', () => {
+    expect(markdownSadelestir('## Özet zip kütüphanesinde kritik bir mimari açık bulunmaktadır'))
+      .toBe('Özet zip kütüphanesinde kritik bir mimari açık bulunmaktadır')
+  })
+  it('kod blogunu ayri paragraf olarak korur, icindeki isaretlere dokunmaz', () => {
+    const md = 'PoC:\n```python\nprint(**kw)\nx = `a`\n```\nSon.'
+    expect(paragraflar(markdownSadelestir(md))).toEqual(['PoC:', 'print(**kw)\nx = `a`', 'Son.'])
+  })
+  it('baglanti metnini birakir, Python dunder adlarini bozmaz', () => {
+    expect(markdownSadelestir('Bkz. [danisma](https://github.com/x/y) ve __init__ dosyasi.'))
+      .toBe('Bkz. danisma ve __init__ dosyasi.')
+  })
+  it('Markdown olmayan metni degistirmez, bos girdiyi bos doner', () => {
+    expect(markdownSadelestir('Düz metin.\n\nİkinci paragraf.')).toBe('Düz metin.\n\nİkinci paragraf.')
+    expect(markdownSadelestir(null)).toBe('')
   })
 })

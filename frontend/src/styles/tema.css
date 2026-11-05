@@ -1143,6 +1143,64 @@ body {
   box-shadow: none;
 }
 
+/* Liste altindaki sayfa cubugu (2026-11-05): cubuk dugmesi gorunumu, gecerli sayfa vurgu renginde */
+.sayfa-cubugu {
+  margin-top: 14px;
+}
+
+.sayfa-cubugu ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sayfa-cubugu .sayfa-dugmesi {
+  min-width: 34px;
+  padding: 5px 10px;
+  border: 1px solid var(--cam-kenar);
+  border-radius: var(--yaricap-kutu);
+  background: var(--cam);
+  color: var(--metin-ikincil);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  transition: background-color var(--gecis), border-color var(--gecis);
+}
+
+.sayfa-cubugu .sayfa-dugmesi:hover:not(:disabled):not(.gecerli) {
+  border-color: rgba(122, 162, 255, .35);
+  background: var(--vurgu-zemin);
+  color: var(--metin);
+}
+
+.sayfa-cubugu .sayfa-dugmesi.gecerli {
+  border-color: transparent;
+  background: var(--vurgu-gradyan);
+  color: var(--zemin-taban);
+  font-weight: 600;
+  cursor: default;
+}
+
+.sayfa-cubugu .sayfa-dugmesi:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.sayfa-cubugu .sayfa-dugmesi:focus-visible {
+  outline: 2px solid var(--vurgu);
+  outline-offset: 2px;
+}
+
+.sayfa-cubugu .sayfa-boslugu {
+  padding: 0 4px;
+  color: var(--metin-ikincil);
+}
+
 .kaynak-menusu {
   --bs-dropdown-bg: var(--yuzey-yukseltilmis);
   --bs-dropdown-border-color: var(--cam-kenar);
@@ -1303,4 +1361,17 @@ body {
     transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Yalniz ekran okuyucu: rozet kaynak adlari (klavye/dokunmatik/okuyucu icin) */
+.gorunmez {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

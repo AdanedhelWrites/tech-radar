@@ -13,7 +13,9 @@ class GeminiSecenegiTests(TestCase):
     def test_alti_modelde_gemini_secenegi_var(self):
         for model in (AINewsEntry, CVEEntry, DevToolsEntry, KubernetesEntry, NewsArticle, SREEntry):
             secenekler = [kod for kod, _ in model._meta.get_field('translation_provider').choices]
-            self.assertEqual(secenekler, ['google', 'libretranslate', 'gemini'], model.__name__)
+            # 0017 (spec 2026-11-02 G6) yedek saglayicilari ekledi; mevcut uc deger ve sirasi korunur
+            self.assertEqual(secenekler, ['google', 'libretranslate', 'gemini', 'openrouter', 'deepl'],
+                             model.__name__)
 
     def test_migration_eksigi_yok(self):
         cikti = StringIO()

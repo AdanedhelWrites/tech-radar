@@ -1,6 +1,6 @@
 import { skorSinifi, cveListeBasligi } from '../../utils/cve'
 import CeviriEtiketi from '../CeviriEtiketi'
-import { cveOkumaKaydi, cevrilmediMi } from '../../utils/okumaKaydi'
+import { cveOkumaKaydi, cevrilmediMi, cweListesi } from '../../utils/okumaKaydi'
 import { goreliZaman } from '../../utils/zaman'
 
 // CVE liste satiri: Genel Bakis'taki oncelikli liste ve Zafiyetler sayfasi ayni satiri kullanir
@@ -33,7 +33,7 @@ export default function CveSatiri({ cve, sonZiyaret, onSec }) {
   const olusma = zamanDamgasi(cve.created_at)
   const sonZiyaretZamani = zamanDamgasi(sonZiyaret)
   const yeni = sonZiyaretZamani != null && olusma != null && olusma > sonZiyaretZamani
-  const cweler = (Array.isArray(cve.cwe_ids) ? cve.cwe_ids.filter(Boolean) : []).slice(0, AZAMI_CWE)
+  const cweler = cweListesi(cve).slice(0, AZAMI_CWE)
 
   return (
     <button type="button" className="oncelikli-satir" onClick={() => onSec(cve)}>

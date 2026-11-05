@@ -21,10 +21,19 @@ services:
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_BATCH_CHARS=10000
+      - GEMINI_BATCH_MAX=15
+      # Ucretsiz yedek ceviri zinciri (README "Ceviri Sistemi"); bos anahtar/model = o yedek kapali
+      - GEMINI_FALLBACK_MODEL=${GEMINI_FALLBACK_MODEL:-}
+      - GEMINI_FALLBACK_DAILY_BUDGET=${GEMINI_FALLBACK_DAILY_BUDGET:-450}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-}
+      - OPENROUTER_DAILY_BUDGET=${OPENROUTER_DAILY_BUDGET:-50}
+      - DEEPL_API_KEY=${DEEPL_API_KEY:-}
+      - DEEPL_MONTHLY_CHARS=${DEEPL_MONTHLY_CHARS:-450000}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - NVD_API_KEY=${NVD_API_KEY:-}
       - RETENTION_DAYS=90
-      - GEMINI_CVE_RESERVE=0.5
     depends_on:
       teknoloji-redis:
         condition: service_started
@@ -109,10 +118,19 @@ services:
       - CELERY_BROKER_URL=redis://teknoloji-redis:6379/1
       - LIBRETRANSLATE_URL=http://teknoloji-translate:5000
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_BATCH_CHARS=10000
+      - GEMINI_BATCH_MAX=15
+      # Ucretsiz yedek ceviri zinciri (README "Ceviri Sistemi"); bos anahtar/model = o yedek kapali
+      - GEMINI_FALLBACK_MODEL=${GEMINI_FALLBACK_MODEL:-}
+      - GEMINI_FALLBACK_DAILY_BUDGET=${GEMINI_FALLBACK_DAILY_BUDGET:-450}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-}
+      - OPENROUTER_DAILY_BUDGET=${OPENROUTER_DAILY_BUDGET:-50}
+      - DEEPL_API_KEY=${DEEPL_API_KEY:-}
+      - DEEPL_MONTHLY_CHARS=${DEEPL_MONTHLY_CHARS:-450000}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - NVD_API_KEY=${NVD_API_KEY:-}
       - RETENTION_DAYS=90
-      - GEMINI_CVE_RESERVE=0.5
     depends_on:
       teknoloji-redis:
         condition: service_started

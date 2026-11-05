@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from news.models import FetchRun
+from news.tests.base import RetranslateKilitMixin
 
 
 class FetchRunModelTests(TestCase):
@@ -242,6 +243,39 @@ class SinyalTests(TestCase):
         self.assertEqual(kayit.status, 'failure')
         self.assertIn('alt surec kesildi', kayit.error)
 
+    def test_atlanan_retranslate_turu_satir_birakmaz(self):
+        """Kilit yuzunden atlanan tur ({'skipped': 'locked'}) 'success' + saved_count 0 satiri
+        birakirsa ceviri_kuyrugu_ozeti ust uste atlanan turlari 'takili' sayar (yanlis alarm)."""
+        from news import fetch_runs
+        sender = self._sender('news.tasks.retranslate_pending_task')
+        fetch_runs.tur_basladi(sender=sender, task_id='t-atla')
+        self.assertEqual(FetchRun.objects.count(), 1)
+
+        fetch_runs.tur_bitti(sender=sender, task_id='t-atla', retval={'skipped': 'locked'})
+
+        self.assertEqual(FetchRun.objects.count(), 0)
+        self.assertNotIn('t-atla', fetch_runs._acik_turlar)
+
+    def test_atlanan_tur_takili_alarmina_yol_acmaz(self):
+        from datetime import timedelta
+        from news import fetch_runs
+        from news.models import CVEEntry
+        CVEEntry.objects.create(
+            cve_id='CVE-2026-9901', source='NVD', original_title='CVE-2026-9901',
+            original_description='Bekleyen.', published_date=timezone.now().date(),
+            link='https://ornek.test/cve/9901', needs_translation=True, translation_attempts=0)
+        for sayi in range(fetch_runs.TAKILMA_TUR_SAYISI):
+            FetchRun.objects.create(section='retranslate', trigger='beat', status='success',
+                                    saved_count=0 if sayi == 0 else 5,
+                                    finished_at=timezone.now() - timedelta(hours=10 + sayi))
+        sender = self._sender('news.tasks.retranslate_pending_task')
+        for sayi in range(fetch_runs.TAKILMA_TUR_SAYISI):
+            fetch_runs.tur_basladi(sender=sender, task_id=f't-atla-{sayi}')
+            fetch_runs.tur_bitti(sender=sender, task_id=f't-atla-{sayi}',
+                                 retval={'skipped': 'locked'})
+
+        self.assertFalse(fetch_runs.ceviri_kuyrugu_ozeti()['stalled'])
+
     def _eski_running(self, bolum, saniye_once):
         kayit = FetchRun.objects.create(section=bolum, trigger='beat', status='running')
         FetchRun.objects.filter(pk=kayit.pk).update(
@@ -291,7 +325,7 @@ class SinyalTests(TestCase):
         self.assertFalse(FetchRun.objects.filter(pk=eski.pk).exists())
 
 
-class DonusSozlesmesiTests(TestCase):
+class DonusSozlesmesiTests(RetranslateKilitMixin, TestCase):
     """Alti fetch task'i sinyalin ihtiyac duydugu sayaclari dondurmeli."""
 
     def test_cve_task_fetched_count_dondurur(self):

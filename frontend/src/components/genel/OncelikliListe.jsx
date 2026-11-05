@@ -4,6 +4,8 @@ import CveSatiri from '../cve/CveSatiri'
 
 // Oncelikli zafiyetler (spec 2026-10-31 G3): /api/ozet/ priority kayitlari. Satir Zafiyetler
 // sayfasiyla ortak (cve/CveSatiri); tiklaninca okuma paneli yerinde acilir.
+// "Tumunu goruntule" Zafiyetler'i CVSS siralamasiyla acar (spec 2026-11-05 G4); Donem varsayilani
+// 7 gun, bu kartin "son 7 gun" penceresiyle ortusur.
 
 export default function OncelikliListe({ kayitlar, hata, sonZiyaret, onSec }) {
   let icerik
@@ -26,7 +28,7 @@ export default function OncelikliListe({ kayitlar, hata, sonZiyaret, onSec }) {
     <section className="oncelikli" aria-labelledby="oncelikli-baslik">
       <div className="bolum-basi">
         <h2 id="oncelikli-baslik" className="etiket-kucuk">Öncelikli Zafiyetler</h2>
-        <Link to="/cve" className="tumu-baglantisi">Tümünü görüntüle →</Link>
+        <Link to="/cve?sirala=cvss" className="tumu-baglantisi">Tümünü görüntüle →</Link>
       </div>
       {icerik}
     </section>

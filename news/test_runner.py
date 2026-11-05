@@ -8,8 +8,8 @@ Redis canli devre kesici anahtarlarini tasir. Bu calistirici iki garanti verir:
    HTTP'yi mock'lar.
 2. Hicbir test canli ceviri devre kesicisini okumaz veya acmaz: kapilar surec
    icidir. Aksi halde LibreTranslate/Gemini devre kesicisi acikken test sonuclari degisirdi.
-3. Hicbir test gercek Gemini'ye gitmez: GEMINI_API_KEY bos, kapi/butce surec ici;
-   Gemini testleri anahtari override_settings ile verir ve HTTP'yi mock'lar.
+3. Hicbir test gercek Gemini/OpenRouter/DeepL'e gitmez: GEMINI_API_KEY, OPENROUTER_API_KEY ve
+   DEEPL_API_KEY bos, kapi/butce surec ici; testler anahtari override_settings ile verir ve HTTP'yi mock'lar.
 """
 from django.test.runner import DiscoverRunner
 from django.test.utils import override_settings
@@ -27,12 +27,16 @@ class GuvenliTestRunner(DiscoverRunner):
         from news import translation_providers as tp
         tp._lt_gate = tu._LocalGate()
 
-        # Hicbir test gercek Gemini'ye gitmez: anahtar bos, kapi ve butce surec ici.
-        self._gemini_kapali = override_settings(GEMINI_API_KEY='')
+        # Hicbir test gercek Gemini/OpenRouter/DeepL'e gitmez: anahtarlar bos, kapi ve butce surec ici.
+        self._gemini_kapali = override_settings(GEMINI_API_KEY='', OPENROUTER_API_KEY='', DEEPL_API_KEY='')
         self._gemini_kapali.enable()
         from news import gemini
         gemini._gate = tu._LocalGate()
         gemini._butce = gemini._LocalButce()
+        from news import kayit_cevirmenleri
+        for cevirmen in kayit_cevirmenleri.YEDEKLER:
+            cevirmen._gate = tu._LocalGate()
+            cevirmen._butce = gemini._LocalButce()
 
     def teardown_test_environment(self, **kwargs):
         self._libretranslate_kapali.disable()

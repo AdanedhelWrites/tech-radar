@@ -12,10 +12,20 @@ const BOLUM_ETIKETLERI = {
 const YENILEME_MS = 5 * 60 * 1000
 // Beat 6 saatte bir cekim yapar; son basari bunun 2 kati kadar eskiyse cekim durmus demektir.
 const BAYAT_SAAT = 12
+// Ceviri butceleri (2026-11-02, PR-C): birincil Gemini hep, yedek yalniz o donem kullanildiysa (used > 0).
+const BUTCELER = [
+  { ad: 'gemini', etiket: 'Gemini', baslik: 'Gemini günlük istek bütçesi', hep: true },
+  { ad: 'gemini2', etiket: 'Gemini 2', baslik: 'Gemini ikinci model günlük istek bütçesi' },
+  { ad: 'openrouter', etiket: 'OpenRouter', baslik: 'OpenRouter günlük istek bütçesi' },
+  { ad: 'deepl', etiket: 'DeepL', baslik: 'DeepL aylık karakter bütçesi' },
+]
+// Eksik bicimli girdi (eski/yarim API yaniti) "undefined/undefined" yazmasin: atlanir
+const gecerliButce = (b) => Boolean(b) && Number.isFinite(b.used) && Number.isFinite(b.limit)
 
 export default function SaglikSeridi() {
   const [veri, setVeri] = useState(null)
   const [kuyruk, setKuyruk] = useState(null)
+  const [butce, setButce] = useState(null)
   const [hata, setHata] = useState(false)
 
   const yukle = useCallback(async () => {
@@ -23,6 +33,7 @@ export default function SaglikSeridi() {
       const yanit = await saglikApi.getSaglik()
       setVeri(yanit.data.sections)
       setKuyruk(yanit.data.translation_queue ?? null)
+      setButce(yanit.data.translation_budget ?? null)
       setHata(false)
     } catch {
       setHata(true)
@@ -58,7 +69,7 @@ export default function SaglikSeridi() {
       })}
       {kuyruk && (
         // Bulgu 6 (2026-10-16): retranslate 3 gun takili kaldi, serit her bolumu "ok" gosterdi.
-        // stalled: bekleyen var ve son 3 tur (~6 sa) hic kayit cevirmedi (news/fetch_runs.py).
+        // stalled: bekleyen var ve son 6 tur (~6 sa, turlar saatlik) hic kayit cevirmedi (news/fetch_runs.py).
         <span className="saglik-ogesi" title={`Bekleyen çeviri: ${kuyruk.pending}`}>
           <strong>Çeviri kuyruğu</strong>{' '}
           <span className="saglik-zaman">{goreliZaman(kuyruk.last_success_at)}</span>{' '}
@@ -69,6 +80,17 @@ export default function SaglikSeridi() {
               : <span className="rozet ok">ok</span>}
         </span>
       )}
+      {butce && BUTCELER.map(({ ad, etiket, baslik, hep }) => {
+        // Gunluk/aylik ceviri butcesi (2026-11-02); cooldown: devre kesici acik, istek atilmiyor.
+        const b = butce[ad]
+        if (!gecerliButce(b) || (!hep && b.used <= 0)) return null
+        return (
+          <span key={ad} className="saglik-ogesi" title={baslik}>
+            <strong>{etiket}</strong> {b.used}/{b.limit}
+            {b.cooldown && <>{' '}<span className="rozet uyari">beklemede</span></>}
+          </span>
+        )
+      })}
     </div>
   )
 }
