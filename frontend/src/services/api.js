@@ -24,7 +24,6 @@ export const newsApi = {
   fetchNews: (data) => api.post('/fetch/', data),
   clearCache: () => api.post('/clear/'),
   getStats: () => api.get('/stats/'),
-  exportNews: () => api.get('/export/'),
 }
 
 // CVE API
@@ -33,7 +32,6 @@ export const cveApi = {
   fetchCVEs: (data) => api.post('/cve/fetch/', data),
   clearCache: () => api.post('/cve/clear/'),
   getStats: () => api.get('/cve/stats/'),
-  exportCVEs: () => api.get('/cve/export/'),
 }
 
 // Kubernetes API
@@ -42,7 +40,6 @@ export const k8sApi = {
   fetchK8s: (data) => api.post('/k8s/fetch/', data),
   clearCache: () => api.post('/k8s/clear/'),
   getStats: () => api.get('/k8s/stats/'),
-  exportK8s: () => api.get('/k8s/export/'),
 }
 
 // SRE API
@@ -51,7 +48,6 @@ export const sreApi = {
   fetchSRE: (data) => api.post('/sre/fetch/', data),
   clearCache: () => api.post('/sre/clear/'),
   getStats: () => api.get('/sre/stats/'),
-  exportSRE: () => api.get('/sre/export/'),
 }
 
 // DevTools API
@@ -60,7 +56,6 @@ export const devtoolsApi = {
   fetchDevTools: (data) => api.post('/devtools/fetch/', data),
   clearCache: () => api.post('/devtools/clear/'),
   getStats: () => api.get('/devtools/stats/'),
-  exportDevTools: () => api.get('/devtools/export/'),
 }
 
 // AI API
@@ -69,7 +64,6 @@ export const aiApi = {
   fetchAINews: (data) => api.post('/ai/fetch/', data),
   clearCache: () => api.post('/ai/clear/'),
   getStats: () => api.get('/ai/stats/'),
-  exportAINews: () => api.get('/ai/export/'),
 }
 
 // Sunucunun dondurdugu mesaji tercih eder (ornegin soguma: 429 "... N dk sonra tekrar deneyin").

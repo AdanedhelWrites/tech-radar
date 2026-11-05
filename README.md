@@ -398,8 +398,7 @@ Her bolum (news, cve, k8s, sre, devtools, ai) ayni endpoint yapisini kullanir:
 | GET | `/api/{bolum}/` | Kayitli verileri listele (filtre, siralama ve sayfalama parametreleri asagida) |
 | POST | `/api/{bolum}/fetch/` | Arka planda cekim baslat — Celery task (body: `{"days": 7, "sources": [...]}`) |
 | POST | `/api/{bolum}/clear/` | Tum verileri sil (**yonetici oturumu gerekir**, aksi halde 403) |
-| GET | `/api/{bolum}/stats/` | Istatistikleri getir |
-| GET | `/api/{bolum}/export/` | HTML rapor olarak disa aktar |
+| GET | `/api/{bolum}/stats/` | Istatistikleri getir: `{success, total, by_source, last_update}`; CVE'de ayrica `by_severity`, Kubernetes'te `by_category`, DevTools'ta `by_type` |
 | GET | `/api/saglik/` | Bolum basina son basarili cekim, son durum, ceviri bekleyen/vazgecilen, yukseltmeden vazgecilen (`upgrade_given_up`), sessiz kaynaklar; ust duzeyde `translation_budget.gemini` (Gemini gunluk butcesi) (anonim, 60 sn cache) |
 | GET | `/api/gundem/` | Gundem karti: son 72 saatin en cok 6 olayi, CVE haric (anonim, 120 sn cache). Yanit `{success, olaylar[], hesaplandi}`; her olay `{bolum, kayit, kaynak_sayisi, kaynaklar[], makale_sayisi, bolumler[], puan, ilk, son}` (`kayit` bolumun kendi serilestiricisinin ciktisidir). Hesap hatasinda 500 yerine `200 {success: false, olaylar: []}` doner ve cache'e yazilmaz |
 | GET | `/api/ozet/` | Genel Bakis ozeti: `critical_count` (CVSS >= 9.0, son 24 sa), `high_count` (7.0-8.9, son 7 gun), `kev_count` (`kev_added_date` son 7 gun), `priority` (en fazla 5 oncelikli CVE), `chart` (CVSS noktalari), `unscored_count`, `sources{total,silent}`, `fetch{last_success_at,next_at}`; `?since=<ISO tarih>` ile ek olarak `new_since_count` (anonim, 60 sn cache; `new_since_count` cache'e girmez) |
@@ -408,7 +407,7 @@ Her bolum (news, cve, k8s, sre, devtools, ai) ayni endpoint yapisini kullanir:
 
 ### Liste parametreleri
 
-Alti liste ucu (`/api/news/`, `/api/cve/`, `/api/k8s/`, `/api/sre/`, `/api/devtools/`, `/api/ai/`) sorguyu veritabanindan yapar; eski 100 kayitlik liste cache'i artik okunmaz. Filtre ve siralama `created_at` alanina gore calisir. Gecersiz deger hata vermez, varsayilana duser.
+Alti liste ucu (`/api/news/`, `/api/cve/`, `/api/k8s/`, `/api/sre/`, `/api/devtools/`, `/api/ai/`) sorguyu veritabanindan yapar; bolum basina liste cache'i yoktur (eski 100 kayitlik cache 2026-11-05'te kaldirildi). Filtre ve siralama `created_at` alanina gore calisir. Gecersiz deger hata vermez, varsayilana duser.
 
 | Parametre | Degerler | Aciklama |
 |-----------|----------|----------|
@@ -420,9 +419,11 @@ Alti liste ucu (`/api/news/`, `/api/cve/`, `/api/k8s/`, `/api/sre/`, `/api/devto
 | `onem` | CVE: `kritik`, `yuksek`, `orta`, `dusuk` | CVSS araliklari |
 | `kategori` | Kubernetes: `kubernetes` | Kategori filtresi |
 
-Yanit: `{success, data, cached, count, toplam, sayfa, sayfa_sayisi, boyut}`. `cached` her zaman `false`; `count` sayfadaki kayit sayisi, `toplam` filtreye uyan tum kayit sayisidir. Ornek: `/api/cve/?gun=30&sirala=cvss&onem=kritik&sayfa=2`. `/api/v1/` degismedi.
+Yanit: `{success, data, cached, count, toplam, sayfa, sayfa_sayisi, boyut}`. `cached` geriye uyumluluk icin kalir ve her zaman `false`'tur; `count` sayfadaki kayit sayisi, `toplam` filtreye uyan tum kayit sayisidir. Ornek: `/api/cve/?gun=30&sirala=cvss&onem=kritik&sayfa=2`. `/api/v1/` degismedi.
 
-> **Not:** Siber guvenlik bolumunun fetch, clear, stats ve export endpoint'leri `/api/news/` altinda degil, dogrudan `/api/` altindadir: `/api/fetch/`, `/api/clear/`, `/api/stats/`, `/api/export/`
+> **Not:** Siber guvenlik bolumunun fetch, clear ve stats endpoint'leri `/api/news/` altinda degil, dogrudan `/api/` altindadir: `/api/fetch/`, `/api/clear/`, `/api/stats/`
+>
+> **Kaldirilan uclar (2026-11-05):** `/api/{bolum}/export/` (tum tabloyu tek yanitta donduruyordu). HTML rapor arayuzde liste ucundan kurulur (`frontend/src/utils/rapor.js`); toplu veri isteyen dis tuketiciler `/api/v1/` imlecli listesini kullanir.
 
 ---
 
@@ -601,8 +602,8 @@ cybersecurity_news/
 │
 ├── news/                       # Ana Django uygulamasi
 │   ├── models.py               # NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
-│   ├── views.py                # API endpoint'leri (6 bolum x 5 endpoint = 30)
-│   ├── tasks.py                # Celery task'lari (cekim + ceviri + cache)
+│   ├── views.py                # API endpoint'leri (6 bolum x 4 endpoint + saglik, ozet, gundem)
+│   ├── tasks.py                # Celery task'lari (cekim + ceviri)
 │   ├── serializers.py          # DRF serializer'lari
 │   ├── urls.py                 # API URL pattern'leri
 │   ├── translation_utils.py    # Merkezi ceviri modulu (terim koruma + post-processing)
@@ -610,13 +611,12 @@ cybersecurity_news/
 │   ├── gemini.py               # Gemini API istemcisi, hiz siniri, gunluk butce, tur payi
 │   ├── kayit_cevirmenleri.py   # Ucretsiz yedek cevirmenler: Gemini 2. model, OpenRouter, DeepL Free + zincir
 │   ├── retranslate.py          # Bekleyenleri cevir + LibreTranslate kayitlarini Gemini'ye yukselt (yedek zincirle)
-│   ├── cache_utils.py          # Redis cache anahtarlari ve temizleme
 │   ├── liste_sorgusu.py        # Liste ucleri icin filtre, siralama ve sayfalama sorgusu
 │   ├── gundem.py               # Gundem: olay gruplama ve puan (saf fonksiyonlar, /api/gundem/)
 │   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
 │   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
-│   ├── tests/                  # 843 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
+│   ├── tests/                  # 850 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
 │   │   └── fixtures/gundem_basliklari.json  # Gundem gruplama testlerinin gercek baslik ornekleri
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
 │   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i

@@ -90,14 +90,6 @@ class FetchDevToolsRequestSerializer(serializers.Serializer):
     sources = _kaynak_listesi()
 
 
-class StatsSerializer(serializers.Serializer):
-    """Istatistikler serializer"""
-    total = serializers.IntegerField()
-    by_source = serializers.DictField(child=serializers.IntegerField())
-    last_update = serializers.DateTimeField(allow_null=True)
-    cached = serializers.BooleanField()
-
-
 class AINewsEntrySerializer(serializers.ModelSerializer):
     """AI Haber serializer"""
 

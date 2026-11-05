@@ -10,7 +10,6 @@ vi.mock('../services/api', () => ({
     getStats: vi.fn(),
     fetchCVEs: vi.fn(),
     clearCache: vi.fn(),
-    exportCVEs: vi.fn(),
   },
   istekHataMesaji: (err, varsayilan) => err.response?.data?.message || `${varsayilan}: ${err.message}`,
 }))
@@ -186,7 +185,6 @@ describe('CVEComponent', () => {
     expect(screen.getByRole('combobox', { name: 'Dönem' })).toHaveValue('7')
     const cubuk = screen.getByRole('navigation', { name: 'Sayfalar' })
     expect(within(cubuk).getByRole('button', { name: '2' })).toHaveAttribute('aria-current', 'page')
-    expect(cveApi.exportCVEs).not.toHaveBeenCalled()
   })
 
   it('kaynak_secimi_listeyi_suzer_ve_ceker', async () => {
@@ -270,7 +268,6 @@ describe('CVEComponent', () => {
     fireEvent.click(screen.getByTitle(/HTML rapor olarak indir/))
     await waitFor(() => expect(raporlar).toHaveLength(1))
     expect(cveApi.getCVEs).toHaveBeenCalledWith({ gun: 7, sirala: 'cvss', sayfa: 1, boyut: 100, onem: 'yuksek' })
-    expect(cveApi.exportCVEs).not.toHaveBeenCalled()
     const html = raporlar[0]
     expect(html).toContain('<span class="ek-rozet cveid">CVE-2026-0005</span>')
     expect(html).toContain('<span class="ek-rozet yuksek">CVSS 8.8</span>')

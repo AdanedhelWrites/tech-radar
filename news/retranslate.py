@@ -68,7 +68,6 @@ from . import gemini
 from . import kayit_cevirmenleri
 from . import translation_utils as tu
 from .api_v1.cursor import InvalidCursor, apply_cursor, decode_cursor, encode_cursor
-from .cache_utils import cache_yenile
 from .models import (
     AINewsEntry, CVEEntry, DevToolsEntry, KubernetesEntry, NewsArticle, SREEntry,
 )
@@ -733,8 +732,6 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
                                             else _yukselt(ad, model, upgrade_batch, sonuc, bitis, tur))
         basarisiz += yukseltme_basarisiz  # iki asamanin icerik hatalari tek 'failed' sayacinda
 
-        if cevrilen or yukseltilen:
-            cache_yenile(ad)
         # update: _yukselt bolum satirina stopped_reason yazmis olabilir (ardisik icerik hatasi)
         sonuc['sections'].setdefault(ad, {}).update(
             {'translated': cevrilen, 'failed': basarisiz, 'upgraded': yukseltilen})

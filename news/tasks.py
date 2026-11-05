@@ -3,7 +3,6 @@ import os
 import uuid
 from celery import shared_task
 from django.conf import settings
-from django.core.cache import cache
 from django.utils import timezone
 from datetime import timedelta
 
@@ -11,7 +10,6 @@ from .models import NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEn
 from .translation_utils import (
     consume_translation_failures, consume_translation_providers, kayit_saglayicisi,
 )
-from .cache_utils import CACHE_YENILEME_ARALIGI, cache_yenile
 from .kaynaklar import kaynak_sayaclari, kaynak_yazildi
 
 from scraper_multi import MultiSourceScraper
@@ -57,16 +55,11 @@ def _drop_existing(entries, model, field, key='link'):
 # okunur; consume_translation_failures() sayaci her kayitta sifirlar.
 # translation_provider ayni anda okunur: kaydin cevirisinde kullanilan
 # saglayicilarin en dusuk kalitelisi (bkz. translation_utils.kayit_saglayicisi).
-#
-# Cache: her CACHE_YENILEME_ARALIGI kayitta bir ve cekim sonunda yeniden kurulur
-# (bkz. news/cache_utils.py).
 
 @shared_task
 def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_existing=True):
     try:
-        # Eski cache ve saklama penceresi disindaki kayitlari temizle
-        cache.delete('cybersecurity_news')
-        cache.delete('last_update')
+        # Saklama penceresi disindaki kayitlari temizle
         _saklama_temizligi(NewsArticle)
 
         scraper = MultiSourceScraper()
@@ -100,9 +93,6 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, article['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('news')
-            cache_yenile('news')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -116,8 +106,6 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
 @shared_task
 def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('cve_entries')
-        cache.delete('cve_last_update')
         _saklama_temizligi(CVEEntry)
 
         scraper = MultiCVEScraper()
@@ -158,9 +146,6 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
                 CVEEntry.objects.update_or_create(cve_id=cve['cve_id'], defaults=defaults)
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, cve['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('cve')
-            cache_yenile('cve')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -174,8 +159,6 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
 @shared_task
 def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('k8s_entries')
-        cache.delete('k8s_last_update')
         _saklama_temizligi(KubernetesEntry)
 
         scraper = MultiK8sScraper()
@@ -209,9 +192,6 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, entry['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('kubernetes')
-            cache_yenile('kubernetes')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -225,8 +205,6 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
 @shared_task
 def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('sre_entries')
-        cache.delete('sre_last_update')
         _saklama_temizligi(SREEntry)
 
         scraper = MultiSREScraper()
@@ -258,9 +236,6 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, entry['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('sre')
-            cache_yenile('sre')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -274,8 +249,6 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
 @shared_task
 def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('devtools_entries')
-        cache.delete('devtools_last_update')
         _saklama_temizligi(DevToolsEntry)
 
         scraper = MultiDevToolsScraper()
@@ -309,9 +282,6 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, entry['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('devtools')
-            cache_yenile('devtools')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -325,8 +295,6 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
 @shared_task
 def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('ai_entries')
-        cache.delete('ai_last_update')
         _saklama_temizligi(AINewsEntry)
 
         scraper = MultiAINewsScraper()
@@ -358,9 +326,6 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, entry['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('ai')
-            cache_yenile('ai')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
