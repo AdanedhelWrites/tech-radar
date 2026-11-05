@@ -633,34 +633,28 @@ class MultiSourceScraper(BaseRSSScraper):
                           'https://securityaffairs.com'),
         ]
 
-    def fetch_all_news(self, days=7, selected_sources=None, max_total=30):
-        """Tum kaynaklardan haber ceker (max_total ile sinirli)"""
+    def fetch_all_news(self, days=7, selected_sources=None, max_total=30, sinirla=True):
+        """Tum kaynaklardan haber ceker.
+
+        sinirla=True: kaynak basina pay + toplam tavan (news.kaynaklar.kayit_tavani). Beat/elle
+        cekim task'i sinirla=False ister ve tavani veritabaninda olanlari ayikladiktan SONRA
+        uygular; yoksa tarihce geride kalan yeni haberler hic kaydedilmez (2026-11-05)."""
+        from news.kaynaklar import kayit_tavani
+
         all_articles = []
         sources_to_fetch = self.sources
 
         if selected_sources:
             sources_to_fetch = [s for s in self.sources if s.get_name() in selected_sources]
 
-        # Kaynak sayisi arttikca toplam tavan da buyusun: 12 kaynakta 30'luk sabit tavan,
-        # tarihe gore siralamada seyrek yazan kaynaklari (Krebs, SANS) tamamen dusuruyordu.
-        max_total = max(max_total, 3 * len(sources_to_fetch))
-
         log.debug(f"\n{'='*80}")
-        log.info(f"TUM KAYNAKLARDAN HABER CEKILIYOR ({days} gun, maks {max_total})")
+        log.info(f"TUM KAYNAKLARDAN HABER CEKILIYOR ({days} gun)")
         log.debug(f"{'='*80}\n")
-
-        # Her kaynaga esit pay ver
-        per_source_limit = max(5, max_total // max(len(sources_to_fetch), 1))
 
         for source in sources_to_fetch:
             try:
                 articles = source.fetch_news(days=days)
-                # Kaynak basina limit uygula
-                if len(articles) > per_source_limit:
-                    articles = articles[:per_source_limit]
-                    log.info(f"  -> {source.get_name()}: {per_source_limit} haber (sinirlandirildi)\n")
-                else:
-                    log.info(f"  -> {source.get_name()}: {len(articles)} haber\n")
+                log.info(f"  -> {source.get_name()}: {len(articles)} haber\n")
                 all_articles.extend(articles)
             except Exception as e:
                 log.warning(f"[{source.get_name()}] Kaynak hatasi: {e}")
@@ -669,9 +663,8 @@ class MultiSourceScraper(BaseRSSScraper):
         # Tarihe gore sirala (en yeni en ustte)
         all_articles.sort(key=lambda x: x['date'], reverse=True)
 
-        # Toplam sinir
-        if len(all_articles) > max_total:
-            all_articles = all_articles[:max_total]
+        if sinirla:
+            all_articles = kayit_tavani(all_articles, len(sources_to_fetch), max_total)
 
         log.debug(f"{'='*80}")
         log.info(f"TOPLAM {len(all_articles)} HABER CEKILDI")

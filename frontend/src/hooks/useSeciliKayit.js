@@ -4,7 +4,10 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 // Bolum sayfalarinda okuma panelinde acik kayit (spec 2026-10-31 §6): secim ?kayit=<id> sorgu
 // parametresinde tutulur; adres paylasilabilir, geri tusu paneli kapatir. Secili kayit her
 // render'da id ile listeden cozulur: periyodik yenileme yeni nesneler getirse de panel kapanmaz,
-// listede olmayan id (saklama suresiyle silinmis ya da elle yazilmis) null doner.
+// listede hic gorulmemis id (saklama suresiyle silinmis ya da elle yazilmis) null doner.
+// 2026-11-05 (filtre/sayfalama spec G4): liste artik tek sayfa; sayfa, filtre degisimi ya da 5 sn
+// yenilemesi secili kaydi listeden dusurebilir. Panel o zaman son bilinen nesneyle acik kalir,
+// yalniz kapat() (ya da geri tusu) kapatir.
 
 const PARAMETRE = 'kayit'
 
@@ -16,10 +19,14 @@ export default function useSeciliKayit(kayitlar) {
   // (Esc + kapat dugmesi); ikinci cagri ikinci kez geri gidip sayfadan cikmamali (karar R12).
   // Her secim yeni bir giris (yeni anahtar) acar, boylece ayni kayit yeniden acilip kapatilabilir.
   const kapatilanGiris = useRef(null)
+  // Secili id'nin listede en son goruldugu hali; baska id secilince kullanilmaz
+  const sonBilinen = useRef(null)
 
   const deger = parametreler.get(PARAMETRE)
   const id = deger ? Number(deger) : NaN
-  const secili = Number.isFinite(id) ? (kayitlar || []).find(k => k.id === id) ?? null : null
+  const bulunan = Number.isFinite(id) ? (kayitlar || []).find(k => k.id === id) ?? null : null
+  if (bulunan) sonBilinen.current = bulunan
+  const secili = bulunan ?? (sonBilinen.current?.id === id ? sonBilinen.current : null)
 
   const sec = useCallback((yeniId) => {
     setParametreler(onceki => {

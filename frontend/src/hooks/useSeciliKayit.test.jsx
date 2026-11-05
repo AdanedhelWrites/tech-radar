@@ -34,11 +34,34 @@ describe('useSeciliKayit', () => {
     const yeni = [{ id: 7, ad: 'yedi (guncel)' }, { id: 3, ad: 'uc' }]
     rerender({ liste: yeni })
     expect(result.current.secili).toBe(yeni[0])
-    // Liste henuz yuklenmediyse panel kapali, yuklenince ayni secim acilir
-    rerender({ liste: [] })
+  })
+
+  it('liste yuklenmeden panel kapali, yuklenince acilir', () => {
+    const { result, rerender } = kur('/cve?kayit=7', [])
     expect(result.current.secili).toBeNull()
-    rerender({ liste: yeni })
+    rerender({ liste: kayitlar() })
     expect(result.current.secili.id).toBe(7)
+  })
+
+  it('secili_kayit_listeden_dusunce_panel_acik_kalir', () => {
+    // Sayfa degisimi, filtre ya da 5 sn yenilemesi secili kaydi gorunen sayfadan dusurebilir
+    const { result, rerender } = kur('/cve?kayit=7')
+    const ilk = result.current.secili
+    rerender({ liste: [{ id: 3, ad: 'uc' }] })
+    expect(result.current.secili).toBe(ilk)
+    rerender({ liste: [] })
+    expect(result.current.secili).toBe(ilk)
+    // Kayit listeye guncel haliyle donerse guncel nesne kullanilir
+    const guncel = { id: 7, ad: 'yedi (guncel)' }
+    rerender({ liste: [guncel] })
+    expect(result.current.secili).toBe(guncel)
+    // Baska kayit secilince eskisi tutulmaz; kapat ile panel kapanir
+    act(() => result.current.sec(3))
+    rerender({ liste: [{ id: 3, ad: 'uc' }] })
+    expect(result.current.secili.id).toBe(3)
+    act(() => result.current.kapat())
+    expect(result.current.konum.search).toBe('')
+    expect(result.current.secili).toBeNull()
   })
 
   it('sec adrese ekler, geri tusu paneli kapatir', () => {

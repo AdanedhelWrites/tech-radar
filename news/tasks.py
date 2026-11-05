@@ -1,7 +1,8 @@
 # Celery tasks
 import os
+import uuid
 from celery import shared_task
-from django.core.cache import cache
+from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 
@@ -9,8 +10,7 @@ from .models import NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEn
 from .translation_utils import (
     consume_translation_failures, consume_translation_providers, kayit_saglayicisi,
 )
-from .cache_utils import CACHE_YENILEME_ARALIGI, cache_yenile
-from .kaynaklar import kaynak_sayaclari, kaynak_yazildi
+from .kaynaklar import kayit_tavani, kaynak_sayaclari, kaynak_yazildi
 
 from scraper_multi import MultiSourceScraper
 from .cve_scraper import MultiCVEScraper
@@ -55,24 +55,20 @@ def _drop_existing(entries, model, field, key='link'):
 # okunur; consume_translation_failures() sayaci her kayitta sifirlar.
 # translation_provider ayni anda okunur: kaydin cevirisinde kullanilan
 # saglayicilarin en dusuk kalitelisi (bkz. translation_utils.kayit_saglayicisi).
-#
-# Cache: her CACHE_YENILEME_ARALIGI kayitta bir ve cekim sonunda yeniden kurulur
-# (bkz. news/cache_utils.py).
 
 @shared_task
 def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_existing=True):
     try:
-        # Eski cache ve saklama penceresi disindaki kayitlari temizle
-        cache.delete('cybersecurity_news')
-        cache.delete('last_update')
+        # Saklama penceresi disindaki kayitlari temizle
         _saklama_temizligi(NewsArticle)
 
         scraper = MultiSourceScraper()
-        articles = scraper.fetch_all_news(days=days, selected_sources=selected_sources)
+        articles = scraper.fetch_all_news(days=days, selected_sources=selected_sources, sinirla=False)
         kaynaktan_gelen = len(articles)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         kaynak_sayaci = kaynak_sayaclari('news', selected_sources, articles)
         if skip_existing:
             articles = _drop_existing(articles, NewsArticle, 'link')
+        articles = kayit_tavani(articles, len(kaynak_sayaci))
         if articles:
             saved_count = 0
             consume_translation_failures()
@@ -98,9 +94,6 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, article['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('news')
-            cache_yenile('news')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -114,8 +107,6 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
 @shared_task
 def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('cve_entries')
-        cache.delete('cve_last_update')
         _saklama_temizligi(CVEEntry)
 
         scraper = MultiCVEScraper()
@@ -156,9 +147,6 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
                 CVEEntry.objects.update_or_create(cve_id=cve['cve_id'], defaults=defaults)
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, cve['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('cve')
-            cache_yenile('cve')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -172,8 +160,6 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
 @shared_task
 def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('k8s_entries')
-        cache.delete('k8s_last_update')
         _saklama_temizligi(KubernetesEntry)
 
         scraper = MultiK8sScraper()
@@ -207,9 +193,6 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, entry['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('kubernetes')
-            cache_yenile('kubernetes')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -223,16 +206,15 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
 @shared_task
 def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('sre_entries')
-        cache.delete('sre_last_update')
         _saklama_temizligi(SREEntry)
 
         scraper = MultiSREScraper()
-        entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        entries = scraper.fetch_all(days=days, selected_sources=selected_sources, sinirla=False)
         kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         kaynak_sayaci = kaynak_sayaclari('sre', selected_sources, entries)
         if skip_existing:
             entries = _drop_existing(entries, SREEntry, 'link')
+        entries = kayit_tavani(entries, len(kaynak_sayaci))
         if entries:
             saved_count = 0
             consume_translation_failures()
@@ -256,9 +238,6 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, entry['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('sre')
-            cache_yenile('sre')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -272,16 +251,15 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
 @shared_task
 def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('devtools_entries')
-        cache.delete('devtools_last_update')
         _saklama_temizligi(DevToolsEntry)
 
         scraper = MultiDevToolsScraper()
-        entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        entries = scraper.fetch_all(days=days, selected_sources=selected_sources, sinirla=False)
         kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         kaynak_sayaci = kaynak_sayaclari('devtools', selected_sources, entries)
         if skip_existing:
             entries = _drop_existing(entries, DevToolsEntry, 'link')
+        entries = kayit_tavani(entries, len(kaynak_sayaci))
         if entries:
             saved_count = 0
             consume_translation_failures()
@@ -307,9 +285,6 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, entry['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('devtools')
-            cache_yenile('devtools')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -323,8 +298,6 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
 @shared_task
 def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
     try:
-        cache.delete('ai_entries')
-        cache.delete('ai_last_update')
         _saklama_temizligi(AINewsEntry)
 
         scraper = MultiAINewsScraper()
@@ -356,9 +329,6 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
                 )
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, entry['source'])
-                if saved_count % CACHE_YENILEME_ARALIGI == 0:
-                    cache_yenile('ai')
-            cache_yenile('ai')
             return {'success': True, 'count': saved_count,
                     'fetched_count': kaynaktan_gelen, 'translation_failures': ceviri_hatalari,
                     'by_source': kaynak_sayaci}
@@ -370,16 +340,68 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
         return {'success': False, 'error': f'{type(e).__name__}: {e}'}
 
 
+# Tekil calisma kilidi (spec 2026-11-02 G4): saatlik turlar ust uste binmesin.
+RETRANSLATE_KILIT_ANAHTARI = 'retranslate:kilit'
+
+
+def _retranslate_kilidi_al():
+    """Kilidi almaya calisir. Donus: (redis_istemcisi, jeton, alindi).
+
+    Redis'e ulasilamazsa tur KAYBEDILMEZ: uyarilir, kilitsiz kosulur (alindi=True, istemci None).
+    Kilit alinamadiysa (baska tur tutuyor) alindi=False doner.
+    """
+    from .retranslate import RETRANSLATE_TIME_BUDGET, _canli_redis
+    jeton = uuid.uuid4().hex
+    try:
+        redis_client = _canli_redis()
+        # Omur: tur butcesi + 600 sn pay, ama en fazla sert sinir + 60 sn (tur bundan uzun yasayamaz).
+        # Worker olurse kilit en gec bu surede kendiliginden duser; butce env ile buyutulse de
+        # olu kilit sonraki saatlik turu atlatmaz.
+        omur = min(RETRANSLATE_TIME_BUDGET + 600, settings.CELERY_TASK_TIME_LIMIT + 60)
+        alindi = bool(redis_client.set(RETRANSLATE_KILIT_ANAHTARI, jeton, nx=True, ex=omur))
+    except Exception as e:
+        log.warning(f'  [retranslate] Kilit alinamadi (Redis?), tur kilitsiz kosuluyor: {e}')
+        return None, jeton, True
+    return redis_client, jeton, alindi
+
+
+def _retranslate_kilidini_birak(redis_client, jeton):
+    """Kilidi yalniz sahibiyse siler. get+delete atomik degildir: kilidin tam bu iki cagri arasinda
+    dusup baskasina gecmesi icin TTL'nin (bkz. _retranslate_kilidi_al) bitmesi gerekir; tek worker sureci ve
+    saatlik tur icin bu risk kabul edildi, Lua betigi gereksiz."""
+    if redis_client is None:
+        return
+    try:
+        mevcut = redis_client.get(RETRANSLATE_KILIT_ANAHTARI)
+        if isinstance(mevcut, bytes):
+            mevcut = mevcut.decode()
+        if mevcut == jeton:
+            redis_client.delete(RETRANSLATE_KILIT_ANAHTARI)
+    except Exception as e:
+        log.warning(f'  [retranslate] Kilit birakilamadi (TTL ile dusecek): {e}')
+
+
 @shared_task
 def retranslate_pending_task():
-    """Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir (bkz. news/retranslate.py)."""
+    """Ceviri bekleyen kayitlari feed'e bakmadan yeniden cevirir (bkz. news/retranslate.py).
+
+    Onceki tur hala kilidi tutuyorsa {'skipped': 'locked'} doner (FetchRun satiri birakilmaz,
+    bkz. fetch_runs.tur_bitti).
+    """
     from .fetch_runs import eski_kayitlari_temizle
     from .retranslate import retranslate_pending
-    sonuc = retranslate_pending()
-    # Saklama temizligi asil isin sonucunu etkilememeli: sinyal katmaniyla ayni
-    # savunmaci kalip (bkz. fetch_runs.py) - burada da task'in donusunu bozmaz.
+    redis_client, jeton, alindi = _retranslate_kilidi_al()
+    if not alindi:
+        log.info('  [retranslate] Onceki tur suruyor, bu tur atlandi')
+        return {'skipped': 'locked'}
     try:
-        eski_kayitlari_temizle()  # 30 gunden eski FetchRun satirlari (spec 3.4)
-    except Exception as e:
-        log.warning(f'  [FetchRun] Eski kayitlar temizlenemedi: {e}')
-    return sonuc
+        sonuc = retranslate_pending()
+        # Saklama temizligi asil isin sonucunu etkilememeli: sinyal katmaniyla ayni
+        # savunmaci kalip (bkz. fetch_runs.py) - burada da task'in donusunu bozmaz.
+        try:
+            eski_kayitlari_temizle()  # 30 gunden eski FetchRun satirlari (spec 3.4)
+        except Exception as e:
+            log.warning(f'  [FetchRun] Eski kayitlar temizlenemedi: {e}')
+        return sonuc
+    finally:
+        _retranslate_kilidini_birak(redis_client, jeton)

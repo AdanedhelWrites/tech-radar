@@ -6,6 +6,39 @@ dizinindeki her degisiklik `Chart.yaml` `version`'ini artirir ve buraya `## [sur
 basligi ekler; CI (`scripts/chart_surum_kontrol.sh`) bunu zorlar. `appVersion`
 uygulama imajinin etiketidir (CalVer `YYYY.M.N`).
 
+## [3.2.0] - 2026-11-03 — appVersion 2026.10.3
+
+Yeni istege bagli values: ucretsiz yedek ceviri zinciri (spec
+`docs/superpowers/specs/2026-11-02-ceviri-yayma-design.md` G6/G7). Hepsi bos/kapali gelir; mevcut kurulumlar degismeden calisir.
+Yukseltme sirasi: once `python manage.py migrate` (migration 0017, yalniz secenek listesi; PostgreSQL'de islem yok), sonra kod.
+
+### Eklenenler
+- `secrets.openrouterApiKey` (`""`) -> Secret `OPENROUTER_API_KEY`, `secrets.deeplApiKey` (`""`) -> `DEEPL_API_KEY`. Pod'larda `optional: true`; `existingSecret` bu anahtarlari tasimiyorsa pod yine acilir.
+- `config.app.geminiFallbackModel` (`""`) -> `GEMINI_FALLBACK_MODEL` ve `config.app.geminiFallbackDailyBudget` (`"450"`) -> `GEMINI_FALLBACK_DAILY_BUDGET`: Gemini ikinci model.
+- `config.app.openrouterModel` (`""`, adi `:free` ile bitmeli) -> `OPENROUTER_MODEL`, `openrouterDailyBudget` (`"50"`) -> `OPENROUTER_DAILY_BUDGET`, `openrouterMinInterval` (`"4"`) -> `OPENROUTER_MIN_INTERVAL`.
+- `config.app.deeplMonthlyChars` (`"450000"`) -> `DEEPL_MONTHLY_CHARS`: DeepL API Free aylik karakter butcesi.
+
+## [3.1.0] - 2026-11-03 — appVersion 2026.10.3
+
+Yeni istege bagli values: Gemini paket cevirisi sinirlari (spec
+`docs/superpowers/specs/2026-11-02-ceviri-yayma-design.md` G5). Varsayilanlar kodla ayni; mevcut kurulumlar degismeden calisir.
+
+### Eklenenler
+- `config.app.geminiBatchChars` (`"10000"`) -> ConfigMap `GEMINI_BATCH_CHARS`: bir Gemini isteginde paketlenen kayitlarin toplam karakter siniri.
+- `config.app.geminiBatchMax` (`"15"`) -> ConfigMap `GEMINI_BATCH_MAX`: bir pakette en fazla kayit sayisi.
+
+## [3.0.0] - 2026-11-02 — appVersion 2026.10.3
+
+Geriye uyumsuz values degisikligi: CVE Gemini rezervi uygulamadan kalkti
+(spec `docs/superpowers/specs/2026-11-02-ceviri-yayma-design.md` G3; oncelik artik `BOLUMLER` sirasidir).
+
+### Yukseltme notu (2.2.1 -> 3.0.0)
+- `config.app.geminiCveReserve` kalkti; ConfigMap'te `GEMINI_CVE_RESERVE` uretilmez. Override eden kurulumda deger
+  yok sayilir (uygulama okumaz).
+
+### Degisenler
+- `config.app.geminiDailyBudget` varsayilani `"400"` -> `"450"` (kod varsayilaniyla ayni; ucretsiz katman 500 RPD).
+
 ## [2.2.1] - 2026-10-14 — appVersion 2026.10.3
 
 Yalniz `appVersion` yukseltmesi; sablon ve values degismedi (render farki yalniz imaj etiketi ve `helm.sh/chart`).

@@ -2,15 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import GenelBakis from './GenelBakis'
-import { ozetApi, newsApi, k8sApi, sreApi, devtoolsApi, aiApi, saglikApi } from '../../services/api'
+import { ozetApi, gundemApi, saglikApi } from '../../services/api'
 
 vi.mock('../../services/api', () => ({
   ozetApi: { getOzet: vi.fn() },
-  newsApi: { getNews: vi.fn() },
-  k8sApi: { getK8s: vi.fn() },
-  sreApi: { getSRE: vi.fn() },
-  devtoolsApi: { getDevTools: vi.fn() },
-  aiApi: { getAINews: vi.fn() },
+  gundemApi: { getGundem: vi.fn() },
   saglikApi: { getSaglik: vi.fn() },
 }))
 
@@ -51,11 +47,21 @@ const ozet = (ek = {}) => ({
   ...ek,
 })
 
-const haber = (id, baslik, sa) => ({
-  id, turkish_title: baslik, original_title: baslik, source: 'Örnek Kaynak',
-  link: `https://ornek.test/${id}`, created_at: saatOnce(sa),
+const olay = (id, baslik, sa, bolum = 'news') => ({
+  bolum,
+  kayit: {
+    id, turkish_title: baslik, original_title: baslik, source: 'Örnek Kaynak',
+    link: `https://ornek.test/${id}`, created_at: saatOnce(sa),
+  },
+  kaynak_sayisi: 1,
+  kaynaklar: ['Örnek Kaynak'],
+  makale_sayisi: 1,
+  bolumler: [bolum],
+  puan: 1,
+  ilk: saatOnce(sa),
+  son: saatOnce(sa),
 })
-const liste = (kayitlar) => Promise.resolve({ data: { success: true, data: kayitlar } })
+const gundemYaniti = (olaylar) => Promise.resolve({ data: { success: true, olaylar, hesaplandi: new Date().toISOString() } })
 
 const sayfa = () => render(
   <MemoryRouter>
@@ -69,11 +75,10 @@ describe('GenelBakis', () => {
     localStorage.clear()
     sessionStorage.clear()
     ozetApi.getOzet.mockResolvedValue({ data: ozet() })
-    newsApi.getNews.mockImplementation(() => liste([haber(1, 'Fidye yazılımı grubu yeni site açtı', 3)]))
-    k8sApi.getK8s.mockImplementation(() => liste([haber(2, 'Kubernetes beta sürüm notları', 5)]))
-    sreApi.getSRE.mockImplementation(() => liste([]))
-    devtoolsApi.getDevTools.mockImplementation(() => liste([]))
-    aiApi.getAINews.mockImplementation(() => liste([]))
+    gundemApi.getGundem.mockImplementation(() => gundemYaniti([
+      olay(1, 'Fidye yazılımı grubu yeni site açtı', 3),
+      olay(2, 'Kubernetes beta sürüm notları', 5, 'kubernetes'),
+    ]))
     saglikApi.getSaglik.mockResolvedValue({ data: { sections: {} } })
   })
 
@@ -83,6 +88,28 @@ describe('GenelBakis', () => {
     expect(screen.getByText(/değerlendirme bekliyor/)).toBeInTheDocument()
     expect(screen.getByText(/Son 7 günde 2 zafiyet CISA KEV kataloğuna eklendi; aktif istismar doğrulanmış\./)).toBeInTheDocument()
     expect(screen.getByText('Zafiyet Durumu · Son 24 Saat')).toBeInTheDocument()
+  })
+
+  it('genel_bakis_gundem_ucunu_cagirir', async () => {
+    sayfa()
+    expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
+    expect(await screen.findByText('Kubernetes beta sürüm notları')).toBeInTheDocument()
+    expect(gundemApi.getGundem).toHaveBeenCalledTimes(1)
+    expect(gundemApi.getGundem).toHaveBeenCalledWith()
+  })
+
+  it('gundem_hatasi_karta_yansir', async () => {
+    gundemApi.getGundem.mockResolvedValue({ data: { success: false, olaylar: [] } })
+    sayfa()
+    expect(await screen.findByText('Gündem bilgisi alınamadı.')).toBeInTheDocument()
+    expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
+  })
+
+  it('gundem_istek_hatasi_karta_yansir', async () => {
+    gundemApi.getGundem.mockRejectedValue(new Error('ag'))
+    sayfa()
+    expect(await screen.findByText('Gündem bilgisi alınamadı.')).toBeInTheDocument()
+    expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
   })
 
   it('kritik yoksa sakin cumle', async () => {
@@ -120,9 +147,14 @@ describe('GenelBakis', () => {
     expect(screen.getByText('Yeni').closest('button')).toHaveTextContent('CVE-2026-1001')
   })
 
-  it('sayfa gizlenince en yeni created_at son ziyaret olarak yazilir', async () => {
+  it('son_ziyaret_olay_son_zamanini_kullanir', async () => {
     const enYeni = saatOnce(1)
-    newsApi.getNews.mockImplementation(() => liste([{ ...haber(1, 'En yeni haber', 1), created_at: enYeni }, haber(3, 'Eski haber', 40)]))
+    ozetApi.getOzet.mockResolvedValue({ data: ozet({ priority: [cve({ created_at: saatOnce(20) })] }) })
+    gundemApi.getGundem.mockImplementation(() => gundemYaniti([
+      // Temsilci eski, olayin son'u yeni: son ziyaret olayin son'unu kullanir
+      { ...olay(1, 'En yeni haber', 40), son: enYeni },
+      olay(3, 'Eski haber', 40),
+    ]))
     sayfa()
     expect(await screen.findByText('En yeni haber')).toBeInTheDocument()
     expect(await screen.findByText('3 kritik zafiyet')).toBeInTheDocument()
@@ -205,11 +237,18 @@ describe('GenelBakis', () => {
   it('oncelikli satir paneli acar', async () => {
     sayfa()
     const baslik = await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
-    expect(screen.getByRole('link', { name: 'Tümünü görüntüle →' })).toHaveAttribute('href', '/cve')
+    expect(screen.getByRole('link', { name: 'Tümünü görüntüle →' })).toHaveAttribute('href', '/cve?sirala=cvss')
     fireEvent.click(baslik.closest('button'))
     const panel = await screen.findByRole('dialog')
     expect(within(panel).getByText('CVE-2026-1001')).toBeInTheDocument()
     expect(within(panel).getByText('Yönetim arayüzü internete açık kurulumlar etkileniyor.')).toBeInTheDocument()
+  })
+
+  it('tumunu_goruntule_cvss_siralamasina_gider', async () => {
+    // spec 2026-11-05 G4: Zafiyetler'in Donem varsayilani 7 gun, ana sayfanin "son 7 gun" penceresiyle ortusur
+    sayfa()
+    await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
+    expect(screen.getByRole('link', { name: 'Tümünü görüntüle →' })).toHaveAttribute('href', '/cve?sirala=cvss')
   })
 
   it('gundem kaydi paneli acar', async () => {

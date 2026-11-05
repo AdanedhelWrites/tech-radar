@@ -20,6 +20,22 @@ class CveBasligiTests(SimpleTestCase):
         self.assertEqual(cve_basligi('CVE-2026-1', 'CVE-2026-1 - Fortinet FortiOS RCE', 'Bir aciklama.', ''),
                          'CVE-2026-1 - Fortinet FortiOS RCE')
 
+    def test_eski_kesik_ghsa_basligi_kelime_sinirinda_biter(self):
+        # 2026-11-04 oncesi scraper ozeti 80 karakterde kesiyordu
+        ozet = 'zip: Critical Parser Differential & Security Control Bypass via Dual-Header Inco'
+        self.assertEqual(len(ozet), 80)
+        self.assertEqual(
+            cve_basligi('CVE-2026-115905', f'CVE-2026-115905 - {ozet}', 'Açıklama.', 'Desc.'),
+            'CVE-2026-115905 - zip: Critical Parser Differential & Security Control Bypass via Dual-Header…')
+
+    def test_kesik_olmayan_basliklar_degismez(self):
+        kisa = 'CVE-2026-2 - Path traversal in foo'
+        self.assertEqual(cve_basligi('CVE-2026-2', kisa, 'A.', 'B.'), kisa)
+        tam = 'CVE-2026-3 - ' + ('x' * 79) + '.'  # 80 karakter ama cumle sonuyla bitiyor
+        self.assertEqual(cve_basligi('CVE-2026-3', tam, 'A.', 'B.'), tam)
+        uzun = 'CVE-2026-4 - ' + ('word ' * 30).strip()
+        self.assertEqual(cve_basligi('CVE-2026-4', uzun, 'A.', 'B.'), uzun)
+
     def test_sablon_baslik_ilk_cumleden_turetilir(self):
         self.assertEqual(
             cve_basligi('CVE-2026-2', 'CVE-2026-2 - Güvenlik Açığı',

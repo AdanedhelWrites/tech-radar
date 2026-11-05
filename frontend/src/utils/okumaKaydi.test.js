@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cveOkumaKaydi, haberOkumaKaydi, haberRozetleri } from './okumaKaydi'
+import { cveOkumaKaydi, cweListesi, haberOkumaKaydi, haberRozetleri } from './okumaKaydi'
 
 const KEV_ORIJINAL = 'Added to the CISA KEV catalog on 2026-10-20; required action due 2026-11-10. A command injection vulnerability allows remote code execution.'
 const REFERANSLAR = Array.from({ length: 7 }, (_, i) => `https://ornek.test/ref/${i}`)
@@ -22,7 +22,30 @@ const kevCve = (ek = {}) => ({
   ...ek,
 })
 
+describe('cweListesi', () => {
+  it('yinelenen ve bos CWE degerlerini atar, sirayi korur', () => {
+    expect(cweListesi({ cwe_ids: ['CWE-787', '', 'CWE-20', 'CWE-787'] })).toEqual(['CWE-787', 'CWE-20'])
+    expect(cweListesi({ cwe_ids: null })).toEqual([])
+    expect(cweListesi(undefined)).toEqual([])
+  })
+
+  it('okuma kaydinda ayni CWE rozeti bir kez cikar', () => {
+    const k = cveOkumaKaydi(kevCve({ cwe_ids: ['CWE-78', 'CWE-78'] }))
+    expect(k.rozetler.filter(r => r.metin === 'CWE-78')).toHaveLength(1)
+  })
+})
+
 describe('cveOkumaKaydi', () => {
+  it('GitHub Advisory Markdown govdesini duz metne cevirir', () => {
+    const k = cveOkumaKaydi({
+      cve_id: 'CVE-2026-115905', source: 'GitHub Advisory',
+      original_description: '## Summary\nA flaw in the `zip` crate.\n### Impact\n**High** impact.',
+      turkish_description: '## Özet\n`zip` kütüphanesinde bir açık.\n### Etki\n**Yüksek** etki.',
+    })
+    expect(k.govdeOrijinal).toBe('A flaw in the zip crate.\n\nImpact\n\nHigh impact.')
+    expect(k.govdeTr).toBe('zip kütüphanesinde bir açık.\n\nEtki\n\nYüksek etki.')
+  })
+
   it('cve kev onekini govdeden ayirir ve tum referanslari alir', () => {
     const k = cveOkumaKaydi(kevCve())
     expect(k.govdeOrijinal).toBe('A command injection vulnerability allows remote code execution.')
