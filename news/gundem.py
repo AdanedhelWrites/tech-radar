@@ -49,9 +49,18 @@ Yalniz Ingilizce ORIJINAL baslik kullanilir (ceviriler saglayicidan saglayiciya 
   law..." ile TechCrunch "Nvidia weighs ... AI data center in West Virginia" ve OpenAI
   Blog "Basis completes a tax workbook 2x faster with GPT-6 Astra" ile GPT-6.1 Sol
   olayi yalniz boyle bir obek uzerinden birlesiyordu. Bedeli (tum-olay taramasi): yalniz
-  iki sozcuklu adi paylasan dogru ciftler de ayri kalir ("SiteGuard WAF", "Quest
-  Diagnostics", "Introducing GPT-6.1 Terra"); supheli durumda ayri tutma kurali geregi.
-  Ayni kaynak kurali (0) token sayar; orada Jaccard >= YUKSEK_ESIK zaten siki.
+  rakamsiz iki sozcuklu adi paylasan dogru ciftler de ayri kalir ("SiteGuard WAF",
+  "Quest Diagnostics"); supheli durumda ayri tutma kurali geregi. Ayni kaynak kurali (0)
+  token sayar; orada Jaccard >= YUKSEK_ESIK zaten siki.
+- Surumlu urun adi obegi (_surum_obegi): basligin ILK rakamli ad obegi ("GPT-6.1 Sol",
+  "Gemini 4 Argon" -> {4, argon}, "Kubernetes 1.35"). Iki baslikta AYNI ise tek basina
+  baglar (kural 1): buyuk model/surum cikislari Gundem'in asil konusudur ve "Introducing
+  GPT-6.1 Terra" gibi basliklarda baska ortak sozcuk yoktur. Yalniz ilk obek alindigi
+  icin TechCrunch "OpenAI launches GPT-6.1 Sol, says it nearly matches GPT-6 Astra"
+  basligi GPT-6.1 Sol'dur; Basis "...with GPT-6 Astra" ona baglanmaz. "Windows 11",
+  "Microsoft 365" gibi yalniz genel ad + tamsayi obekleri gecersizdir.
+- Listeler (DURAK, GENEL, GENEL_AD) kok bicimleriyle de genisletilir: "windows",
+  "kubernetes", "macos" kokte "window", "kubernete", "maco" olur; yoksa eslesmiyordu.
 - Yil sozcukleri (^(19|20)\\d{2}$) atilir: "2027" iki ilgisiz basligi ek sozcuk olarak
   bagliyordu. Binlik ayiracli sayilar tek sozcuktur ("238,000"; yoksa "000" baglardi).
 - DURAK genel karsilastirma ve sifatlari da icerir (faster, biggest, top, major...):
@@ -66,7 +75,7 @@ Iki kayit su durumda ayni olaydir (union-find ile gecisli birlesir):
    kurallar ayni kaynak icin uygulanmaz. Neden: AWS ML Blog'un "Amazon Bedrock AgentCore"
    paylasan ilgisiz iki yazisi 10-01'de GPT-6.1 olayina zincirleniyordu. Ayni kaynagin
    takip haberleri diger kaynaklar uzerinden yine ayni olaya baglanir.
-1. Ortak uydurma ad ya da ayni CVE kimligi; ya da
+1. Ortak uydurma ad, ayni CVE kimligi ya da ayni surumlu urun adi obegi; ya da
 2. Ortak bir ozel ad VE Jaccard >= ORTA_ESIK VE (ikinci bir ortak ad OBEGI YA DA
    GENEL_AD olmayan bir ortak icerik sozcugu daha); ya da
 3. Jaccard >= YUKSEK_ESIK ve en az YUKSEK_ORTAK_EN_AZ ortak icerik sozcugu (ad sartsiz).
@@ -253,6 +262,51 @@ def _sozcukler(baslik: str) -> List[str]:
     return [s.lstrip('$') for s in _SOZCUK.findall(metin) if s.lstrip('$')]
 
 
+def _surum_obegi(baslik: str) -> Optional[frozenset]:
+    """Basliktaki ilk gecerli surumlu urun adi obegi ("GPT-6.1 Sol", "Gemini 4 Argon",
+    "Kubernetes 1.35"); yoksa None.
+
+    Obek: aralarinda yalniz bosluk olan, buyuk harf (macOS dahil) ya da rakam iceren ardisik
+    sozcukler (DURAK, GENEL ve yil sozcukleri ile her noktalama obegi bitirir). Basindaki
+    genel adlar (OpenAI's, Gemini) kalan en az iki sozcukse atilir. Gecerli sayilmasi icin
+    en az iki sozcuk, en az bir rakamli sozcuk ve ya genel ad olmayan harfli bir sozcuk
+    ("Argon", "Sol") ya da noktali bir surum ("1.35") gerekir; "Windows 11", "Microsoft
+    365" gecersizdir. Yalniz ILK gecerli obek alinir: TechCrunch "OpenAI launches GPT-6.1
+    Sol, says it nearly matches GPT-6 Astra" basligin oznesi GPT-6.1 Sol'dur."""
+    metin = (baslik or '').replace('’', "'").replace('‘', "'")
+    obekler: List[List[Tuple[str, str]]] = []
+    obek: Optional[List[Tuple[str, str]]] = None
+    onceki_son = 0
+    for m in _SOZCUK.finditer(metin):
+        bitisik = metin[onceki_son:m.start()].strip() == ''
+        onceki_son = m.end()
+        ham = m.group().lstrip('$')
+        k = _kok(ham) if ham else ''
+        uye = (bool(k) and k not in DURAK and k not in GENEL and not _YIL.match(k)
+               and (any(c.isupper() for c in ham) or any(c.isdigit() for c in ham)))
+        if not uye:
+            obek = None
+            continue
+        if obek is None or not bitisik:
+            obek = []
+            obekler.append(obek)
+        obek.append((ham, k))
+    for obek in obekler:
+        if not any(any(c.isdigit() for c in ham) for ham, _ in obek):
+            continue
+        kokler = [k for _, k in obek]
+        while len(kokler) > 2 and kokler[0] in GENEL_AD:
+            kokler.pop(0)
+        if len(kokler) < 2:
+            continue
+        harfli_ad = any(k not in GENEL_AD and not any(c.isdigit() for c in k) and any(c.isalpha() for c in k)
+                        for k in kokler)
+        noktali = any('.' in k and any(c.isdigit() for c in k) for k in kokler)
+        if harfli_ad or noktali:
+            return frozenset(kokler)
+    return None
+
+
 def _kok(sozcuk: str) -> str:
     k = sozcuk.lower()
     if k.endswith("'s"):
@@ -261,6 +315,14 @@ def _kok(sozcuk: str) -> str:
     if len(k) > 3 and k.endswith('s') and not k.endswith(('ss', 'us', 'is')):
         k = k[:-1]
     return k
+
+
+# Listeler kok bicimiyle karsilastirilir; cogul yazilan girdiler kok bicimleriyle de eklenir.
+# Yoksa "windows", "kubernetes", "macos", "ddos" hic eslesmiyordu (kok: window, kubernete...)
+# ve "Windows" ozel ad sayiliyordu.
+DURAK = DURAK | frozenset(_kok(w) for w in DURAK)
+GENEL = GENEL | frozenset(_kok(w) for w in GENEL)
+GENEL_AD = GENEL_AD | frozenset(_kok(w) for w in GENEL_AD)
 
 
 def _yas_carpani(simdi: datetime, an: datetime) -> float:
@@ -295,6 +357,7 @@ class _Ozellik(NamedTuple):
     uydurma: frozenset  # tek basina baglayan uydurma adlar ve CVE kimlikleri
     ozne: Optional[str]  # basligin oznesi (bkz. _baslik_ozellikleri; genel adlar haric)
     obekler: Tuple[frozenset, ...] = ()  # bitisik ozel adlarin olusturdugu ad obekleri
+    surum: Optional[frozenset] = None  # ilk surumlu urun adi obegi (bkz. _surum_obegi)
 
 
 def _uydurma_mi(kok: str) -> bool:
@@ -355,7 +418,7 @@ def _baslik_ozellikleri(ogeler: List[Ogeler]) -> List[_Ozellik]:
             else:
                 obek = None
         sonuc.append(_Ozellik(_kaynak(o), frozenset(icerik), frozenset(adlar), frozenset(uydurma), ozne,
-                              tuple(frozenset(ob) for ob in obekler)))
+                              tuple(frozenset(ob) for ob in obekler), _surum_obegi(o.baslik)))
     return sonuc
 
 
@@ -378,6 +441,9 @@ def _ayni_olay(a: _Ozellik, b: _Ozellik) -> bool:
         # bloglarinin urun adini paylasan ilgisiz yazilari zincir kurmasin.
         return jaccard >= YUKSEK_ESIK and (len(ortak_adlar) >= 2 or len(ortak) >= YUKSEK_ORTAK_EN_AZ)
     if a.uydurma & b.uydurma:
+        return True
+    if a.surum is not None and a.surum == b.surum:
+        # Ayni surumlu urun adi (GPT-6.1 Sol, Gemini 4 Argon) uydurma ad gibi tek basina baglar.
         return True
     if ortak_adlar and jaccard >= ORTA_ESIK:
         # Ad tek basina yetmez: ikinci bir ortak ad OBEGI ya da genel ad olmayan bir ortak

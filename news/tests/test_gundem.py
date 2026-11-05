@@ -140,9 +140,21 @@ class TaramaCapalariTest(SimpleTestCase):
         # GPT-6.1 olayina zincirlenmez (ayni kaynak kurali).
         self.assertNotEqual(olay_of(olaylar, 'ai', 992), gpt)
         self.assertNotEqual(olay_of(olaylar, 'ai', 1028), gpt)
-        # Ad obegi kurali sonrasi: "...GPT-6.1 Sol on Amazon Bedrock" (1008) yalniz "GPT-6.1 Sol"
-        # obegini paylasir ve ek sozcugu yok; o da olay disinda kalir.
-        self.assertEqual([o.source for o in olaylar[gpt] if o.source == 'AWS ML Blog'], [])
+        # Yalniz GPT-6.1 Sol'un Bedrock'a gelisini anlatan yazi (1008) olayda: ayni surumlu
+        # urun adi obegini ("GPT-6.1 Sol") tasir.
+        self.assertEqual([o.id for o in olaylar[gpt] if o.source == 'AWS ML Blog'], [1008])
+
+    def test_surumlu_urun_obegi_cikislari_toplar(self):
+        olaylar = olaylari_grupla(penceredeki(list(fikstur()), ist('2026-10-01 20:00')))
+        sol = olay_of(olaylar, 'ai', 997)
+        self.assertEqual(
+            sorted((o.source for o in olaylar[sol])),
+            ['AWS ML Blog', 'MarkTechPost', 'OpenAI Blog', 'TechCrunch AI'],
+        )
+        self.assertNotEqual(olay_of(olaylar, 'news', 714), sol)  # "OpenAI Shelves GPT-6.1 Astra"
+        olaylar = olaylari_grupla(penceredeki(list(fikstur()), ist('2026-10-28 12:00')))
+        terra = {olay_of(olaylar, b, i) for b, i in [('ai', 1651), ('ai', 1655), ('news', 1817), ('news', 1891)]}
+        self.assertEqual(len(terra), 1)  # "Introducing GPT-6.1 Terra" dahil dort kaynak tek olay
 
     def test_gpt6_astra_obegi_basis_yazisini_zincirlemez(self):
         # OpenAI Blog "Basis completes a tax workbook 2x faster with GPT-6 Astra" (974) yalniz
@@ -298,6 +310,37 @@ class SonDuzeltmeTest(SimpleTestCase):
             ogeler[0],
             oge(4, 'The Hacker News', 'Qilin Ransomware Group Exploits Palo Alto Networks Flaw', s),
         ]), 1)
+
+    def test_surumlu_urun_obegi_tek_basina_baglar(self):
+        s = self.simdi
+        sol = 'OpenAI launches GPT-6.1 Sol, says it nearly matches GPT-6 Astra'
+        self.assertEqual(self.grup_sayisi([oge(1, 'A', sol, s), oge(2, 'B', 'Introducing GPT-6.1 Sol', s)]), 1)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Kubernetes 1.35 released', s),
+            oge(2, 'B', 'Kubernetes 1.35 brings sidecar GA', s),
+        ]), 1)
+
+    def test_farkli_ya_da_rakamsiz_obek_tek_basina_baglamaz(self):
+        s = self.simdi
+        sol = 'OpenAI launches GPT-6.1 Sol, says it nearly matches GPT-6 Astra'
+        # Ikinci obek (GPT-6 Astra) basligin surum obegi degildir.
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', sol, s),
+            oge(2, 'B', 'Basis completes a tax workbook 2x faster with GPT-6 Astra', s),
+        ]), 2)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Startup builds tooling around GPT-6 Astra', s),
+            oge(2, 'B', 'Introducing GPT-6.1 Sol', s),
+        ]), 2)
+        # Rakamsiz obek ve genel ad + tamsayi obegi tek basina baglamaz.
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Quest Diagnostics reports breach', s),
+            oge(2, 'B', 'Quest Diagnostics warns patients', s),
+        ]), 2)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Windows 11 update breaks printers', s),
+            oge(2, 'B', 'Windows 11 adds redesigned Start menu', s),
+        ]), 2)
 
     def test_yil_sozcugu_atilir(self):
         s = self.simdi
