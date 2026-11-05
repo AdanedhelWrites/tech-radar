@@ -35,13 +35,26 @@ Yalniz Ingilizce ORIJINAL baslik kullanilir (ceviriler saglayicidan saglayiciya 
   Japan Airlines ayri olaylar); MFA, SSH gibi genel kisaltmalar ozel ad sayilmaz
   (icerik kumesinde kalir, benzerlige katkisi olur ama bag kurmaz). Kaynak adlarindaki
   sozcukler de (Google DeepMind, Hugging Face, AWS ML Blog) ayni nedenle genel sayilir:
-  satici blogunun her yazisi kendi adini tasir.
+  satici blogunun her yazisi kendi adini tasir. Bilerek guvenli taraf: kaynak adi
+  urun adiysa (DevTools'ta "Redis", "PostgreSQL") o urunun adi hicbir baslikta ad bagi
+  kuramaz; ornegin bir Redis acigi haberi Redis surum notuyla ad uzerinden birlesmez.
+- Uydurma ad: harf-rakam-harf bicimli, en az UYDURMA_HARF_EN_AZ harfli kok
+  (^[a-z]+[0-9]+[a-z]+$: php2shell, plex2shell, node2shell) ya da ayni CVE kimligi
+  (cve-YYYY-NNNN...). Bunlar bir olaya ozgu konmus adlardir ve TEK BASINA baglar.
+  Genel harf+rakam adlari (GPT-6.1, ISC2), CamelCase ya da buyuk harfli adlar tek
+  basina baglamaz; inceleme taramasinda bunlar yanlis bag uretiyordu.
 
 Iki kayit su durumda ayni olaydir (union-find ile gecisli birlesir):
 
-1. Ortak bir ozel ad VE Jaccard >= ORTA_ESIK VE (ikinci bir ortak ozel ad YA DA
+0. Ayni kaynaktan iki kayit YALNIZ su durumda dogrudan baglanir: Jaccard >= YUKSEK_ESIK
+   VE (en az 2 ortak ozel ad YA DA en az YUKSEK_ORTAK_EN_AZ ortak sozcuk). Asagidaki
+   kurallar ayni kaynak icin uygulanmaz. Neden: AWS ML Blog'un "Amazon Bedrock AgentCore"
+   paylasan ilgisiz iki yazisi 10-01'de GPT-6.1 olayina zincirleniyordu. Ayni kaynagin
+   takip haberleri diger kaynaklar uzerinden yine ayni olaya baglanir.
+1. Ortak uydurma ad ya da ayni CVE kimligi; ya da
+2. Ortak bir ozel ad VE Jaccard >= ORTA_ESIK VE (ikinci bir ortak ozel ad YA DA
    GENEL_AD olmayan bir ortak icerik sozcugu daha); ya da
-2. Jaccard >= YUKSEK_ESIK ve en az YUKSEK_ORTAK_EN_AZ ortak icerik sozcugu (ad sartsiz).
+3. Jaccard >= YUKSEK_ESIK ve en az YUKSEK_ORTAK_EN_AZ ortak icerik sozcugu (ad sartsiz).
 
 Ozel ad icin salt belge sikligi esigi KULLANILMAZ: 10-21 penceresinde "PHP" 13 baslikta,
 10-30 penceresinde "Microsoft" 8 baslikta gecer; siklik ikisini ayiramaz. Ayiran sey ad
@@ -94,13 +107,23 @@ Once en az 2 farkli kaynakli olaylar puan azalan (esitlikte `son` azalan, sonra 
 (bolum, id)). Kalan yerler tek kaynakli olaylarin en yeni kaydiyla dolar (`created_at`
 azalan, sonra (bolum, id)); her tek kaynakli olaydan yalniz bir kayit alinir ki ayni olay
 iki satirda gorunmesin. Dolgu ogeleri kaynak_sayisi 1 ve makale_sayisi 1 tasir.
+
+Secim aninda birlestirme: secilen satirlardan ikisinin olaylarinda BUTUN basliklarin
+oznesi (basliktaki ilk ozel ad; GENEL_AD ve kaynak adlari ad sayilmadigi icin onlar
+atlanir) ayni ise iki olay birlesir, puan ve temsilci yeniden hesaplanir ve secim bastan
+yapilir; kararli olana kadar. Neden: 10-30 12:15-18:00 arasi Binance iki olayda kaliyordu
+(capraz ciftler yalniz "binance" paylasiyordu, ikisi ~3.16) ve iki satirda gorunuyordu
+(spec s4). Kural yalniz secilen satirlara bakar ve her basligin ayni adla baslamasini
+ister; bu yuzden dar kalir. Fikstur taramasinda (10-21..10-23 ve 10-30..11-03, 15 dk
+aralik, 768 an) yalniz Binance icin tetiklendi; Drupal Commerce ile Adobe Commerce,
+Siemens ClickFix ile diger ClickFix haberleri birlesmedi.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 # settings.TIME_ZONE ile ayni; saf modul Django ayarina bagli kalmasin diye sabit.
@@ -115,17 +138,18 @@ COK_KAYNAK_EN_AZ = 2
 ORTA_ESIK = 0.12
 YUKSEK_ESIK = 0.4
 YUKSEK_ORTAK_EN_AZ = 3
+UYDURMA_HARF_EN_AZ = 4  # "a1b" gibi kisa kodlar uydurma ad sayilmaz
 
 # Islev sozcukleri ve manset dolgu sozcukleri (kok bicimiyle).
 DURAK = frozenset('''
-a an the and or of to in on for with by at from as is are was were be been being its it it's this that these
-those new how why what who whom which when where after before over into via vs not no your you we our their
-his her than more most up out say says said report amid about can could will would may might just now get
-got one two three has have had do does did all any some still yet also only then there here other another
-next way under against across through within without while ahead behind back down off per like make made
-use using used today week day year time inside meet introducing announcing introduce introduces announce
-announces unveil unveils unveiled launch launches launched release releases released show shows reveal
-reveals revealed new latest what's here's now off over amid u.s us uk 2025 2026 vs.
+a about across after against ahead all also amid an and announce announces announcing another any are as at
+back be been before behind being by can could day did do does down for from get got had has have her here
+here's his how in inside into introduce introduces introducing is it it's its just latest launch launched
+launches like made make may meet might more most new next no not now of off on one only or other our out over
+per release released releases report reveal revealed reveals said say says show shows some still than that
+the their then there these this those three through time to today two u.s uk under unveil unveiled unveils up
+us use used using via vs was way we week were what what's when where which while who whom will within without
+why with would year yet you your 2025 2026
 '''.split())
 
 # Alan genelinde cok sik gecen, olay ayirt etmeyen sozcukler (kok bicimiyle).
@@ -135,7 +159,7 @@ critical patch patche patched update fix fixe fixed exploit exploitation exploit
 agent agentic tool open source company team warn warning researcher research find found risk system service
 app platform software code cloud network build building guide help issue issues million billion customer
 government official orgs organization online device devices browser server servers account campaign actor
-group gang target targeted targeting store
+group gang target targeted targeting store zero-day 0-day
 '''.split())
 
 # Sik gecen genel adlar: ozel ad sayilmaz (spec G2 ayrim olcutu). Buyuk saticilar, kurumlar,
@@ -165,6 +189,8 @@ CEVIRISIZ_SIRA = 4
 BOS_CEVIRI_SIRA = 5
 
 _KISA_ISLEV = frozenset('a an the and or of to in on for with by at from as vs via is are be its'.split())
+_UYDURMA = re.compile(r'^[a-z]+[0-9]+[a-z]+$')
+_CVE = re.compile(r'^cve-\d{4}-\d{4,}$')
 _SOZCUK = re.compile(r"[A-Za-z0-9$]+(?:[.\-'][A-Za-z0-9]+)*")
 
 
@@ -228,8 +254,22 @@ def _title_case_mi(sozcukler: List[str]) -> bool:
     return buyuk >= 0.6 * len(adaylar)
 
 
-def _baslik_ozellikleri(ogeler: List[Ogeler]) -> List[Tuple[frozenset, frozenset]]:
-    """Her oge icin (icerik kumesi, ozel ad kumesi)."""
+class _Ozellik(NamedTuple):
+    kaynak: str
+    icerik: frozenset
+    adlar: frozenset
+    uydurma: frozenset  # tek basina baglayan uydurma adlar ve CVE kimlikleri
+    ozne: Optional[str]  # basliktaki ilk ozel ad (genel adlar haric)
+
+
+def _uydurma_mi(kok: str) -> bool:
+    if _CVE.match(kok):
+        return True
+    return bool(_UYDURMA.match(kok)) and sum(c.isalpha() for c in kok) >= UYDURMA_HARF_EN_AZ
+
+
+def _baslik_ozellikleri(ogeler: List[Ogeler]) -> List[_Ozellik]:
+    """Her oge icin kaynak, icerik kumesi, ozel ad kumesi, uydurma adlar ve ozne."""
     kucuk_gorulen = set()
     cumle_duzeninde_buyuk = set()
     kaynak_sozcukleri = set()
@@ -248,6 +288,8 @@ def _baslik_ozellikleri(ogeler: List[Ogeler]) -> List[Tuple[frozenset, frozenset
     for o in ogeler:
         icerik = set()
         adlar = set()
+        uydurma = set()
+        ozne = None
         for s in _sozcukler(o.baslik):
             k = _kok(s)
             if not k or k in DURAK or k in GENEL:
@@ -255,24 +297,32 @@ def _baslik_ozellikleri(ogeler: List[Ogeler]) -> List[Tuple[frozenset, frozenset
             icerik.add(k)
             if k in GENEL_AD or k in kaynak_sozcukleri or len(k) < 2:
                 continue
+            if _uydurma_mi(k):
+                uydurma.add(k)
             if not any(c.isalpha() for c in s):
                 continue
             if (any(c.isdigit() for c in s)
                     or any(c.isupper() for c in s[1:])
                     or (s[0].isupper() and k not in kucuk_gorulen and k in cumle_duzeninde_buyuk)):
                 adlar.add(k)
-        sonuc.append((frozenset(icerik), frozenset(adlar)))
+                if ozne is None:
+                    ozne = k
+        sonuc.append(_Ozellik(_kaynak(o), frozenset(icerik), frozenset(adlar), frozenset(uydurma), ozne))
     return sonuc
 
 
-def _ayni_olay(a: Tuple[frozenset, frozenset], b: Tuple[frozenset, frozenset]) -> bool:
-    icerik_a, adlar_a = a
-    icerik_b, adlar_b = b
-    ortak = icerik_a & icerik_b
+def _ayni_olay(a: _Ozellik, b: _Ozellik) -> bool:
+    ortak = a.icerik & b.icerik
     if not ortak:
         return False
-    jaccard = len(ortak) / len(icerik_a | icerik_b)
-    ortak_adlar = adlar_a & adlar_b
+    jaccard = len(ortak) / len(a.icerik | b.icerik)
+    ortak_adlar = a.adlar & b.adlar
+    if a.kaynak == b.kaynak:
+        # Ayni kaynagin iki yazisi ancak cok benzerse dogrudan baglanir; satici
+        # bloglarinin urun adini paylasan ilgisiz yazilari zincir kurmasin.
+        return jaccard >= YUKSEK_ESIK and (len(ortak_adlar) >= 2 or len(ortak) >= YUKSEK_ORTAK_EN_AZ)
+    if a.uydurma & b.uydurma:
+        return True
     if ortak_adlar and jaccard >= ORTA_ESIK:
         # Ad tek basina yetmez: ikinci bir ortak ad ya da genel ad olmayan bir ortak
         # icerik sozcugu daha gerekir ("Amazon Bedrock" gibi satici urun adi + satici
@@ -283,11 +333,11 @@ def _ayni_olay(a: Tuple[frozenset, frozenset], b: Tuple[frozenset, frozenset]) -
     return len(ortak) >= YUKSEK_ORTAK_EN_AZ and jaccard >= YUKSEK_ESIK
 
 
-def olaylari_grupla(ogeler: List[Ogeler]) -> List[List[Ogeler]]:
-    """Ogeleri olaylara boler. Cikti: her olay (created_at, bolum, id) sirali; olaylar ilk
-    ogelerine gore sirali. Girdi sirasindan bagimsizdir."""
-    sirali = sorted(ogeler, key=_anahtar)
-    ozellik = _baslik_ozellikleri(sirali)
+def _olay_sirasi(olay: List[Ogeler]) -> List[Ogeler]:
+    return sorted(olay, key=lambda o: (o.created_at, o.bolum, o.id))
+
+
+def _grupla(sirali: List[Ogeler], ozellik: List[_Ozellik]) -> List[List[Ogeler]]:
     ebeveyn = list(range(len(sirali)))
 
     def kok_bul(i: int) -> int:
@@ -306,9 +356,16 @@ def olaylari_grupla(ogeler: List[Ogeler]) -> List[List[Ogeler]]:
     gruplar: Dict[int, List[Ogeler]] = {}
     for i, oge in enumerate(sirali):
         gruplar.setdefault(kok_bul(i), []).append(oge)
-    olaylar = [sorted(g, key=lambda o: (o.created_at, o.bolum, o.id)) for g in gruplar.values()]
+    olaylar = [_olay_sirasi(g) for g in gruplar.values()]
     olaylar.sort(key=lambda g: (g[0].created_at, g[0].bolum, g[0].id))
     return olaylar
+
+
+def olaylari_grupla(ogeler: List[Ogeler]) -> List[List[Ogeler]]:
+    """Ogeleri olaylara boler. Cikti: her olay (created_at, bolum, id) sirali; olaylar ilk
+    ogelerine gore sirali. Girdi sirasindan bagimsizdir."""
+    sirali = sorted(ogeler, key=_anahtar)
+    return _grupla(sirali, _baslik_ozellikleri(sirali))
 
 
 def _etkili(oge: Ogeler) -> bool:
@@ -362,20 +419,66 @@ def _olay_ozeti(olay: List[Ogeler], simdi: datetime, kayit: Ogeler) -> dict:
     }
 
 
-def olaylari_sec(ogeler: List[Ogeler], simdi: datetime, adet: int = 6) -> List[dict]:
-    """Penceredeki ogelerden Gundem ogelerini secer (bkz. modul belgesi, Secim)."""
-    olaylar = olaylari_grupla(penceredeki(ogeler, simdi))
+Satir = Tuple[List[Ogeler], Ogeler, bool]
+
+
+def _satirlar(olaylar: List[List[Ogeler]], simdi: datetime, adet: int) -> List[Satir]:
+    """(olay, gosterilecek kayit, dolgu_mu) satirlari: secim aninda birlestirme oncesi."""
     cok, tek = [], []
     for olay in olaylar:
         (cok if len({_kaynak(o) for o in olay}) >= COK_KAYNAK_EN_AZ else tek).append(olay)
 
     puanli = [(olay_puani(o, simdi), max(x.created_at for x in o), temsilci(o), o) for o in cok]
     puanli.sort(key=lambda p: (-p[0], -p[1].timestamp(), _anahtar(p[2])))
-    secim = [_olay_ozeti(o, simdi, t) for _, _, t, o in puanli[:adet]]
+    satirlar = [(o, t, False) for _, _, t, o in puanli[:adet]]
 
-    if len(secim) < adet:
-        dolgu = [max(olay, key=lambda o: (o.created_at, -o.id, o.bolum)) for olay in tek]
-        dolgu.sort(key=lambda o: (-o.created_at.timestamp(), o.id, o.bolum))
-        for kayit in dolgu[:adet - len(secim)]:
-            secim.append(_olay_ozeti([kayit], simdi, kayit))
-    return secim
+    if len(satirlar) < adet:
+        dolgu = [(max(olay, key=lambda o: (o.created_at, -o.id, o.bolum)), olay) for olay in tek]
+        dolgu.sort(key=lambda p: (-p[0].created_at.timestamp(), p[0].id, p[0].bolum))
+        satirlar.extend((olay, kayit, True) for kayit, olay in dolgu[:adet - len(satirlar)])
+    return satirlar
+
+
+def _olay_oznesi(olay: List[Ogeler], ozellik: Dict[Tuple[str, int], _Ozellik]) -> Optional[str]:
+    """Olaydaki her basligin ilk ozel adi (oznesi) ayniysa o ad, degilse None."""
+    ozneler = {ozellik[_anahtar(o)].ozne for o in olay}
+    if len(ozneler) == 1:
+        return ozneler.pop()
+    return None
+
+
+def _secip_birlestir(
+    olaylar: List[List[Ogeler]], simdi: datetime, adet: int, ozellik: Dict[Tuple[str, int], _Ozellik],
+) -> Tuple[List[Satir], List[Tuple[List[Ogeler], List[Ogeler]]]]:
+    """Secim aninda birlestirme (bkz. modul belgesi). Doner: (satirlar, birlesen olay ciftleri)."""
+    birlesmeler = []
+    while True:
+        satirlar = _satirlar(olaylar, simdi, adet)
+        cift = None
+        for i in range(len(satirlar)):
+            ozne = _olay_oznesi(satirlar[i][0], ozellik)
+            if ozne is None:
+                continue
+            for j in range(i + 1, len(satirlar)):
+                if _olay_oznesi(satirlar[j][0], ozellik) == ozne:
+                    cift = (satirlar[i][0], satirlar[j][0])
+                    break
+            if cift:
+                break
+        if cift is None:
+            return satirlar, birlesmeler
+        a, b = cift
+        birlesmeler.append(cift)
+        olaylar = [o for o in olaylar if o is not a and o is not b] + [_olay_sirasi(a + b)]
+
+
+def olaylari_sec(ogeler: List[Ogeler], simdi: datetime, adet: int = 6) -> List[dict]:
+    """Penceredeki ogelerden Gundem ogelerini secer (bkz. modul belgesi, Secim)."""
+    sirali = sorted(penceredeki(ogeler, simdi), key=_anahtar)
+    ozellik_listesi = _baslik_ozellikleri(sirali)
+    ozellik = {_anahtar(o): oz for o, oz in zip(sirali, ozellik_listesi)}
+    satirlar, _ = _secip_birlestir(_grupla(sirali, ozellik_listesi), simdi, adet, ozellik)
+    return [
+        _olay_ozeti([kayit], simdi, kayit) if dolgu else _olay_ozeti(olay, simdi, kayit)
+        for olay, kayit, dolgu in satirlar
+    ]

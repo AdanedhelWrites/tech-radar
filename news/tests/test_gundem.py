@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from django.test import SimpleTestCase
 
+from news import gundem
 from news.gundem import Ogeler, olay_puani, olaylari_grupla, olaylari_sec, penceredeki, temsilci
 
 IST = ZoneInfo('Europe/Istanbul')
@@ -45,6 +46,15 @@ def ist(metin):
 def oge(id, source, baslik, created_at, bolum='news', yayin=None, ceviri='gemini', tr_baslik='Baslik'):
     return Ogeler(bolum=bolum, id=id, source=source, baslik=baslik, created_at=created_at,
                   yayin=yayin, ceviri=ceviri, tr_baslik=tr_baslik)
+
+
+def secilen_olaylar(ogeler, simdi, adet=6):
+    """olaylari_sec'in sectigi satirlarin olaylari (secim aninda birlestirme sonrasi)."""
+    sirali = sorted(penceredeki(list(ogeler), simdi), key=lambda o: (o.bolum, o.id))
+    ozellik_listesi = gundem._baslik_ozellikleri(sirali)
+    ozellik = {(o.bolum, o.id): oz for o, oz in zip(sirali, ozellik_listesi)}
+    satirlar, _ = gundem._secip_birlestir(gundem._grupla(sirali, ozellik_listesi), simdi, adet, ozellik)
+    return [olay for olay, _, _ in satirlar]
 
 
 def olay_of(olaylar, bolum, id):
@@ -102,6 +112,103 @@ class GercekVeriOrnekleriTest(SimpleTestCase):
         # Karsit kontrol: ayni olay olan cift birlesir (Microsoft Authenticator acigi; HNS + THN).
         self.assertEqual(olay_of(olaylar, 'news', 1829), olay_of(olaylar, 'news', 1834))
         self.assertEqual(olay_of(olaylar, 'ai', 1718), olay_of(olaylar, 'ai', 1736))
+
+
+class TaramaCapalariTest(SimpleTestCase):
+    """Inceleme taramasinin (15 dk aralik) buldugu karsi hedef ihlallerinin capalari (spec s4)."""
+
+    def satir_sayisi(self, simdi, sozcuk):
+        return sum(
+            1 for olay in secilen_olaylar(fikstur(), simdi)
+            if any(sozcuk in o.baslik for o in olay)
+        )
+
+    def test_binance_30_ekim_15_tek_satir(self):
+        # Onceden iki Binance olayi (~3.16) iki satirdaydi: capraz ciftler yalniz "binance"
+        # paylasiyordu. Secim aninda ozne birlestirmesi tek satira indirir.
+        self.assertEqual(self.satir_sayisi(ist('2026-10-30 15:00'), 'Binance'), 1)
+
+    def test_php2shell_22_ekim_21_tek_satir(self):
+        # Onceden 10-22 18:15-23:00 arasi PHP2Shell iki satirdaydi; uydurma ad kurali birlestirir.
+        self.assertEqual(self.satir_sayisi(ist('2026-10-22 21:00'), 'PHP2Shell'), 1)
+
+    def test_gpt_olayinda_ilgisiz_aws_yazilari_yok(self):
+        simdi = ist('2026-10-01 20:00')
+        olaylar = olaylari_grupla(penceredeki(list(fikstur()), simdi))
+        gpt = olay_of(olaylar, 'ai', 1008)  # AWS: "...GPT-6.1 Sol on Amazon Bedrock"
+        # Satici blogunun ayni urun adini (Amazon Bedrock AgentCore) paylasan ilgisiz iki yazisi
+        # GPT-6.1 olayina zincirlenmez (ayni kaynak kurali).
+        self.assertNotEqual(olay_of(olaylar, 'ai', 992), gpt)
+        self.assertNotEqual(olay_of(olaylar, 'ai', 1028), gpt)
+        aws = [o.id for o in olaylar[gpt] if o.source == 'AWS ML Blog']
+        self.assertEqual(aws, [1008])  # yalniz GPT-6.1 Sol'un Bedrock'a gelisini anlatan yazi
+
+
+class KuralTest(SimpleTestCase):
+    simdi = ist('2026-11-02 12:00')
+
+    def grup_sayisi(self, ogeler):
+        return len(olaylari_grupla(ogeler))
+
+    def test_uydurma_ad_ve_cve_tek_basina_baglar(self):
+        s = self.simdi
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Zorp2Shell bug hits routers', s),
+            oge(2, 'B', 'Vendors scramble over Zorp2Shell', s),
+        ]), 1)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Patch now for CVE-2026-12345', s),
+            oge(2, 'B', 'Exploit published for CVE-2026-12345 in routers', s),
+        ]), 1)
+        # Farkli CVE, genel harf+rakam adi (GPT-6.1) ve ISC2 tek basina baglamaz.
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Patch now for CVE-2026-12345', s),
+            oge(2, 'B', 'Exploit published for CVE-2026-54321 in routers', s),
+        ]), 2)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'GPT-6.1 tops coding benchmark', s),
+            oge(2, 'B', 'Startup builds chatbot on GPT-6.1', s),
+        ]), 2)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'ISC2 survey finds talent shortage', s),
+            oge(2, 'B', 'ISC2 names new board chair', s),
+        ]), 2)
+
+    def test_ayni_kaynak_yalniz_yuksek_benzerlikle_baglanir(self):
+        s = self.simdi
+        a = 'Zorblax ransomware hits hospital chain'
+        b = 'Zorblax gang leaks hospital files'
+        self.assertEqual(self.grup_sayisi([oge(1, 'A', a, s), oge(2, 'B', b, s)]), 1)
+        self.assertEqual(self.grup_sayisi([oge(1, 'A', a, s), oge(2, 'A', b, s)]), 2)
+        # Uydurma ad da ayni kaynakta tek basina baglamaz.
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Zorp2Shell bug hits routers', s),
+            oge(2, 'A', 'Vendors scramble over Zorp2Shell', s),
+        ]), 2)
+
+    def test_secimde_ayni_ozneli_olaylar_birlesir(self):
+        s = self.simdi
+        ogeler = [
+            oge(1, 'A', 'Quixly probes potential crypto theft', s - timedelta(hours=4)),
+            oge(2, 'B', 'Quixly confirms crypto theft, freezes withdrawals', s - timedelta(hours=3)),
+            oge(3, 'C', 'Quixly hit by record heist', s - timedelta(hours=2)),
+            oge(4, 'D', 'Quixly heist blamed on insiders', s - timedelta(hours=1)),
+        ]
+        self.assertEqual(self.grup_sayisi(ogeler), 2)  # capraz ciftler yalniz "quixly" paylasir
+        secim = olaylari_sec(ogeler, s)
+        self.assertEqual(len(secim), 1)
+        self.assertEqual((secim[0]['kaynak_sayisi'], secim[0]['makale_sayisi']), (4, 4))
+        self.assertEqual(secim[0]['puan'], round(olay_puani(ogeler, s), 2))
+
+    def test_secimde_farkli_ozneli_olaylar_birlesmez(self):
+        s = self.simdi
+        ogeler = [
+            oge(1, 'A', 'Drupal Commerce Core flaw exploited', s - timedelta(hours=4)),
+            oge(2, 'B', 'Drupal warns of Commerce Core attacks', s - timedelta(hours=3)),
+            oge(3, 'C', 'Adobe Commerce shops breached via Brotli', s - timedelta(hours=2)),
+            oge(4, 'D', 'Adobe Commerce Brotli bug hits retailers', s - timedelta(hours=1)),
+        ]
+        self.assertEqual(len(olaylari_sec(ogeler, s)), 2)
 
 
 class SentetikTest(SimpleTestCase):
