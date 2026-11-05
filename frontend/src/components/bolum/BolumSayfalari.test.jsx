@@ -13,11 +13,11 @@ import { newsApi, k8sApi, sreApi, devtoolsApi, aiApi } from '../../services/api'
 // sunucuda suzulur (adreste tutulur), liste sayfalanir; Cek en fazla 15 gun, rapor en fazla 500 kayit.
 
 vi.mock('../../services/api', () => ({
-  newsApi: { getNews: vi.fn(), fetchNews: vi.fn(), getStats: vi.fn(), clearCache: vi.fn(), exportNews: vi.fn() },
-  k8sApi: { getK8s: vi.fn(), fetchK8s: vi.fn(), getStats: vi.fn(), clearCache: vi.fn(), exportK8s: vi.fn() },
-  sreApi: { getSRE: vi.fn(), fetchSRE: vi.fn(), getStats: vi.fn(), clearCache: vi.fn(), exportSRE: vi.fn() },
-  devtoolsApi: { getDevTools: vi.fn(), fetchDevTools: vi.fn(), getStats: vi.fn(), clearCache: vi.fn(), exportDevTools: vi.fn() },
-  aiApi: { getAINews: vi.fn(), fetchAINews: vi.fn(), getStats: vi.fn(), clearCache: vi.fn(), exportAINews: vi.fn() },
+  newsApi: { getNews: vi.fn(), fetchNews: vi.fn(), getStats: vi.fn(), clearCache: vi.fn() },
+  k8sApi: { getK8s: vi.fn(), fetchK8s: vi.fn(), getStats: vi.fn(), clearCache: vi.fn() },
+  sreApi: { getSRE: vi.fn(), fetchSRE: vi.fn(), getStats: vi.fn(), clearCache: vi.fn() },
+  devtoolsApi: { getDevTools: vi.fn(), fetchDevTools: vi.fn(), getStats: vi.fn(), clearCache: vi.fn() },
+  aiApi: { getAINews: vi.fn(), fetchAINews: vi.fn(), getStats: vi.fn(), clearCache: vi.fn() },
   istekHataMesaji: (err, varsayilan) => err.response?.data?.message || `${varsayilan}: ${err.message}`,
 }))
 

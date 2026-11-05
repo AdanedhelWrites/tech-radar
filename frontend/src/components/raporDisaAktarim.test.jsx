@@ -9,21 +9,21 @@ import AINewsComponent from './AINewsComponent'
 import CVEComponent from './CVEComponent'
 import { newsApi, k8sApi, sreApi, devtoolsApi, aiApi, cveApi } from '../services/api'
 
-// Alti bolumun API'si ayni bicimde: liste, istatistik, cekim, sifirlama, disa aktarim.
+// Alti bolumun API'si ayni bicimde: liste, istatistik, cekim, sifirlama.
 // vi.mock dosya basina tasindigi icin yardimci da vi.hoisted ile tanimlanir.
 const { bolumApi } = vi.hoisted(() => ({
-  bolumApi: (liste, cekim, aktarim) => ({
-    [liste]: vi.fn(), getStats: vi.fn(), [cekim]: vi.fn(), clearCache: vi.fn(), [aktarim]: vi.fn(),
+  bolumApi: (liste, cekim) => ({
+    [liste]: vi.fn(), getStats: vi.fn(), [cekim]: vi.fn(), clearCache: vi.fn(),
   }),
 }))
 
 vi.mock('../services/api', () => ({
-  newsApi: bolumApi('getNews', 'fetchNews', 'exportNews'),
-  k8sApi: bolumApi('getK8s', 'fetchK8s', 'exportK8s'),
-  sreApi: bolumApi('getSRE', 'fetchSRE', 'exportSRE'),
-  devtoolsApi: bolumApi('getDevTools', 'fetchDevTools', 'exportDevTools'),
-  aiApi: bolumApi('getAINews', 'fetchAINews', 'exportAINews'),
-  cveApi: bolumApi('getCVEs', 'fetchCVEs', 'exportCVEs'),
+  newsApi: bolumApi('getNews', 'fetchNews'),
+  k8sApi: bolumApi('getK8s', 'fetchK8s'),
+  sreApi: bolumApi('getSRE', 'fetchSRE'),
+  devtoolsApi: bolumApi('getDevTools', 'fetchDevTools'),
+  aiApi: bolumApi('getAINews', 'fetchAINews'),
+  cveApi: bolumApi('getCVEs', 'fetchCVEs'),
   istekHataMesaji: (err, varsayilan) => `${varsayilan}: ${err.message}`,
 }))
 
@@ -51,12 +51,12 @@ const kayit = {
 }
 
 const BOLUMLER = [
-  ['News', NewsComponent, newsApi, 'getNews', 'exportNews'],
-  ['Kubernetes', KubernetesComponent, k8sApi, 'getK8s', 'exportK8s'],
-  ['SRE', SREComponent, sreApi, 'getSRE', 'exportSRE'],
-  ['DevTools', DevToolsComponent, devtoolsApi, 'getDevTools', 'exportDevTools'],
-  ['AINews', AINewsComponent, aiApi, 'getAINews', 'exportAINews'],
-  ['CVE', CVEComponent, cveApi, 'getCVEs', 'exportCVEs'],
+  ['News', NewsComponent, newsApi, 'getNews'],
+  ['Kubernetes', KubernetesComponent, k8sApi, 'getK8s'],
+  ['SRE', SREComponent, sreApi, 'getSRE'],
+  ['DevTools', DevToolsComponent, devtoolsApi, 'getDevTools'],
+  ['AINews', AINewsComponent, aiApi, 'getAINews'],
+  ['CVE', CVEComponent, cveApi, 'getCVEs'],
 ]
 
 describe('HTML rapor disa aktarimi', () => {
@@ -79,14 +79,12 @@ describe('HTML rapor disa aktarimi', () => {
     vi.restoreAllMocks()
   })
 
-  it.each(BOLUMLER)('%s raporunda govde kacislanir, satir sonu <br> olur', async (_ad, Bilesen, api, liste, aktarim) => {
-    // 2026-11-05: alti bolum raporu da liste ucundan (gecerli filtreyle, boyut=100) alir;
-    // disa aktarim ucu da ayni zararli kaydi dondurur (kullanilmamali ama kullanilsa da kacislanmali).
+  it.each(BOLUMLER)('%s raporunda govde kacislanir, satir sonu <br> olur', async (_ad, Bilesen, api, liste) => {
+    // 2026-11-05: alti bolum raporu da liste ucundan (gecerli filtreyle, boyut=100) alir.
     api[liste].mockResolvedValue({ data: { success: true, data: [kayit] } })
     api.getStats.mockResolvedValue({ data: {
       success: true, total: 0, by_source: {}, by_severity: {}, by_category: {}, last_update: null,
     } })
-    api[aktarim].mockResolvedValue({ data: { success: true, data: [kayit] } })
 
     render(<MemoryRouter><Bilesen /></MemoryRouter>)
     fireEvent.click(await screen.findByTitle(/HTML rapor olarak indir/))
@@ -99,7 +97,6 @@ describe('HTML rapor disa aktarimi', () => {
     // 500'u asmayan raporda kesme notu yok
     expect(html).not.toContain('İlk 500 kayıt')
     expect(api[liste]).toHaveBeenCalledWith(expect.objectContaining({ sayfa: 1, boyut: 100 }))
-    expect(api[aktarim]).not.toHaveBeenCalled()
   })
 
   it('k8s_rapor_govdesinde_girinti_korunur', async () => {

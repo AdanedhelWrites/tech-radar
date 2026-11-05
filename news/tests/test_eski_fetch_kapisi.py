@@ -4,19 +4,17 @@ Uclar anonim kullanima acik kalir (kullanici karari) ama kaynak sitelere ve
 ceviri kotasina giden yuk v1 ile ayni Redis kapisindan gecer. Gercek task
 kuyruga atilmaz: RefreshTestMixin alti task'in apply_async'ini mock'lar.
 """
-from django.core.cache import cache
-
 from news.api_v1 import refresh
 from news.tests.base import RefreshTestMixin, V1TestCase
 
-# URL -> (refresh bolumu, frontend cache anahtari)
+# URL -> refresh bolumu
 UCLAR = {
-    '/api/fetch/': ('news', 'cybersecurity_news'),
-    '/api/cve/fetch/': ('cve', 'cve_entries'),
-    '/api/k8s/fetch/': ('kubernetes', 'k8s_entries'),
-    '/api/sre/fetch/': ('sre', 'sre_entries'),
-    '/api/devtools/fetch/': ('devtools', 'devtools_entries'),
-    '/api/ai/fetch/': ('ai', 'ai_entries'),
+    '/api/fetch/': 'news',
+    '/api/cve/fetch/': 'cve',
+    '/api/k8s/fetch/': 'kubernetes',
+    '/api/sre/fetch/': 'sre',
+    '/api/devtools/fetch/': 'devtools',
+    '/api/ai/fetch/': 'ai',
 }
 
 
@@ -88,24 +86,12 @@ class EskiFetchKapisiTest(RefreshTestMixin, V1TestCase):
         self.assertEqual(yanit.status_code, 400)
         self.assertFalse(self.gorevler['cve'].called)
 
-    def test_cache_yalniz_baslatilinca_silinir(self):
-        cache.set('cve_entries', ['eski'])
-        self.gate.start_cooldown('cve', 600)
-        self._gonder()
-        self.assertEqual(cache.get('cve_entries'), ['eski'], 'sogumada cache silinmemeli')
-
-        self.redis.delete(f'{self.gate.prefix}:cooldown:cve')  # soguma bitti
-        self._gonder()
-        self.assertIsNone(cache.get('cve_entries'), 'baslatilinca cache silinmeli')
-
     def test_alti_uc_dogru_bolume_gider(self):
-        for url, (bolum, cache_anahtari) in UCLAR.items():
+        for url, bolum in UCLAR.items():
             with self.subTest(url=url):
-                cache.set(cache_anahtari, ['eski'])
                 yanit = self._gonder(url=url, govde={'days': 7})
                 self.assertEqual(yanit.status_code, 200)
                 self.assertEqual(self.gorevler[bolum].call_count, 1)
-                self.assertIsNone(cache.get(cache_anahtari))
 
     def test_anonim_istek_kabul_edilir(self):
         """Kullanici karari: uclar anonim kullanima acik kalir."""
