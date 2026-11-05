@@ -108,15 +108,23 @@ Once en az 2 farkli kaynakli olaylar puan azalan (esitlikte `son` azalan, sonra 
 azalan, sonra (bolum, id)); her tek kaynakli olaydan yalniz bir kayit alinir ki ayni olay
 iki satirda gorunmesin. Dolgu ogeleri kaynak_sayisi 1 ve makale_sayisi 1 tasir.
 
-Secim aninda birlestirme: secilen satirlardan ikisinin olaylarinda BUTUN basliklarin
-oznesi (basliktaki ilk ozel ad; GENEL_AD ve kaynak adlari ad sayilmadigi icin onlar
-atlanir) ayni ise iki olay birlesir, puan ve temsilci yeniden hesaplanir ve secim bastan
-yapilir; kararli olana kadar. Neden: 10-30 12:15-18:00 arasi Binance iki olayda kaliyordu
-(capraz ciftler yalniz "binance" paylasiyordu, ikisi ~3.16) ve iki satirda gorunuyordu
-(spec s4). Kural yalniz secilen satirlara bakar ve her basligin ayni adla baslamasini
-ister; bu yuzden dar kalir. Fikstur taramasinda (10-21..10-23 ve 10-30..11-03, 15 dk
-aralik, 768 an) yalniz Binance icin tetiklendi; Drupal Commerce ile Adobe Commerce,
-Siemens ClickFix ile diger ClickFix haberleri birlesmedi.
+Secim aninda birlestirme: secilen ve ZATEN COK KAYNAKLI olan iki satirin olaylarinda
+BUTUN basliklarin oznesi ayni ise iki olay birlesir, puan ve temsilci yeniden hesaplanir
+ve secim bastan yapilir; kararli olana kadar. Dolgu (tek kaynakli) satirlar asla katilmaz:
+tek basliklik bir olay "butun basliklar ayni ozneli" sartini kendiliginden saglar ve
+ozne gurultuludur (The Record "Judge denies WhatsApp's bid..." ile Ars "Judge rejects
+Trump's..." sahte iki kaynakli satir olurdu; Google Cloud SRE'nin iki "Accelerating..."
+yazisi ayni kaynak kuralini asardi).
+Ozne: basliktaki ilk ozel ad ya da pencerede hic kucuk harfle gecmeyen ilk buyuk harfli
+icerik sozcugu; GENEL_AD ve kaynak adlari atlanir. Ikinci kosul yalniz Title Case
+basliklarda gecen adlari yakalar: "Siemens Software Center Vulnerability Exploited in
+ClickFix Malware Attacks" icin ozne "siemens"tir; "Google Chrome Adds ClickFix Warnings"
+icin "clickfix". Boylece Siemens ClickFix ile Chrome ClickFix olaylari birlesmez.
+Neden: 10-30 12:15-18:00 arasi Binance iki olayda kaliyordu (capraz ciftler yalniz
+"binance" paylasiyordu, ikisi ~3.16, ikisi de 2 kaynakli) ve iki satirda gorunuyordu
+(spec s4). Fikstur taramasinda (10-21..10-23 ve 10-30..11-03, 15 dk aralik, 768 an) kural
+yalniz Binance icin tetiklendi; tum olaylar satir sayildiginda da (adet sinirsiz) yanlis
+birlesme yok (bkz. task-1-report.md, duzeltme turu 2).
 """
 from __future__ import annotations
 
@@ -140,16 +148,16 @@ YUKSEK_ESIK = 0.4
 YUKSEK_ORTAK_EN_AZ = 3
 UYDURMA_HARF_EN_AZ = 4  # "a1b" gibi kisa kodlar uydurma ad sayilmaz
 
-# Islev sozcukleri ve manset dolgu sozcukleri (kok bicimiyle).
+# Islev sozcukleri ve manset dolgu sozcukleri (kok bicimiyle; alfabetik, tekrarsiz).
 DURAK = frozenset('''
-a about across after against ahead all also amid an and announce announces announcing another any are as at
-back be been before behind being by can could day did do does down for from get got had has have her here
-here's his how in inside into introduce introduces introducing is it it's its just latest launch launched
+2025 2026 a about across after against ahead all also amid an and announce announces announcing another any
+are as at back be been before behind being by can could day did do does down for from get got had has have her
+here here's his how in inside into introduce introduces introducing is it it's its just latest launch launched
 launches like made make may meet might more most new next no not now of off on one only or other our out over
-per release released releases report reveal revealed reveals said say says show shows some still than that
-the their then there these this those three through time to today two u.s uk under unveil unveiled unveils up
-us use used using via vs was way we week were what what's when where which while who whom will within without
-why with would year yet you your 2025 2026
+per release released releases report reveal revealed reveals said say says show shows some still than that the
+their then there these this those three through time to today two u.s uk under unveil unveiled unveils up us
+use used using via vs was way we week were what what's when where which while who whom why will with within
+without would year yet you your
 '''.split())
 
 # Alan genelinde cok sik gecen, olay ayirt etmeyen sozcukler (kok bicimiyle).
@@ -259,7 +267,7 @@ class _Ozellik(NamedTuple):
     icerik: frozenset
     adlar: frozenset
     uydurma: frozenset  # tek basina baglayan uydurma adlar ve CVE kimlikleri
-    ozne: Optional[str]  # basliktaki ilk ozel ad (genel adlar haric)
+    ozne: Optional[str]  # basligin oznesi (bkz. _baslik_ozellikleri; genel adlar haric)
 
 
 def _uydurma_mi(kok: str) -> bool:
@@ -301,12 +309,16 @@ def _baslik_ozellikleri(ogeler: List[Ogeler]) -> List[_Ozellik]:
                 uydurma.add(k)
             if not any(c.isalpha() for c in s):
                 continue
-            if (any(c.isdigit() for c in s)
-                    or any(c.isupper() for c in s[1:])
-                    or (s[0].isupper() and k not in kucuk_gorulen and k in cumle_duzeninde_buyuk)):
+            ad = (any(c.isdigit() for c in s)
+                  or any(c.isupper() for c in s[1:])
+                  or (s[0].isupper() and k not in kucuk_gorulen and k in cumle_duzeninde_buyuk))
+            if ad:
                 adlar.add(k)
-                if ozne is None:
-                    ozne = k
+            # Ozne: ilk ozel ad ya da pencerede hic kucuk harfle gecmeyen ilk buyuk harfli
+            # icerik sozcugu. Ikincisi yalniz Title Case basliklarda gecen adlari yakalar
+            # ("Siemens Software Center ..." -> siemens; yoksa ozne "clickfix" olurdu).
+            if ozne is None and (ad or (s[0].isupper() and k not in kucuk_gorulen)):
+                ozne = k
         sonuc.append(_Ozellik(_kaynak(o), frozenset(icerik), frozenset(adlar), frozenset(uydurma), ozne))
     return sonuc
 
@@ -454,14 +466,18 @@ def _secip_birlestir(
     birlesmeler = []
     while True:
         satirlar = _satirlar(olaylar, simdi, adet)
+        # Yalniz zaten cok kaynakli olan satirlar katilir: tek basliklik bir olay "butun
+        # basliklar ayni ozneli" sartini kendiliginden saglar; dolgu satirlari asla birlesmez.
+        adaylar = [olay for olay, _, dolgu in satirlar
+                   if not dolgu and len({_kaynak(o) for o in olay}) >= COK_KAYNAK_EN_AZ]
         cift = None
-        for i in range(len(satirlar)):
-            ozne = _olay_oznesi(satirlar[i][0], ozellik)
+        for i in range(len(adaylar)):
+            ozne = _olay_oznesi(adaylar[i], ozellik)
             if ozne is None:
                 continue
-            for j in range(i + 1, len(satirlar)):
-                if _olay_oznesi(satirlar[j][0], ozellik) == ozne:
-                    cift = (satirlar[i][0], satirlar[j][0])
+            for j in range(i + 1, len(adaylar)):
+                if _olay_oznesi(adaylar[j], ozellik) == ozne:
+                    cift = (adaylar[i], adaylar[j])
                     break
             if cift:
                 break

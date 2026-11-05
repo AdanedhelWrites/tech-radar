@@ -210,6 +210,50 @@ class KuralTest(SimpleTestCase):
         ]
         self.assertEqual(len(olaylari_sec(ogeler, s)), 2)
 
+    def test_dolgu_satirlari_ozneyle_birlesmez(self):
+        # Fiksturdeki ilgisiz cift (The Record 1440, Ars Technica AI 1541): ikisi de "Judge" ile
+        # baslar; dolgu satirlari birlesip sahte iki kaynakli olay olmamali.
+        s = self.simdi
+        ogeler = [
+            oge(1440, 'The Record', "Judge denies WhatsApp’s bid to hold spyware maker in contempt for "
+                'allegedly targeting users', s - timedelta(hours=2)),
+            oge(1541, 'Ars Technica AI', "Judge rejects Trump’s wild claim EPA can dismiss data center "
+                'pollution lawsuits', s - timedelta(hours=1), bolum='ai'),
+        ]
+        secim = olaylari_sec(ogeler, s)
+        self.assertEqual(len(secim), 2)
+        self.assertEqual([x['kaynak_sayisi'] for x in secim], [1, 1])
+
+    def test_ayni_kaynagin_dolgu_satirlari_birlesmez(self):
+        # Google Cloud SRE'nin iki ilgisiz "Accelerating..." yazisi (fikstur 206, 216).
+        s = self.simdi
+        ogeler = [
+            oge(206, 'Google Cloud SRE', 'Accelerating agentic RL and evaluation research velocity with 45x '
+                'faster GKE Agent Sandbox', s - timedelta(hours=2), bolum='sre'),
+            oge(216, 'Google Cloud SRE', 'Accelerating analytics: PayPal’s journey with Managed Service '
+                'for Apache Spark', s - timedelta(hours=1), bolum='sre'),
+        ]
+        secim = olaylari_sec(ogeler, s)
+        self.assertEqual(len(secim), 2)
+        self.assertEqual([x['makale_sayisi'] for x in secim], [1, 1])
+
+    def test_siemens_clickfix_ile_chrome_clickfix_birlesmez(self):
+        # Siemens basliklari (fikstur 1434, 1479) yalniz Title Case yazilir; "Siemens" ozel ad
+        # sayilmasa da ozne olarak yakalanir. Aksi halde iki olayin oznesi "clickfix" olurdu.
+        s = self.simdi
+        ogeler = [
+            oge(1434, 'SecurityWeek', 'Siemens Software Center Vulnerability Exploited in ClickFix Malware Attacks',
+                s - timedelta(hours=5)),
+            oge(1479, 'Infosecurity Magazine', 'Siemens Customers Targeted by ClickFix Attackers Exploiting '
+                'DLL Side-Loading Flaw', s - timedelta(hours=4)),
+            oge(1, 'Bleeping Computer', 'ClickFix lures surge as Chrome adds warnings', s - timedelta(hours=3)),
+            oge(2, 'The Hacker News', 'ClickFix lures hit Chrome users', s - timedelta(hours=2)),
+        ]
+        self.assertEqual(self.grup_sayisi(ogeler), 2)
+        secim = olaylari_sec(ogeler, s, adet=50)  # tum olaylar satir
+        self.assertEqual(len(secim), 2)
+        self.assertEqual([x['kaynak_sayisi'] for x in secim], [2, 2])
+
 
 class SentetikTest(SimpleTestCase):
     simdi = ist('2026-11-02 12:00')
