@@ -6,6 +6,8 @@ urlpatterns = [
     path('api/saglik/', views.get_saglik, name='get_saglik'),
     # Ana sayfa Zafiyet Durumu ozeti (anonim, 60 sn cache; 2026-10-31)
     path('api/ozet/', views.get_ozet, name='get_ozet'),
+    # Ana sayfa Gundem karti (anonim, 120 sn cache; 2026-11-05)
+    path('api/gundem/', views.get_gundem, name='get_gundem'),
 
     # Haber API endpoints
     path('api/news/', views.get_news, name='get_news'),

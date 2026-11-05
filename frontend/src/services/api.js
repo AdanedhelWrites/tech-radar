@@ -87,4 +87,9 @@ export const ozetApi = {
   getOzet: (since) => api.get('/ozet/', { params: since ? { since } : {} }),
 }
 
+// Ana sayfa Gundem karti: sunucuda puanlanmis olaylar (2026-11-05)
+export const gundemApi = {
+  getGundem: () => api.get('/gundem/'),
+}
+
 export default api
