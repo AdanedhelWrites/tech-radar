@@ -320,6 +320,34 @@ class SonDuzeltmeTest(SimpleTestCase):
             oge(2, 'B', 'Kubernetes 1.35 brings sidecar GA', s),
         ]), 1)
 
+    def test_sayili_ama_urun_olmayan_obekler_tek_basina_baglamaz(self):
+        s = self.simdi
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Fortinet FortiWeb flaw scores CVSS 9.8', s),
+            oge(2, 'B', 'Ivanti EPMM bug rated CVSS 9.8', s),
+        ]), 2)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Inside the breach, Part 1', s),
+            oge(2, 'B', 'Building a SOC, Part 1', s),
+        ]), 2)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Retailer files for Chapter 11', s),
+            oge(2, 'B', 'Telecom heads to Chapter 11', s),
+        ]), 2)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Hospital chain reports ransomware outage in SEC 8-K', s),
+            oge(2, 'B', 'Chipmaker confirms supplier intrusion in SEC 8-K', s),
+        ]), 2)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Python 3.14 released', s),
+            oge(2, 'B', 'Python 3.14 brings free threading', s),
+        ]), 1)
+
+    def test_doe_durak_sozcuk_degildir(self):
+        self.assertNotIn('doe', gundem.DURAK)
+        self.assertIn('does', gundem.DURAK)
+        self.assertIsNone(gundem._surum_obegi('Fortune 500 firm hit'))
+
     def test_farkli_ya_da_rakamsiz_obek_tek_basina_baglamaz(self):
         s = self.simdi
         sol = 'OpenAI launches GPT-6.1 Sol, says it nearly matches GPT-6 Astra'

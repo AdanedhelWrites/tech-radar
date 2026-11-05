@@ -199,7 +199,7 @@ critical patch patche patched update fix fixe fixed exploit exploitation exploit
 agent agentic tool open source company team warn warning researcher research find found risk system service
 app platform software code cloud network build building guide help issue issues million billion customer
 government official orgs organization online device devices browser server servers account campaign actor
-group gang target targeted targeting store zero-day 0-day
+group gang target targeted targeting store zero-day 0-day part chapter section
 '''.split())
 
 # Sik gecen genel adlar: ozel ad sayilmaz (spec G2 ayrim olcutu). Buyuk saticilar, kurumlar,
@@ -217,6 +217,11 @@ ai llm api ceo cto ciso it rce cve cvss sql vpn dos ddos os mcp saas gpu tpu sdk
 dns http xss poc iot ics edr siem soc apt
 deepmind azure gemini claude chatgpt gpt copilot week review
 '''.split())
+
+# Surum obegini bitiren, urun adi olmayan sozcukler: "CVSS 9.8", "Part 1", "Chapter 11",
+# "Section 230", "Fortune 500", "SEC 8-K" tek basina baglanmasin (_surum_obegi).
+OBEK_DISI = frozenset('cvss part chapter section fortune sec'.split())
+_DOSYA_FORMU = re.compile(r'^\d+-[kq]$')  # SEC dosyalari: 8-K, 10-K, 10-Q
 
 # Etki sozcukleri (spec G3 ornekleri, kok bicimiyle eslesir).
 ETKI_SOZCUKLERI = frozenset('''
@@ -283,6 +288,7 @@ def _surum_obegi(baslik: str) -> Optional[frozenset]:
         ham = m.group().lstrip('$')
         k = _kok(ham) if ham else ''
         uye = (bool(k) and k not in DURAK and k not in GENEL and not _YIL.match(k)
+               and k not in OBEK_DISI and not _DOSYA_FORMU.match(k)
                and (any(c.isupper() for c in ham) or any(c.isdigit() for c in ham)))
         if not uye:
             obek = None
@@ -320,7 +326,8 @@ def _kok(sozcuk: str) -> str:
 # Listeler kok bicimiyle karsilastirilir; cogul yazilan girdiler kok bicimleriyle de eklenir.
 # Yoksa "windows", "kubernetes", "macos", "ddos" hic eslesmiyordu (kok: window, kubernete...)
 # ve "Windows" ozel ad sayiliyordu.
-DURAK = DURAK | frozenset(_kok(w) for w in DURAK)
+# 3 harfli govde (does -> doe) baska bir sozcuge (DOE: Enerji Bakanligi) carpmasin diye atlanir.
+DURAK = DURAK | frozenset(_kok(w) for w in DURAK if len(_kok(w)) >= 4)
 GENEL = GENEL | frozenset(_kok(w) for w in GENEL)
 GENEL_AD = GENEL_AD | frozenset(_kok(w) for w in GENEL_AD)
 
