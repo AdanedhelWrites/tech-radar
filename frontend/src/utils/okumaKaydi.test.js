@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cveOkumaKaydi, haberOkumaKaydi, haberRozetleri } from './okumaKaydi'
+import { cveOkumaKaydi, cweListesi, haberOkumaKaydi, haberRozetleri } from './okumaKaydi'
 
 const KEV_ORIJINAL = 'Added to the CISA KEV catalog on 2026-10-20; required action due 2026-11-10. A command injection vulnerability allows remote code execution.'
 const REFERANSLAR = Array.from({ length: 7 }, (_, i) => `https://ornek.test/ref/${i}`)
@@ -20,6 +20,19 @@ const kevCve = (ek = {}) => ({
   references: REFERANSLAR,
   affected_products: 'Örnek VPN Gateway 7.0.0 - 7.4.2',
   ...ek,
+})
+
+describe('cweListesi', () => {
+  it('yinelenen ve bos CWE degerlerini atar, sirayi korur', () => {
+    expect(cweListesi({ cwe_ids: ['CWE-787', '', 'CWE-20', 'CWE-787'] })).toEqual(['CWE-787', 'CWE-20'])
+    expect(cweListesi({ cwe_ids: null })).toEqual([])
+    expect(cweListesi(undefined)).toEqual([])
+  })
+
+  it('okuma kaydinda ayni CWE rozeti bir kez cikar', () => {
+    const k = cveOkumaKaydi(kevCve({ cwe_ids: ['CWE-78', 'CWE-78'] }))
+    expect(k.rozetler.filter(r => r.metin === 'CWE-78')).toHaveLength(1)
+  })
 })
 
 describe('cveOkumaKaydi', () => {
