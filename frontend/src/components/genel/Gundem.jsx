@@ -35,7 +35,10 @@ export default function Gundem({ olaylar, hata, onSec }) {
                   {olay.kaynak_sayisi >= 2 && (
                     <>
                       {' '}
-                      <span className="rozet bilgi" title={(olay.kaynaklar || []).join(', ')}>{`${olay.kaynak_sayisi} kaynak`}</span>
+                      <span className="rozet bilgi" title={(olay.kaynaklar || []).join(', ')}>
+                        {`${olay.kaynak_sayisi} kaynak`}
+                        <span className="gorunmez">{`: ${(olay.kaynaklar || []).join(', ')}`}</span>
+                      </span>
                     </>
                   )}
                   {zaman && ` · ${zaman}`}

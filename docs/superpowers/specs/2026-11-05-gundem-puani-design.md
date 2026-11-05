@@ -1,6 +1,8 @@
 # Gündem: Büyük Olayları Çok Kaynak Ölçüsüyle Öne Çıkarmak — Tasarım
 
-> Tarih: 2026-11-05. Kaynak: brainstorming oturumu (UI isteklerinin üçüncüsü). Durum: taslak, onay bekliyor.
+> Tarih: 2026-11-05. Kaynak: brainstorming oturumu (UI isteklerinin üçüncüsü). Durum: uygulandı (dal feat/gundem-puani).
+>
+> Uygulama notu: puan, kaynak başına tazelik çarpanıyla genelleştirildi (tüm yaşlar eşitken G3 ile aynı sonucu verir). İnceleme sonrası ek gruplama kuralları: uydurma ad ve CVE kimliği tek başına bağlar, aynı kaynak çiftleri yüksek benzerlik ister, seçim anındaki özne birleştirmesi yalnız çok kaynaklı olaylar arasında yapılır.
 
 ## 1. Amaç ve neden
 

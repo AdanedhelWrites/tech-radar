@@ -28,6 +28,8 @@ describe('Gundem', () => {
     render(<Gundem olaylar={[olay({ kaynak_sayisi: 6, kaynaklar, makale_sayisi: 7 })]} hata={false} onSec={() => {}} />)
     const rozet = screen.getByText('6 kaynak')
     expect(rozet).toHaveAttribute('title', 'A, B, C, D, E, F')
+    // Dokunmatik/klavye/ekran okuyucu: kaynak adlari satirin erisilebilir adinda da bulunur
+    expect(screen.getByRole('button')).toHaveAccessibleName(/6 kaynak: A, B, C, D, E, F/)
   })
 
   it('tek_kaynakta_rozet_yok', () => {
