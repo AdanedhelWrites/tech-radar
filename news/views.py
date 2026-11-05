@@ -609,6 +609,86 @@ def get_saglik(request):
     return Response(govde)
 
 
+GUNDEM_CACHE_SURESI = 120
+GUNDEM_CACHE_ANAHTARI = 'gundem_ozeti'
+
+
+def _gundem_ogeleri(simdi):
+    """Bes bolumden son 72 saatin kayitlari (CVE yok); her model tek sorgu, yalniz gerekli alanlar."""
+    from datetime import timedelta
+
+    from .gundem import PENCERE_SAAT, Ogeler
+
+    alt = simdi - timedelta(hours=PENCERE_SAAT)
+    kaynaklar = (('news', NewsArticle, 'date'), ('kubernetes', KubernetesEntry, 'published_date'),
+                 ('sre', SREEntry, 'published_date'), ('devtools', DevToolsEntry, 'published_date'),
+                 ('ai', AINewsEntry, 'published_date'))
+    ogeler = []
+    for bolum, model, yayin_alani in kaynaklar:
+        satirlar = model.objects.filter(created_at__gte=alt).values(
+            'id', 'source', 'original_title', 'created_at', yayin_alani, 'translation_provider', 'turkish_title')
+        ogeler.extend(
+            Ogeler(bolum=bolum, id=s['id'], source=s['source'], baslik=s['original_title'],
+                   created_at=s['created_at'], yayin=s[yayin_alani], ceviri=s['translation_provider'],
+                   tr_baslik=s['turkish_title'])
+            for s in satirlar)
+    return ogeler
+
+
+def _gundem_hesapla():
+    """Gundem yanit govdesi: secilen olaylar, temsilci kayitlar bolumun kendi serilestiricisiyle."""
+    from django.utils.timezone import now
+
+    from . import gundem
+
+    simdi = now()
+    secilenler = gundem.olaylari_sec(_gundem_ogeleri(simdi), simdi)
+    serilestiriciler = {'news': (NewsArticle, NewsArticleSerializer),
+                        'kubernetes': (KubernetesEntry, KubernetesEntrySerializer),
+                        'sre': (SREEntry, SREEntrySerializer),
+                        'devtools': (DevToolsEntry, DevToolsEntrySerializer),
+                        'ai': (AINewsEntry, AINewsEntrySerializer)}
+    idler = {}
+    for olay in secilenler:
+        idler.setdefault(olay['temsilci'].bolum, []).append(olay['temsilci'].id)
+    kayitlar = {}
+    for bolum, liste in idler.items():
+        model, serilestirici = serilestiriciler[bolum]
+        for kayit in model.objects.filter(id__in=liste):
+            kayitlar[(bolum, kayit.id)] = serilestirici(kayit).data
+    olaylar = [{
+        'bolum': olay['temsilci'].bolum,
+        'kayit': kayitlar[(olay['temsilci'].bolum, olay['temsilci'].id)],
+        'kaynak_sayisi': olay['kaynak_sayisi'],
+        'kaynaklar': olay['kaynaklar'],
+        'makale_sayisi': olay['makale_sayisi'],
+        'bolumler': olay['bolumler'],
+        'puan': round(olay['puan'], 2),
+        'ilk': olay['ilk'].isoformat(),
+        'son': olay['son'].isoformat(),
+    } for olay in secilenler]
+    return {'success': True, 'olaylar': olaylar, 'hesaplandi': simdi.isoformat()}
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_gundem(request):
+    """Ana sayfa Gundem karti (2026-11-05): son 72 saatin cok kaynakli olaylari, en cok 6 oge.
+
+    Tokensizdir (arayuz anonim), 120 sn cache'lenir. Hesap hatasi ana sayfayi bozmaz: 500 yerine
+    200 + success False doner ve onbellege yazilmaz. LLM ve dis istek yok.
+    """
+    govde = cache.get(GUNDEM_CACHE_ANAHTARI)
+    if govde is None:
+        try:
+            govde = _gundem_hesapla()
+        except Exception:
+            logger.exception('Gundem hesaplanamadi')
+            return Response({'success': False, 'olaylar': []})
+        cache.set(GUNDEM_CACHE_ANAHTARI, govde, GUNDEM_CACHE_SURESI)
+    return Response(govde)
+
+
 OZET_CACHE_SURESI = 60
 
 
