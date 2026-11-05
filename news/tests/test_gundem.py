@@ -424,6 +424,101 @@ class SonDuzeltmeTest(SimpleTestCase):
         self.assertTrue(all(isinstance(x['puan'], float) for x in secim))
 
 
+class OzetBaslikTest(SimpleTestCase):
+    """Cok konulu ozet basliklari (bulten, haftalik ozet, ';' ile baglanan iki haber) en fazla
+    bir olaya katilir ve yalniz tekrar sayilir: iki olay arasinda kopru kurmaz, bir olayi
+    cok kaynakli yapmaz."""
+    simdi = ist('2026-11-02 12:00')
+
+    def test_fiksturdeki_ozet_basliklari_taninir(self):
+        basliklar = {(o.bolum, o.id): o.baslik for o in fikstur()}
+        ozet = [
+            ('news', 700), ('news', 754), ('news', 1383), ('news', 1384), ('news', 1388), ('news', 1402),
+            ('news', 1628), ('news', 1655), ('news', 1663), ('news', 1992), ('news', 2007), ('news', 2038),
+            ('news', 2094), ('news', 2149), ('news', 2155), ('ai', 1831),
+        ]
+        for anahtar in ozet:
+            self.assertTrue(gundem._ozet_mi(basliklar[anahtar]), basliklar[anahtar])
+        tek_haber = [
+            ('news', 1844),  # "iOS, macOS 27.2 Patch 286 Bugs; Fix for Exploited Flaw Backported to iOS 18"
+            ('ai', 1861),    # "Apple Watch's AI features for rewinding and recapping conversations..."
+            ('ai', 979),     # "Roundtables: The Deadly Failures of The Virtual Border Wall"
+            ('ai', 1010),    # "OpenAI repotedly in talks to raise $30B round at $1.4T valuation"
+            ('news', 710),   # "AI Agents Are Privileged Users; Who Is Auditing Their Access?"
+            ('news', 1607), ('news', 1953), ('news', 1978),
+        ]
+        for anahtar in tek_haber:
+            self.assertFalse(gundem._ozet_mi(basliklar[anahtar]), basliklar[anahtar])
+
+    def test_ozet_iki_olayi_kopruyle_birlestirmez(self):
+        # Help Net Security 1992 hem VMware ESX hem PHP2Shell olayini anar. Gercek PHP2Shell ve
+        # VMware basliklari (fikstur 1978, 1915, 1953) ile ona "chained" uzerinden baglanan bir
+        # VMware basligi: ozet kopru olsaydi dort haber tek olay olurdu.
+        s = self.simdi
+        php = [
+            oge(1978, 'Bleeping Computer', 'CISA warns of Fragnesia Linux flaw chained in PHP2Shell attacks', s),
+            oge(1915, 'SecurityWeek', 'China-Linked Hackers Exploit PHP2Shell to Root Firewalls', s),
+        ]
+        vmware = [
+            oge(1953, 'The Hacker News', 'China-Linked Hackers Exploited VMware ESX Zero-Day to Reduce Audit '
+                'Trail Visibility', s),
+            oge(1, 'The Register', 'Chinese spies chained VMware ESX zero-day to dodge audit logs', s),
+        ]
+        ozet = oge(1992, 'Help Net Security', 'Chinese hackers used VMware ESX zero-day; PHP2Shell and '
+                   'Fragnesia chained to root firewalls', s)
+        olaylar = olaylari_grupla(php + vmware + [ozet])
+        self.assertNotEqual(olay_of(olaylar, 'news', 1978), olay_of(olaylar, 'news', 1953))
+        self.assertEqual(olay_of(olaylar, 'news', 1978), olay_of(olaylar, 'news', 1915))
+        self.assertEqual(olay_of(olaylar, 'news', 1953), olay_of(olaylar, 'news', 1))
+        # Iki olaya birden uyan ozet hicbirine katilmaz (supheli durumda ayri tut).
+        self.assertEqual(len(olaylar[olay_of(olaylar, 'news', 1992)]), 1)
+        # Yalniz bir olaya uyuyorsa o olaya tekrar olarak katilir, kaynak sayisini artirmaz.
+        secim = olaylari_sec(php + [ozet], s)
+        self.assertEqual(len(secim), 1)
+        self.assertEqual((secim[0]['kaynak_sayisi'], secim[0]['makale_sayisi']), (2, 3))
+        self.assertNotIn('Help Net Security', secim[0]['kaynaklar'])
+        self.assertNotEqual(secim[0]['temsilci'].id, 1992)
+
+    def test_fikstur_29_ekim_vmware_php2shell_ayri(self):
+        simdi = ist('2026-10-30 00:00')
+        olaylar = secilen_olaylar(fikstur(), simdi, adet=1000)
+        php = olay_of(olaylar, 'news', 1978)
+        self.assertNotEqual(php, olay_of(olaylar, 'news', 1953))
+        self.assertNotEqual(php, olay_of(olaylar, 'news', 1966))
+        secim = olaylari_sec(list(fikstur()), simdi)
+        self.assertIn('PHP2Shell', secim[0]['temsilci'].baslik)
+        self.assertNotIn('Help Net Security', secim[0]['kaynaklar'])
+
+    def test_bulten_tek_signal_haberini_cok_kaynakli_yapmaz(self):
+        # 10-25 15:00-18:00: SecurityWeek 1607 "Signal Vulnerability Lets Malicious Callers Block
+        # Hang-Ups" ile THN 1628 "ThreatsDay: ... Signal Hang-Up Flaw, ... + 21 More" iki kaynakli
+        # olay sayiliyordu.
+        for saat in ('2026-10-25 15:00', '2026-10-25 18:00'):
+            secim = olaylari_sec(list(fikstur()), ist(saat), adet=1000)
+            signal = [x for x in secim if 'Signal' in x['temsilci'].baslik]
+            self.assertTrue(signal)
+            for x in signal:
+                self.assertEqual(x['kaynak_sayisi'], 1, saat)
+            self.assertFalse(any(x['kaynak_sayisi'] >= 2 and x['temsilci'].id == 1628 for x in secim))
+
+    def test_ozetler_birbirine_baglanmaz(self):
+        s = self.simdi
+        ogeler = [
+            oge(1, 'The Hacker News', 'ThreatsDay: Zorblax Ransomware, Quixly Heist, Router Botnet + 12 More', s),
+            oge(2, 'Help Net Security', 'Week in review: Zorblax ransomware, Quixly heist, router botnet', s),
+        ]
+        self.assertEqual(len(olaylari_grupla(ogeler)), 2)
+        self.assertEqual([x['kaynak_sayisi'] for x in olaylari_sec(ogeler, s)], [1, 1])
+        # Ayni kaynagin ardisik bultenleri (fikstur 1388, 1390) ayni kaynak kuraliyla tek olay
+        # kalir; yoksa iki dolgu satiri kaplardi.
+        bultenler = [
+            oge(1388, 'Security Affairs', 'SECURITY AFFAIRS AI-CYBERSECURITY NEWSLETTER ROUND 4', s),
+            oge(1390, 'Security Affairs', 'SECURITY AFFAIRS MALWARE NEWSLETTER ROUND 119', s),
+        ]
+        self.assertEqual(len(olaylari_grupla(bultenler)), 1)
+        self.assertEqual(len(olaylari_sec(bultenler, s)), 1)
+
+
 class SentetikTest(SimpleTestCase):
     simdi = ist('2026-11-02 12:00')
 

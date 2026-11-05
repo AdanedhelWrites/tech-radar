@@ -2,7 +2,7 @@
 
 > Tarih: 2026-11-05. Kaynak: brainstorming oturumu (UI isteklerinin üçüncüsü). Durum: uygulandı (dal feat/gundem-puani).
 >
-> Uygulama notu: puan, kaynak başına tazelik çarpanıyla genelleştirildi (tüm yaşlar eşitken G3 ile aynı sonucu verir). İnceleme sonrası ek gruplama kuralları: uydurma ad ve CVE kimliği tek başına bağlar, aynı kaynak çiftleri yüksek benzerlik ister, seçim anındaki özne birleştirmesi yalnız çok kaynaklı olaylar arasında yapılır.
+> Uygulama notu: puan, kaynak başına tazelik çarpanıyla genelleştirildi (tüm yaşlar eşitken G3 ile aynı sonucu verir). İnceleme sonrası ek gruplama kuralları: uydurma ad ve CVE kimliği tek başına bağlar, aynı kaynak çiftleri yüksek benzerlik ister, seçim anındaki özne birleştirmesi yalnız çok kaynaklı olaylar arasında yapılır. Sonradan (fix/gundem-ozet-baslik): çok konulu özet başlıkları (bülten, haftalık özet, `;` ile bağlanan iki haber) olaylar arasında köprü kurmaz, en fazla bir olaya yalnız tekrar olarak katılır ve kaynak sayılmaz.
 
 ## 1. Amaç ve neden
 

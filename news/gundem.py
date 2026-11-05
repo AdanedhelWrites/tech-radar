@@ -89,6 +89,26 @@ Reveals How Logic Bugs Alone Cracked Microsoft Edge in $175,000 Pwn2Own Win" yal
 "microsoft"u paylasir ve ayri kalir (test_genel_ad_tek_basina_birlestirmez).
 Supheli durumda ayri tutmak, yanlis birlestirmekten iyidir (spec s4).
 
+Ozet basliklari (_ozet_mi)
+-------------------------
+Cok konulu ozetler birden cok olayi anar: THN "ThreatsDay: ... Signal Hang-Up Flaw, ... + 21
+More", "Weekly Recap", Help Net Security "Week in review: ...", SecurityWeek "In Other News:",
+"... Roundup", Security Affairs "newsletter", "... of the week", "+ N more" / "and N more", ya da
+ortak icerik sozcugu olmayan iki parcayi ';' ile baglayan mansetler ("Chinese hackers used
+VMware ESX zero-day; PHP2Shell and Fragnesia chained to root firewalls"). Kurallar:
+
+- Union-find'a katilmaz: iki olay arasinda kopru kuramaz. Yalniz ayni kaynagin ozetleriyle
+  kural 0'la baglanir (Security Affairs'in ardisik bultenleri tek dolgu satiri kalir).
+- Sonra her ozet obegi, kurallara gore uydugu olay TEK ise o olaya katilir; iki ya da daha cok
+  olaya uyuyorsa hicbirine katilmaz (supheli durumda ayri tut).
+- Katildigi olayda yalniz tekrar sayilir: kaynak sayisina, rozet kaynak adlarina ve etki
+  sozcugune girmez; temsilci, dolgu kaydi ve secim anindaki ozne olamaz. Boylece tek kaynakli
+  bir haber bir bulten yuzunden "cok kaynakli" olmaz.
+Neden: 10-25'te THN bulteni tek bir SecurityWeek Signal haberini iki kaynakli yapiyordu; 1992
+VMware ve PHP2Shell olaylarini kopruyle birlestirebiliyordu. Fikstur taramasinda (3 sa aralik,
+204 an) gruplama hic degismedi; yalniz kaynak sayilari: Signal 2 -> 1, PHP2Shell 10-30..11-01
+arasi 6 -> 5 (HNS yalniz 1992 ile vardi), Binance 11-02 15:00-18:00 7 -> 6 (HNS yalniz 2094).
+
 Esikler (fiksturle ayarlandi):
 
 - ORTA_ESIK = 0.12: en zayif gercek bag THN'nin "Binance Suffers Security Breach
@@ -157,6 +177,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from typing import Dict, List, NamedTuple, Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -174,6 +195,7 @@ YUKSEK_ESIK = 0.4
 YUKSEK_ORTAK_EN_AZ = 3
 UYDURMA_HARF_EN_AZ = 4  # "a1b" gibi kisa kodlar uydurma ad sayilmaz
 BIRLESME_ZAMAN_SAAT = 24  # secim aninda birlesme: iki olayin zaman araligi en fazla bu kadar uzak
+OZET_PARCA_EN_AZ = 2  # ';' ile ayrilan bir parcanin ayri haber sayilmasi icin en az icerik sozcugu
 
 # Islev sozcukleri, manset dolgu sozcukleri ve genel karsilastirma/sifatlar (faster, biggest,
 # top...; ek sozcuk olarak bag kurmasinlar diye). Kok bicimiyle; alfabetik, tekrarsiz. Yillar
@@ -232,6 +254,20 @@ outage billion record
 CEVIRI_SIRASI = {'gemini': 0, 'openrouter': 1, 'deepl': 1, 'google': 2, 'libretranslate': 3}
 CEVIRISIZ_SIRA = 4
 BOS_CEVIRI_SIRA = 5
+
+# Cok konulu ozet basliklari (bkz. modul belgesi, Ozet basliklari). Kucuk/buyuk harf duyarsiz.
+_OZET_KALIBI = re.compile(
+    r'^\W*week in review\b'          # Help Net Security "Week in review: ..."
+    r'|^\W*in other news\b'          # SecurityWeek "In Other News: ..."
+    r'|\bweekly recap\b'             # The Hacker News "Weekly Recap: ..."
+    r'|\bthreatsday\b'               # The Hacker News "ThreatsDay Bulletin" / "ThreatsDay: ..."
+    r'|\bnewsletter\b'               # Security Affairs "... newsletter Round 602"
+    r'|\bround-?up\b'                # SecurityWeek "Cybersecurity M&A Roundup: ..."
+    r'|\bof the week\b'              # Help Net Security "New infosec products of the week"
+    r'|\+\s*\d+\s*more\b'            # "... + 21 More"
+    r'|\band\s+\d+\s+more\b',        # "... and 13 More Stories"
+    re.IGNORECASE,
+)
 
 _KISA_ISLEV = frozenset('a an the and or of to in on for with by at from as vs via is are be its'.split())
 _UYDURMA = re.compile(r'^[a-z]+[0-9]+[a-z]+$')
@@ -330,6 +366,44 @@ def _kok(sozcuk: str) -> str:
 DURAK = DURAK | frozenset(_kok(w) for w in DURAK if len(_kok(w)) >= 4)
 GENEL = GENEL | frozenset(_kok(w) for w in GENEL)
 GENEL_AD = GENEL_AD | frozenset(_kok(w) for w in GENEL_AD)
+
+
+def _icerik_sozcukleri(metin: str) -> frozenset:
+    """DURAK, GENEL ve yil sozcukleri disindaki kokler (basligin bir parcasi icin)."""
+    return frozenset(
+        k for k in (_kok(s) for s in _sozcukler(metin))
+        if k and k not in DURAK and k not in GENEL and not _YIL.match(k)
+    )
+
+
+@lru_cache(maxsize=4096)
+def _ozet_mi(baslik: str) -> bool:
+    """Basligin cok konulu bir ozet (bulten, haftalik ozet, iki haberi ';' ile baglayan manset)
+    olup olmadigi. Yalniz basliga bakar; pencereden bagimsizdir.
+
+    ';' tek basina yetmez: "iOS, macOS 27.2 Patch 286 Bugs; Fix for Exploited Flaw Backported
+    to iOS 18" tek haberdir (iki parca "ios" paylasir). Ortak icerik sozcugu olmayan iki parca
+    varsa ozettir: "Chinese hackers used VMware ESX zero-day; PHP2Shell and Fragnesia chained
+    to root firewalls". En az OZET_PARCA_EN_AZ icerik sozcuklu parcalar sayilir: Dark Reading
+    "AI Agents Are Privileged Users; Who Is Auditing Their Access?" tek yazidir (ilk parcada
+    yalniz "privileged" kalir)."""
+    baslik = baslik or ''
+    if _OZET_KALIBI.search(baslik):
+        return True
+    parcalar = [p for p in (_icerik_sozcukleri(p) for p in baslik.split(';')) if len(p) >= OZET_PARCA_EN_AZ]
+    return any(not (parcalar[i] & parcalar[j])
+               for i in range(len(parcalar)) for j in range(i + 1, len(parcalar)))
+
+
+def _asil(olay: List[Ogeler]) -> List[Ogeler]:
+    """Olayin ozet olmayan kayitlari; olay yalniz ozetlerden olusuyorsa olayin kendisi."""
+    asil = [o for o in olay if not _ozet_mi(o.baslik)]
+    return asil or olay
+
+
+def _kaynak_sayisi(olay: List[Ogeler]) -> int:
+    """Farkli kaynak sayisi; ozet basliklarinin kaynagi sayilmaz (yalniz tekrardir)."""
+    return len({_kaynak(o) for o in _asil(olay)})
 
 
 def _yas_carpani(simdi: datetime, an: datetime) -> float:
@@ -475,12 +549,31 @@ def _grupla(sirali: List[Ogeler], ozellik: List[_Ozellik]) -> List[List[Ogeler]]
             i = ebeveyn[i]
         return i
 
+    def birlestir(i: int, j: int) -> None:
+        a, b = kok_bul(i), kok_bul(j)
+        if a != b:
+            ebeveyn[max(a, b)] = min(a, b)
+
+    # Ozet basliklari olaylar arasinda kopru kuramaz: once ozet olmayan kayitlar birlesir.
+    # Ozetler yalniz AYNI kaynagin ozetleriyle (ardisik bulten sayilari) kural 0'la baglanir.
+    ozet = [_ozet_mi(o.baslik) for o in sirali]
     for i in range(len(sirali)):
         for j in range(i + 1, len(sirali)):
+            if ozet[i] != ozet[j] or (ozet[i] and ozellik[i].kaynak != ozellik[j].kaynak):
+                continue
             if _ayni_olay(ozellik[i], ozellik[j]):
-                a, b = kok_bul(i), kok_bul(j)
-                if a != b:
-                    ebeveyn[max(a, b)] = min(a, b)
+                birlestir(i, j)
+
+    # Sonra her ozet obegi, uydugu olay TEK ise o olaya katilir; iki ya da daha cok olaya
+    # uyuyorsa hicbirine katilmaz (supheli durumda ayri tut). Adaylar katilimlardan once toplanir.
+    adaylar: Dict[int, set] = {}
+    for i in range(len(sirali)):
+        if ozet[i]:
+            adaylar.setdefault(kok_bul(i), set()).update(
+                kok_bul(j) for j in range(len(sirali)) if not ozet[j] and _ayni_olay(ozellik[i], ozellik[j]))
+    for ozet_koku, olay_kokleri in sorted(adaylar.items()):
+        if len(olay_kokleri) == 1:
+            birlestir(ozet_koku, olay_kokleri.pop())
 
     gruplar: Dict[int, List[Ogeler]] = {}
     for i, oge in enumerate(sirali):
@@ -502,14 +595,17 @@ def _etkili(oge: Ogeler) -> bool:
 
 
 def olay_puani(olay: List[Ogeler], simdi: datetime) -> float:
-    """Kaynak basina yas carpanli puan (bkz. modul belgesi; spec G3'un genellemesi)."""
+    """Kaynak basina yas carpanli puan (bkz. modul belgesi; spec G3'un genellemesi). Ozet
+    basliklari yalniz tekrar sayilir; etki sozcukleri de onlardan alinmaz (ozet baska
+    haberlerin etki sozcuklerini tasir)."""
+    asil = _asil(olay)
     en_yeni: Dict[str, Ogeler] = {}
-    for o in sorted(olay, key=lambda o: (o.created_at, o.bolum, o.id)):
+    for o in sorted(asil, key=lambda o: (o.created_at, o.bolum, o.id)):
         en_yeni[_kaynak(o)] = o  # sirali gezildigi icin sonuncusu en yenisi
     kaynak_toplam = sum(_yas_carpani(simdi, o.created_at) for o in en_yeni.values())
     secilenler = {_anahtar(o) for o in en_yeni.values()}
     tekrar_toplam = sum(_yas_carpani(simdi, o.created_at) for o in olay if _anahtar(o) not in secilenler)
-    etkililer = [o.created_at for o in olay if _etkili(o)]
+    etkililer = [o.created_at for o in asil if _etkili(o)]
     etki = ETKI_PUANI * _yas_carpani(simdi, max(etkililer)) if etkililer else 0.0
     return kaynak_toplam + TEKRAR_AGIRLIK * tekrar_toplam + etki
 
@@ -521,8 +617,9 @@ def _ceviri_sirasi(oge: Ogeler) -> int:
 
 
 def temsilci(olay: List[Ogeler]) -> Ogeler:
-    """En iyi cevrilmis kayit; esitlikte en erken giren, sonra en kucuk id."""
-    return min(olay, key=lambda o: (_ceviri_sirasi(o), o.created_at, o.id, o.bolum))
+    """En iyi cevrilmis kayit; esitlikte en erken giren, sonra en kucuk id. Ozet basliklari
+    olayda baska kayit varsa temsilci olmaz."""
+    return min(_asil(olay), key=lambda o: (_ceviri_sirasi(o), o.created_at, o.id, o.bolum))
 
 
 def _kaynak_adlari(olay: List[Ogeler]) -> List[str]:
@@ -538,8 +635,8 @@ def _kaynak_adlari(olay: List[Ogeler]) -> List[str]:
 def _olay_ozeti(olay: List[Ogeler], simdi: datetime, kayit: Ogeler) -> dict:
     return {
         'temsilci': kayit,
-        'kaynak_sayisi': len({_kaynak(o) for o in olay}),
-        'kaynaklar': _kaynak_adlari(olay),
+        'kaynak_sayisi': _kaynak_sayisi(olay),
+        'kaynaklar': _kaynak_adlari(_asil(olay)),
         'makale_sayisi': len(olay),
         'bolumler': sorted({o.bolum for o in olay}),
         'puan': round(olay_puani(olay, simdi), 2),
@@ -555,22 +652,24 @@ def _satirlar(olaylar: List[List[Ogeler]], simdi: datetime, adet: int) -> List[S
     """(olay, gosterilecek kayit, dolgu_mu) satirlari: secim aninda birlestirme oncesi."""
     cok, tek = [], []
     for olay in olaylar:
-        (cok if len({_kaynak(o) for o in olay}) >= COK_KAYNAK_EN_AZ else tek).append(olay)
+        (cok if _kaynak_sayisi(olay) >= COK_KAYNAK_EN_AZ else tek).append(olay)
 
     puanli = [(olay_puani(o, simdi), max(x.created_at for x in o), temsilci(o), o) for o in cok]
     puanli.sort(key=lambda p: (-p[0], -p[1].timestamp(), _anahtar(p[2])))
     satirlar = [(o, t, False) for _, _, t, o in puanli[:adet]]
 
     if len(satirlar) < adet:
-        dolgu = [(max(olay, key=lambda o: (o.created_at, -o.id, o.bolum)), olay) for olay in tek]
+        # Dolgu kaydi da ozet olmayan en yeni kayittir (ozet yalniz tekrar).
+        dolgu = [(max(_asil(olay), key=lambda o: (o.created_at, -o.id, o.bolum)), olay) for olay in tek]
         dolgu.sort(key=lambda p: (-p[0].created_at.timestamp(), p[0].id, p[0].bolum))
         satirlar.extend((olay, kayit, True) for kayit, olay in dolgu[:adet - len(satirlar)])
     return satirlar
 
 
 def _olay_oznesi(olay: List[Ogeler], ozellik: Dict[Tuple[str, int], _Ozellik]) -> Optional[str]:
-    """Olaydaki her basligin ilk ozel adi (oznesi) ayniysa o ad, degilse None."""
-    ozneler = {ozellik[_anahtar(o)].ozne for o in olay}
+    """Olaydaki her basligin ilk ozel adi (oznesi) ayniysa o ad, degilse None. Ozet
+    basliklari sayilmaz: "Week in review: ..." basliginin oznesi olayi anlatmaz."""
+    ozneler = {ozellik[_anahtar(o)].ozne for o in _asil(olay)}
     if len(ozneler) == 1:
         return ozneler.pop()
     return None
@@ -593,7 +692,7 @@ def _secip_birlestir(
         # Yalniz zaten cok kaynakli olan satirlar katilir: tek basliklik bir olay "butun
         # basliklar ayni ozneli" sartini kendiliginden saglar; dolgu satirlari asla birlesmez.
         adaylar = [olay for olay, _, dolgu in satirlar
-                   if not dolgu and len({_kaynak(o) for o in olay}) >= COK_KAYNAK_EN_AZ]
+                   if not dolgu and _kaynak_sayisi(olay) >= COK_KAYNAK_EN_AZ]
         cift = None
         for i in range(len(adaylar)):
             ozne = _olay_oznesi(adaylar[i], ozellik)
