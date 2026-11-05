@@ -135,13 +135,36 @@ class TaramaCapalariTest(SimpleTestCase):
     def test_gpt_olayinda_ilgisiz_aws_yazilari_yok(self):
         simdi = ist('2026-10-01 20:00')
         olaylar = olaylari_grupla(penceredeki(list(fikstur()), simdi))
-        gpt = olay_of(olaylar, 'ai', 1008)  # AWS: "...GPT-6.1 Sol on Amazon Bedrock"
+        gpt = olay_of(olaylar, 'ai', 997)  # TechCrunch: "OpenAI launches GPT-6.1 Sol, ..."
         # Satici blogunun ayni urun adini (Amazon Bedrock AgentCore) paylasan ilgisiz iki yazisi
         # GPT-6.1 olayina zincirlenmez (ayni kaynak kurali).
         self.assertNotEqual(olay_of(olaylar, 'ai', 992), gpt)
         self.assertNotEqual(olay_of(olaylar, 'ai', 1028), gpt)
-        aws = [o.id for o in olaylar[gpt] if o.source == 'AWS ML Blog']
-        self.assertEqual(aws, [1008])  # yalniz GPT-6.1 Sol'un Bedrock'a gelisini anlatan yazi
+        # Ad obegi kurali sonrasi: "...GPT-6.1 Sol on Amazon Bedrock" (1008) yalniz "GPT-6.1 Sol"
+        # obegini paylasir ve ek sozcugu yok; o da olay disinda kalir.
+        self.assertEqual([o.source for o in olaylar[gpt] if o.source == 'AWS ML Blog'], [])
+
+    def test_gpt6_astra_obegi_basis_yazisini_zincirlemez(self):
+        # OpenAI Blog "Basis completes a tax workbook 2x faster with GPT-6 Astra" (974) yalniz
+        # "GPT-6 Astra" obegini (iki sozcuk, tek ad) paylasiyordu; GPT-6.1 Sol olayina girmez.
+        simdi = ist('2026-10-01 20:00')
+        olaylar = olaylari_grupla(penceredeki(list(fikstur()), simdi))
+        self.assertNotEqual(olay_of(olaylar, 'ai', 974), olay_of(olaylar, 'ai', 997))
+        self.assertEqual(len(olaylar[olay_of(olaylar, 'ai', 974)]), 1)
+
+    def test_west_virginia_tek_ad_obegi_birlestirmez(self):
+        # The Record 1938 "Court strikes down West Virginia law..." ile TechCrunch 1800
+        # "Nvidia weighs ... AI data center in West Virginia".
+        simdi = ist('2026-10-31 12:00')
+        olaylar = olaylari_grupla(penceredeki(list(fikstur()), simdi))
+        self.assertNotEqual(olay_of(olaylar, 'news', 1938), olay_of(olaylar, 'ai', 1800))
+
+    def test_genel_sifat_ek_sozcuk_sayilmaz(self):
+        # MarkTechPost 1709 "...FlashMap, a Flow Map Drafter for 6.14x Faster LLM Decoding" ile
+        # Google Cloud SRE 351 "How to troubleshoot GKE workloads faster with VPC Flow Logs".
+        simdi = ist('2026-10-29 12:00')
+        olaylar = olaylari_grupla(penceredeki(list(fikstur()), simdi))
+        self.assertNotEqual(olay_of(olaylar, 'ai', 1709), olay_of(olaylar, 'sre', 351))
 
 
 class KuralTest(SimpleTestCase):
@@ -253,6 +276,81 @@ class KuralTest(SimpleTestCase):
         secim = olaylari_sec(ogeler, s, adet=50)  # tum olaylar satir
         self.assertEqual(len(secim), 2)
         self.assertEqual([x['kaynak_sayisi'] for x in secim], [2, 2])
+
+
+class SonDuzeltmeTest(SimpleTestCase):
+    simdi = ist('2026-11-02 12:00')
+
+    def grup_sayisi(self, ogeler):
+        return len(olaylari_grupla(ogeler))
+
+    def test_palo_alto_obegi_tek_ad_sayilir(self):
+        s = self.simdi
+        ogeler = [
+            oge(1, 'Help Net Security', 'Ransomware gangs exploit Palo Alto GlobalProtect VPN flaw', s),
+            oge(2, 'The Hacker News', 'Attackers Exploit PHP2Shell Flaws in Internet-Exposed Palo Alto Networks '
+                'Management Interfaces', s),
+            oge(3, 'SecurityWeek', 'Palo Alto Networks Reports Record Quarterly Revenue', s),
+        ]
+        self.assertEqual(self.grup_sayisi(ogeler), 3)
+        # Karsit kontrol: obek + genel olmayan ek sozcuk ("ransomware") yine baglar.
+        self.assertEqual(self.grup_sayisi([
+            ogeler[0],
+            oge(4, 'The Hacker News', 'Qilin Ransomware Group Exploits Palo Alto Networks Flaw', s),
+        ]), 1)
+
+    def test_yil_sozcugu_atilir(self):
+        s = self.simdi
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Salesforce plans agent marketplace for 2027', s),
+            oge(2, 'B', 'Salesforce raises outlook through 2027', s),
+        ]), 2)
+        self.assertEqual(self.grup_sayisi([
+            oge(1, 'A', 'Zorblax plans expansion by 2031', s),
+            oge(2, 'B', 'Zorblax board meets in 1999 archive', s),
+        ]), 2)
+        self.assertNotIn('2027', gundem.DURAK)
+
+    def test_ozne_birlesmesi_zaman_sinirli(self):
+        s = self.simdi
+        eski = [
+            oge(1, 'A', 'Ivanti patches gateway flaw', s - timedelta(days=4, hours=2)),
+            oge(2, 'B', 'Ivanti gateway flaw exploited', s - timedelta(days=4, hours=1)),
+        ]
+        yeni = [
+            oge(3, 'C', 'Ivanti discloses breach of support portal', s - timedelta(hours=2)),
+            oge(4, 'D', 'Ivanti support portal breach confirmed', s - timedelta(hours=1)),
+        ]
+        hepsi = eski + yeni
+        sirali = sorted(hepsi, key=lambda o: (o.bolum, o.id))
+        ozellik_listesi = gundem._baslik_ozellikleri(sirali)
+        ozellik = {(o.bolum, o.id): oz for o, oz in zip(sirali, ozellik_listesi)}
+        olaylar = gundem._grupla(sirali, ozellik_listesi)
+        self.assertEqual(len(olaylar), 2)
+        satirlar, birlesmeler = gundem._secip_birlestir(olaylar, s, 6, ozellik)
+        self.assertEqual(birlesmeler, [])  # 4 gun arayla iki ayri Ivanti olayi
+        self.assertEqual(len(satirlar), 2)
+        # Ayni iki olay 24 saat icindeyse birlesir.
+        yakin = [oge(o.id, o.source, o.baslik, o.created_at + timedelta(days=4) - timedelta(hours=10))
+                 for o in eski] + yeni
+        self.assertEqual(len(olaylari_sec(yakin, s)), 1)
+
+    def test_bozuk_girdide_hata_vermez(self):
+        s = self.simdi
+        self.assertEqual(olaylari_sec([], s), [])
+        ogeler = [
+            oge(1, None, None, s - timedelta(hours=1), ceviri=None, tr_baslik=None),
+            oge(2, '', '', s - timedelta(hours=2), ceviri='', tr_baslik=''),
+            oge(3, 'A', 'the and of to in', s - timedelta(hours=3)),
+            oge(4, 'B', '北京的网络安全事件', s - timedelta(hours=4)),
+            oge(5, 'C', 'İstanbul’da güvenlik açığı çözüldü',
+                s - timedelta(hours=5)),
+            oge(6, 'D', 'Zorblax ' * 2500, s - timedelta(hours=6)),
+            oge(7, 'E', 'Zorblax ' * 2500, s - timedelta(hours=7)),
+        ]
+        secim = olaylari_sec(ogeler, s)
+        self.assertEqual(len(secim), 6)
+        self.assertTrue(all(isinstance(x['puan'], float) for x in secim))
 
 
 class SentetikTest(SimpleTestCase):

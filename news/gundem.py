@@ -43,6 +43,21 @@ Yalniz Ingilizce ORIJINAL baslik kullanilir (ceviriler saglayicidan saglayiciya 
   (cve-YYYY-NNNN...). Bunlar bir olaya ozgu konmus adlardir ve TEK BASINA baglar.
   Genel harf+rakam adlari (GPT-6.1, ISC2), CamelCase ya da buyuk harfli adlar tek
   basina baglamaz; inceleme taramasinda bunlar yanlis bag uretiyordu.
+- Ad obegi: baslikta bitisik ozel adlar tek ad obegidir ("Palo Alto", "West Virginia",
+  "GPT-6 Astra"). Kural 2'deki "ikinci ortak ad" obek olarak sayilir: iki sozcuklu tek
+  bir ortak ad yine ek sozcuk ister. Neden: The Record "Court strikes down West Virginia
+  law..." ile TechCrunch "Nvidia weighs ... AI data center in West Virginia" ve OpenAI
+  Blog "Basis completes a tax workbook 2x faster with GPT-6 Astra" ile GPT-6.1 Sol
+  olayi yalniz boyle bir obek uzerinden birlesiyordu. Bedeli (tum-olay taramasi): yalniz
+  iki sozcuklu adi paylasan dogru ciftler de ayri kalir ("SiteGuard WAF", "Quest
+  Diagnostics", "Introducing GPT-6.1 Terra"); supheli durumda ayri tutma kurali geregi.
+  Ayni kaynak kurali (0) token sayar; orada Jaccard >= YUKSEK_ESIK zaten siki.
+- Yil sozcukleri (^(19|20)\\d{2}$) atilir: "2027" iki ilgisiz basligi ek sozcuk olarak
+  bagliyordu. Binlik ayiracli sayilar tek sozcuktur ("238,000"; yoksa "000" baglardi).
+- DURAK genel karsilastirma ve sifatlari da icerir (faster, biggest, top, major...):
+  MarkTechPost "...Flow Map Drafter for 6.14x Faster LLM Decoding" ile Google Cloud SRE
+  "How to troubleshoot GKE workloads faster with VPC Flow Logs" "flow" + "faster" ile
+  birlesiyordu. DURAK kok bicimiyle karsilastirilir ("launches" -> "launche").
 
 Iki kayit su durumda ayni olaydir (union-find ile gecisli birlesir):
 
@@ -52,7 +67,7 @@ Iki kayit su durumda ayni olaydir (union-find ile gecisli birlesir):
    paylasan ilgisiz iki yazisi 10-01'de GPT-6.1 olayina zincirleniyordu. Ayni kaynagin
    takip haberleri diger kaynaklar uzerinden yine ayni olaya baglanir.
 1. Ortak uydurma ad ya da ayni CVE kimligi; ya da
-2. Ortak bir ozel ad VE Jaccard >= ORTA_ESIK VE (ikinci bir ortak ozel ad YA DA
+2. Ortak bir ozel ad VE Jaccard >= ORTA_ESIK VE (ikinci bir ortak ad OBEGI YA DA
    GENEL_AD olmayan bir ortak icerik sozcugu daha); ya da
 3. Jaccard >= YUKSEK_ESIK ve en az YUKSEK_ORTAK_EN_AZ ortak icerik sozcugu (ad sartsiz).
 
@@ -110,7 +125,9 @@ iki satirda gorunmesin. Dolgu ogeleri kaynak_sayisi 1 ve makale_sayisi 1 tasir.
 
 Secim aninda birlestirme: secilen ve ZATEN COK KAYNAKLI olan iki satirin olaylarinda
 BUTUN basliklarin oznesi ayni ise iki olay birlesir, puan ve temsilci yeniden hesaplanir
-ve secim bastan yapilir; kararli olana kadar. Dolgu (tek kaynakli) satirlar asla katilmaz:
+ve secim bastan yapilir; kararli olana kadar. Iki olayin zaman araliklari kesismeli ya da
+aralarinda en fazla BIRLESME_ZAMAN_SAAT (24 sa) olmali: ayni sirketin gunler arayla
+yasadigi ayri olaylar (ornegin iki ayri Ivanti acigi) birlesmez. Dolgu (tek kaynakli) satirlar asla katilmaz:
 tek basliklik bir olay "butun basliklar ayni ozneli" sartini kendiliginden saglar ve
 ozne gurultuludur (The Record "Judge denies WhatsApp's bid..." ile Ars "Judge rejects
 Trump's..." sahte iki kaynakli satir olurdu; Google Cloud SRE'nin iki "Accelerating..."
@@ -147,17 +164,23 @@ ORTA_ESIK = 0.12
 YUKSEK_ESIK = 0.4
 YUKSEK_ORTAK_EN_AZ = 3
 UYDURMA_HARF_EN_AZ = 4  # "a1b" gibi kisa kodlar uydurma ad sayilmaz
+BIRLESME_ZAMAN_SAAT = 24  # secim aninda birlesme: iki olayin zaman araligi en fazla bu kadar uzak
 
-# Islev sozcukleri ve manset dolgu sozcukleri (kok bicimiyle; alfabetik, tekrarsiz).
+# Islev sozcukleri, manset dolgu sozcukleri ve genel karsilastirma/sifatlar (faster, biggest,
+# top...; ek sozcuk olarak bag kurmasinlar diye). Kok bicimiyle; alfabetik, tekrarsiz. Yillar
+# burada degil, _YIL kalibiyla atilir.
 DURAK = frozenset('''
-2025 2026 a about across after against ahead all also amid an and announce announces announcing another any
-are as at back be been before behind being by can could day did do does down for from get got had has have her
-here here's his how in inside into introduce introduces introducing is it it's its just latest launch launched
-launches like made make may meet might more most new next no not now of off on one only or other our out over
-per release released releases report reveal revealed reveals said say says show shows some still than that the
-their then there these this those three through time to today two u.s uk under unveil unveiled unveils up us
-use used using via vs was way we week were what what's when where which while who whom why will with within
-without would year yet you your
+a about across after against ahead all also amid an and announce announces announcing another any are as at
+back be been before behind being best better big bigger biggest by can cheaper cheapest could day did do does
+down earlier early easier easiest fast faster fastest first for from full get got great greater greatest had
+has have her here here's high higher highest his how in inside into introduce introduces introducing is it
+it's its just large larger largest last latest launch launche launched launches less like low lower lowest
+made major make may meet might more most new newer newest next no not now of off old older oldest on one only
+or other our out over per release released releases report reveal revealed reveals said say says show shows
+small smaller smallest smart smarter some still strong stronger than that the their then there these this
+those three through time to today top two u.s uk under unveil unveiled unveils up us use used using via vs was
+way we week were what what's when where which while who whom why will with within without worse worst would
+year yet you your
 '''.split())
 
 # Alan genelinde cok sik gecen, olay ayirt etmeyen sozcukler (kok bicimiyle).
@@ -199,7 +222,10 @@ BOS_CEVIRI_SIRA = 5
 _KISA_ISLEV = frozenset('a an the and or of to in on for with by at from as vs via is are be its'.split())
 _UYDURMA = re.compile(r'^[a-z]+[0-9]+[a-z]+$')
 _CVE = re.compile(r'^cve-\d{4}-\d{4,}$')
-_SOZCUK = re.compile(r"[A-Za-z0-9$]+(?:[.\-'][A-Za-z0-9]+)*")
+_YIL = re.compile(r'^(19|20)\d{2}$')
+# Binlik ayiracli sayilar tek sozcuktur ("238,000"); yoksa "000" iki ilgisiz basligi
+# ek sozcuk olarak baglayabiliyordu (Denver Health ile DHS sizintisi).
+_SOZCUK = re.compile(r"[A-Za-z0-9$]+(?:(?:[.\-']|,(?=\d{3}\b))[A-Za-z0-9]+)*")
 
 
 @dataclass(frozen=True)
@@ -268,6 +294,7 @@ class _Ozellik(NamedTuple):
     adlar: frozenset
     uydurma: frozenset  # tek basina baglayan uydurma adlar ve CVE kimlikleri
     ozne: Optional[str]  # basligin oznesi (bkz. _baslik_ozellikleri; genel adlar haric)
+    obekler: Tuple[frozenset, ...] = ()  # bitisik ozel adlarin olusturdugu ad obekleri
 
 
 def _uydurma_mi(kok: str) -> bool:
@@ -298,29 +325,46 @@ def _baslik_ozellikleri(ogeler: List[Ogeler]) -> List[_Ozellik]:
         adlar = set()
         uydurma = set()
         ozne = None
+        obekler = []
+        obek = None
         for s in _sozcukler(o.baslik):
             k = _kok(s)
-            if not k or k in DURAK or k in GENEL:
-                continue
-            icerik.add(k)
-            if k in GENEL_AD or k in kaynak_sozcukleri or len(k) < 2:
-                continue
-            if _uydurma_mi(k):
-                uydurma.add(k)
-            if not any(c.isalpha() for c in s):
-                continue
-            ad = (any(c.isdigit() for c in s)
-                  or any(c.isupper() for c in s[1:])
-                  or (s[0].isupper() and k not in kucuk_gorulen and k in cumle_duzeninde_buyuk))
+            ad = False
+            if k and k not in DURAK and k not in GENEL and not _YIL.match(k):
+                icerik.add(k)
+                if k not in GENEL_AD and k not in kaynak_sozcukleri and len(k) >= 2:
+                    if _uydurma_mi(k):
+                        uydurma.add(k)
+                    if any(c.isalpha() for c in s):
+                        ad = (any(c.isdigit() for c in s)
+                              or any(c.isupper() for c in s[1:])
+                              or (s[0].isupper() and k not in kucuk_gorulen and k in cumle_duzeninde_buyuk))
+                        # Ozne: ilk ozel ad ya da pencerede hic kucuk harfle gecmeyen ilk buyuk
+                        # harfli icerik sozcugu. Ikincisi yalniz Title Case basliklarda gecen adlari
+                        # yakalar ("Siemens Software Center ..." -> siemens; yoksa "clickfix" olurdu).
+                        if ozne is None and (ad or (s[0].isupper() and k not in kucuk_gorulen)):
+                            ozne = k
+            # Bitisik ozel adlar tek ad obegidir ("Palo Alto", "West Virginia", "GPT-6 Astra");
+            # ad olmayan her sozcuk obegi bitirir.
             if ad:
                 adlar.add(k)
-            # Ozne: ilk ozel ad ya da pencerede hic kucuk harfle gecmeyen ilk buyuk harfli
-            # icerik sozcugu. Ikincisi yalniz Title Case basliklarda gecen adlari yakalar
-            # ("Siemens Software Center ..." -> siemens; yoksa ozne "clickfix" olurdu).
-            if ozne is None and (ad or (s[0].isupper() and k not in kucuk_gorulen)):
-                ozne = k
-        sonuc.append(_Ozellik(_kaynak(o), frozenset(icerik), frozenset(adlar), frozenset(uydurma), ozne))
+                if obek is None:
+                    obek = set()
+                    obekler.append(obek)
+                obek.add(k)
+            else:
+                obek = None
+        sonuc.append(_Ozellik(_kaynak(o), frozenset(icerik), frozenset(adlar), frozenset(uydurma), ozne,
+                              tuple(frozenset(ob) for ob in obekler)))
     return sonuc
+
+
+def _ortak_obek_sayisi(a: _Ozellik, b: _Ozellik, ortak_adlar: frozenset) -> int:
+    """Ortak ozel adlarin kac ayri ad obegine dagildigi (iki baslikta da; kucuk olani).
+    "Palo Alto" tek obektir: iki ortak sozcuk ama tek ortak ad."""
+    sayi_a = sum(1 for ob in a.obekler if ob & ortak_adlar)
+    sayi_b = sum(1 for ob in b.obekler if ob & ortak_adlar)
+    return min(sayi_a, sayi_b)
 
 
 def _ayni_olay(a: _Ozellik, b: _Ozellik) -> bool:
@@ -336,11 +380,11 @@ def _ayni_olay(a: _Ozellik, b: _Ozellik) -> bool:
     if a.uydurma & b.uydurma:
         return True
     if ortak_adlar and jaccard >= ORTA_ESIK:
-        # Ad tek basina yetmez: ikinci bir ortak ad ya da genel ad olmayan bir ortak
-        # icerik sozcugu daha gerekir ("Amazon Bedrock" gibi satici urun adi + satici
-        # adi baglamaz).
+        # Ad tek basina yetmez: ikinci bir ortak ad OBEGI ya da genel ad olmayan bir ortak
+        # icerik sozcugu daha gerekir ("Amazon Bedrock" gibi satici urun adi + satici adi,
+        # "West Virginia" gibi iki sozcuklu tek ad baglamaz).
         ek = [k for k in ortak - ortak_adlar if k not in GENEL_AD]
-        if len(ortak_adlar) >= 2 or ek:
+        if _ortak_obek_sayisi(a, b, ortak_adlar) >= 2 or ek:
             return True
     return len(ortak) >= YUKSEK_ORTAK_EN_AZ and jaccard >= YUKSEK_ESIK
 
@@ -459,6 +503,13 @@ def _olay_oznesi(olay: List[Ogeler], ozellik: Dict[Tuple[str, int], _Ozellik]) -
     return None
 
 
+def _zamanca_yakin(a: List[Ogeler], b: List[Ogeler]) -> bool:
+    """Iki olayin zaman araliklari kesisiyor ya da aralarinda en fazla BIRLESME_ZAMAN_SAAT var."""
+    a_ilk, a_son = min(o.created_at for o in a), max(o.created_at for o in a)
+    b_ilk, b_son = min(o.created_at for o in b), max(o.created_at for o in b)
+    return max(a_ilk, b_ilk) - min(a_son, b_son) <= timedelta(hours=BIRLESME_ZAMAN_SAAT)
+
+
 def _secip_birlestir(
     olaylar: List[List[Ogeler]], simdi: datetime, adet: int, ozellik: Dict[Tuple[str, int], _Ozellik],
 ) -> Tuple[List[Satir], List[Tuple[List[Ogeler], List[Ogeler]]]]:
@@ -476,7 +527,7 @@ def _secip_birlestir(
             if ozne is None:
                 continue
             for j in range(i + 1, len(adaylar)):
-                if _olay_oznesi(adaylar[j], ozellik) == ozne:
+                if _olay_oznesi(adaylar[j], ozellik) == ozne and _zamanca_yakin(adaylar[i], adaylar[j]):
                     cift = (adaylar[i], adaylar[j])
                     break
             if cift:
