@@ -2,21 +2,32 @@ import { Badge } from 'react-bootstrap'
 
 // Her kayit hangi saglayiciyla cevrildigini gosterir (spec 2026-09-15, bolum 3.5).
 // LibreTranslate dusuk kalitelidir ve anlam hatasi icerebilir: sari uyari.
-// Gemini ve Google (eski kayitlar) notr gri bilgi rozeti. Bos/null: rozet yok.
+// Gemini, OpenRouter, DeepL ve Google (eski kayitlar) notr gri bilgi rozeti. Bos/null: rozet yok.
 const ROZETLER = {
   libretranslate: {
     metin: 'Makine çevirisi: LibreTranslate',
-    bg: 'warning', text: 'dark', arka: '#ffc107', on: '#212529',
-    aciklama: 'Yerel LibreTranslate ile çevrildi; anlam hatası olabilir, orijinal metne bakın. En geç 2 saat içinde Gemini ile iyileştirilir.',
+    bg: 'warning', text: 'dark',
+    aciklama: 'Yerel LibreTranslate ile çevrildi; anlam hatası olabilir, orijinal metne bakın. Haberler ile kritik ve yüksek zafiyetler gün içinde Gemini ile iyileştirilir.',
   },
   gemini: {
     metin: 'Çeviri: Gemini',
-    bg: 'secondary', text: 'light', arka: '#6c757d', on: '#ffffff',
+    bg: 'secondary', text: 'light',
     aciklama: 'Gemini (gemini-3.5-flash-lite) ile çevrildi.',
+  },
+  // Yedek zincir (spec 2026-11-02 G6, PR-C): birincil Gemini kullanilamazken
+  openrouter: {
+    metin: 'Çeviri: OpenRouter',
+    bg: 'secondary', text: 'light',
+    aciklama: 'OpenRouter ücretsiz modeliyle çevrildi.',
+  },
+  deepl: {
+    metin: 'Çeviri: DeepL',
+    bg: 'secondary', text: 'light',
+    aciklama: 'DeepL API Free ile çevrildi.',
   },
   google: {
     metin: 'Çeviri: Google',
-    bg: 'secondary', text: 'light', arka: '#6c757d', on: '#ffffff',
+    bg: 'secondary', text: 'light',
     aciklama: 'Google Translate ile çevrildi.',
   },
 }
@@ -28,7 +39,7 @@ const ROZETLER = {
 // bos ve ceviri bekleyen kaydin metni her durumda orijinaldir.
 const CEVRILMEDI = {
   metin: 'Çevrilmedi: orijinal metin',
-  bg: 'light', text: 'dark', arka: '#e9ecef', on: '#212529',
+  bg: 'light', text: 'dark',
   aciklama: 'Çeviri sağlayıcıları bu kaydı çeviremedi (çok uzun ya da çevrilemeyen içerik); metin İngilizce gösteriliyor.',
 }
 
@@ -46,9 +57,13 @@ export default function CeviriEtiketi({ kayit, className = 'ms-2' }) {
   )
 }
 
-export const ceviriEtiketiHtml = (kayit) => {
+// HTML rapor rozeti (utils/rapor ekRozetler): ham metin ve sinif, kacis rapor sablonunda.
+// Sinif: notr 'ceviri'; LibreTranslate 'ceviri uyari'; cevrilmemis 'ceviri cevrilmedi'.
+const RAPOR_SINIFI = { libretranslate: 'ceviri uyari' }
+
+export const ceviriRozeti = (kayit) => {
   const rozet = rozetSec(kayit)
-  return rozet
-    ? `<span class="badge" style="background:${rozet.arka};color:${rozet.on}" title="${rozet.aciklama}">${rozet.metin}</span>`
-    : ''
+  if (!rozet) return null
+  const sinif = rozet === CEVRILMEDI ? 'ceviri cevrilmedi' : (RAPOR_SINIFI[kayit.translation_provider] || 'ceviri')
+  return { metin: rozet.metin, sinif }
 }

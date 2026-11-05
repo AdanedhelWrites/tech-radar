@@ -5,14 +5,14 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from django.core.cache import cache
-from datetime import datetime
 from .models import (
     NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
 )
 from .api_v1 import refresh
+from .liste_sorgusu import liste_yaniti
 from .serializers import (
     NewsArticleSerializer, FetchNewsRequestSerializer,
-    CVEEntrySerializer, FetchCVERequestSerializer,
+    FetchCVERequestSerializer,
     KubernetesEntrySerializer, FetchK8sRequestSerializer,
     SREEntrySerializer, FetchSRERequestSerializer,
     DevToolsEntrySerializer, FetchDevToolsRequestSerializer,
@@ -26,15 +26,15 @@ logger = logging.getLogger(__name__)
 GENEL_SUNUCU_HATASI = 'Islem sirasinda sunucuda beklenmeyen bir hata olustu.'
 
 
-# Eski /api/*/fetch/ uclari: bolum -> (istek serializer'i, silinecek frontend cache
-# anahtarlari, mesajdaki ad). Bolum adlari news/api_v1/refresh.py::SECTIONS ile ayni.
+# Eski /api/*/fetch/ uclari: bolum -> (istek serializer'i, mesajdaki ad).
+# Bolum adlari news/api_v1/refresh.py::SECTIONS ile ayni.
 _FETCH_BOLUMLERI = {
-    'news': (FetchNewsRequestSerializer, ('cybersecurity_news', 'last_update'), 'Haber'),
-    'cve': (FetchCVERequestSerializer, ('cve_entries', 'cve_last_update'), 'CVE'),
-    'kubernetes': (FetchK8sRequestSerializer, ('k8s_entries', 'k8s_last_update'), 'K8s haber'),
-    'sre': (FetchSRERequestSerializer, ('sre_entries', 'sre_last_update'), 'SRE haber'),
-    'devtools': (FetchDevToolsRequestSerializer, ('devtools_entries', 'devtools_last_update'), 'DevTools'),
-    'ai': (FetchAINewsRequestSerializer, ('ai_entries', 'ai_last_update'), 'AI haber'),
+    'news': (FetchNewsRequestSerializer, 'Haber'),
+    'cve': (FetchCVERequestSerializer, 'CVE'),
+    'kubernetes': (FetchK8sRequestSerializer, 'K8s haber'),
+    'sre': (FetchSRERequestSerializer, 'SRE haber'),
+    'devtools': (FetchDevToolsRequestSerializer, 'DevTools'),
+    'ai': (FetchAINewsRequestSerializer, 'AI haber'),
 }
 
 
@@ -44,7 +44,7 @@ def _tetikle(request, bolum):
     Kilit ve 15 dk soguma v1 (/api/v1/<bolum>/refresh/) ile paylasilir; kaynak
     sitelere giden yuk tetikleyenden bagimsiz sinirlanir (ADR-0003 karar 5).
     """
-    serializer_sinifi, cache_anahtarlari, ad = _FETCH_BOLUMLERI[bolum]
+    serializer_sinifi, ad = _FETCH_BOLUMLERI[bolum]
     serializer = serializer_sinifi(data=request.data)
     if not serializer.is_valid():
         return Response({'success': False, 'message': 'Gecersiz istek'},
@@ -76,8 +76,6 @@ def _tetikle(request, bolum):
         return yanit
 
     if sonuc.status == 'started':
-        # Yalniz yeni is basladiysa: calisan is ya da soguma varken silmek listeyi bosaltirdi
-        cache.delete_many(cache_anahtarlari)
         mesaj = f'{ad} cekimi baslatildi. Otomatik yansiyacak.'
     else:
         mesaj = f'{ad} cekimi zaten suruyor. Kayitlar otomatik yansiyacak.'
@@ -88,32 +86,8 @@ def _tetikle(request, bolum):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_news(request):
-    """Haberleri getir (cache veya database'den)"""
-    # Once cache'den dene
-    cached_news = cache.get('cybersecurity_news')
-    if cached_news:
-        return Response({
-            'success': True,
-            'data': cached_news,
-            'cached': True,
-            'count': len(cached_news)
-        })
-    
-    # Cache yoksa database'den cek
-    articles = NewsArticle.objects.all().order_by('-date')[:100]
-    serializer = NewsArticleSerializer(articles, many=True)
-    data = serializer.data
-    
-    # Cache'e kaydet
-    if data:
-        cache.set('cybersecurity_news', data, 3600)
-    
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """Haberleri suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'news')
 
 
 @api_view(['POST'])
@@ -126,18 +100,13 @@ def fetch_news(request):
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def clear_cache(request):
-    """Cache ve database'i temizle"""
+    """Veritabanini temizle"""
     try:
-        # Cache temizle
-        cache.delete('cybersecurity_news')
-        cache.delete('last_update')
-        
-        # Database temizle
         NewsArticle.objects.all().delete()
-        
+
         return Response({
             'success': True,
-            'message': 'Cache ve veritabani temizlendi'
+            'message': 'Veritabani temizlendi'
         })
     except Exception:
         logger.exception('clear_cache basarisiz')
@@ -170,22 +139,6 @@ def get_stats(request):
         'total': total,
         'by_source': by_source,
         'last_update': last_update,
-        'cached': cache.get('cybersecurity_news') is not None
-    })
-
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def export_news(request):
-    """Haberleri JSON olarak disari aktar"""
-    articles = NewsArticle.objects.all().order_by('-date')
-    serializer = NewsArticleSerializer(articles, many=True)
-    
-    return Response({
-        'success': True,
-        'data': serializer.data,
-        'exported_at': datetime.now().isoformat(),
-        'count': len(serializer.data)
     })
 
 
@@ -194,32 +147,8 @@ def export_news(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_cves(request):
-    """CVE'leri getir (cache veya database'den)"""
-    # Once cache'den dene
-    cached_cves = cache.get('cve_entries')
-    if cached_cves:
-        return Response({
-            'success': True,
-            'data': cached_cves,
-            'cached': True,
-            'count': len(cached_cves)
-        })
-    
-    # Cache yoksa database'den cek
-    cves = CVEEntry.objects.all().order_by('-published_date')[:100]
-    serializer = CVEEntrySerializer(cves, many=True)
-    data = serializer.data
-    
-    # Cache'e kaydet
-    if data:
-        cache.set('cve_entries', data, 3600)
-    
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """CVE'leri suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'cve')
 
 
 @api_view(['POST'])
@@ -232,18 +161,13 @@ def fetch_cves(request):
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def clear_cve_cache(request):
-    """CVE cache ve database'i temizle"""
+    """CVE veritabanini temizle"""
     try:
-        # Cache temizle
-        cache.delete('cve_entries')
-        cache.delete('cve_last_update')
-        
-        # Database temizle
         CVEEntry.objects.all().delete()
-        
+
         return Response({
             'success': True,
-            'message': 'CVE cache ve veritabani temizlendi'
+            'message': 'CVE veritabani temizlendi'
         })
     except Exception:
         logger.exception('clear_cve_cache basarisiz')
@@ -284,22 +208,6 @@ def get_cve_stats(request):
         'by_source': by_source,
         'by_severity': by_severity,
         'last_update': last_update,
-        'cached': cache.get('cve_entries') is not None
-    })
-
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def export_cves(request):
-    """CVE'leri JSON olarak disari aktar"""
-    cves = CVEEntry.objects.all().order_by('-published_date')
-    serializer = CVEEntrySerializer(cves, many=True)
-    
-    return Response({
-        'success': True,
-        'data': serializer.data,
-        'exported_at': datetime.now().isoformat(),
-        'count': len(serializer.data)
     })
 
 
@@ -308,29 +216,8 @@ def export_cves(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_k8s(request):
-    """Kubernetes haberlerini getir (cache veya database'den)"""
-    cached_k8s = cache.get('k8s_entries')
-    if cached_k8s:
-        return Response({
-            'success': True,
-            'data': cached_k8s,
-            'cached': True,
-            'count': len(cached_k8s)
-        })
-
-    entries = KubernetesEntry.objects.all().order_by('-published_date')[:100]
-    serializer = KubernetesEntrySerializer(entries, many=True)
-    data = serializer.data
-
-    if data:
-        cache.set('k8s_entries', data, 3600)
-
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """Kubernetes haberlerini suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'kubernetes')
 
 
 @api_view(['POST'])
@@ -343,16 +230,13 @@ def fetch_k8s(request):
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def clear_k8s_cache(request):
-    """Kubernetes cache ve database'i temizle"""
+    """Kubernetes veritabanini temizle"""
     try:
-        cache.delete('k8s_entries')
-        cache.delete('k8s_last_update')
-
         KubernetesEntry.objects.all().delete()
 
         return Response({
             'success': True,
-            'message': 'Kubernetes cache ve veritabani temizlendi'
+            'message': 'Kubernetes veritabani temizlendi'
         })
     except Exception:
         logger.exception('clear_k8s_cache basarisiz')
@@ -390,22 +274,6 @@ def get_k8s_stats(request):
         'by_source': by_source,
         'by_category': by_category,
         'last_update': last_update,
-        'cached': cache.get('k8s_entries') is not None
-    })
-
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def export_k8s(request):
-    """Kubernetes haberlerini JSON olarak disari aktar"""
-    entries = KubernetesEntry.objects.all().order_by('-published_date')
-    serializer = KubernetesEntrySerializer(entries, many=True)
-
-    return Response({
-        'success': True,
-        'data': serializer.data,
-        'exported_at': datetime.now().isoformat(),
-        'count': len(serializer.data)
     })
 
 
@@ -414,29 +282,8 @@ def export_k8s(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_sre(request):
-    """SRE haberlerini getir (cache veya database'den)"""
-    cached_sre = cache.get('sre_entries')
-    if cached_sre:
-        return Response({
-            'success': True,
-            'data': cached_sre,
-            'cached': True,
-            'count': len(cached_sre)
-        })
-
-    entries = SREEntry.objects.all().order_by('-published_date')[:100]
-    serializer = SREEntrySerializer(entries, many=True)
-    data = serializer.data
-
-    if data:
-        cache.set('sre_entries', data, 3600)
-
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """SRE haberlerini suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'sre')
 
 
 @api_view(['POST'])
@@ -449,16 +296,13 @@ def fetch_sre(request):
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def clear_sre_cache(request):
-    """SRE cache ve database'i temizle"""
+    """SRE veritabanini temizle"""
     try:
-        cache.delete('sre_entries')
-        cache.delete('sre_last_update')
-
         SREEntry.objects.all().delete()
 
         return Response({
             'success': True,
-            'message': 'SRE cache ve veritabani temizlendi'
+            'message': 'SRE veritabani temizlendi'
         })
     except Exception:
         logger.exception('clear_sre_cache basarisiz')
@@ -489,22 +333,6 @@ def get_sre_stats(request):
         'total': total,
         'by_source': by_source,
         'last_update': last_update,
-        'cached': cache.get('sre_entries') is not None
-    })
-
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def export_sre(request):
-    """SRE haberlerini JSON olarak disari aktar"""
-    entries = SREEntry.objects.all().order_by('-published_date')
-    serializer = SREEntrySerializer(entries, many=True)
-
-    return Response({
-        'success': True,
-        'data': serializer.data,
-        'exported_at': datetime.now().isoformat(),
-        'count': len(serializer.data)
     })
 
 
@@ -513,29 +341,8 @@ def export_sre(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_devtools(request):
-    """DevTools guncellemelerini getir (cache veya database'den)"""
-    cached_devtools = cache.get('devtools_entries')
-    if cached_devtools:
-        return Response({
-            'success': True,
-            'data': cached_devtools,
-            'cached': True,
-            'count': len(cached_devtools)
-        })
-
-    entries = DevToolsEntry.objects.all().order_by('-published_date')[:100]
-    serializer = DevToolsEntrySerializer(entries, many=True)
-    data = serializer.data
-
-    if data:
-        cache.set('devtools_entries', data, 3600)
-
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
+    """DevTools guncellemelerini suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'devtools')
 
 
 @api_view(['POST'])
@@ -548,16 +355,13 @@ def fetch_devtools(request):
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def clear_devtools_cache(request):
-    """DevTools cache ve database'i temizle"""
+    """DevTools veritabanini temizle"""
     try:
-        cache.delete('devtools_entries')
-        cache.delete('devtools_last_update')
-
         DevToolsEntry.objects.all().delete()
 
         return Response({
             'success': True,
-            'message': 'DevTools cache ve veritabani temizlendi'
+            'message': 'DevTools veritabani temizlendi'
         })
     except Exception:
         logger.exception('clear_devtools_cache basarisiz')
@@ -595,52 +399,17 @@ def get_devtools_stats(request):
         'by_source': by_source,
         'by_type': by_type,
         'last_update': last_update,
-        'cached': cache.get('devtools_entries') is not None
     })
 
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def export_devtools(request):
-    """DevTools guncellemelerini JSON olarak disari aktar"""
-    entries = DevToolsEntry.objects.all().order_by('-published_date')
-    serializer = DevToolsEntrySerializer(entries, many=True)
-
-    return Response({
-        'success': True,
-        'data': serializer.data,
-        'exported_at': datetime.now().isoformat(),
-        'count': len(serializer.data)
-    })
 
 # ==================== AI NEWS ENDPOINTS ====================
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_ai_news(request):
-    """AI Haberlerini getir (cache veya database'den)"""
-    cached_ai = cache.get('ai_entries')
-    if cached_ai:
-        return Response({
-            'success': True,
-            'data': cached_ai,
-            'cached': True,
-            'count': len(cached_ai)
-        })
+    """AI haberlerini suzulmus, siralanmis ve sayfalanmis getir (news/liste_sorgusu.py)"""
+    return liste_yaniti(request, 'ai')
 
-    entries = AINewsEntry.objects.all().order_by('-published_date')[:100]
-    serializer = AINewsEntrySerializer(entries, many=True)
-    data = serializer.data
-
-    if data:
-        cache.set('ai_entries', data, 3600)
-
-    return Response({
-        'success': True,
-        'data': data,
-        'cached': False,
-        'count': len(data)
-    })
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -652,16 +421,13 @@ def fetch_ai_news(request):
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def clear_ai_cache(request):
-    """AI cache ve database'i temizle"""
+    """AI veritabanini temizle"""
     try:
-        cache.delete('ai_entries')
-        cache.delete('ai_last_update')
-
         AINewsEntry.objects.all().delete()
 
         return Response({
             'success': True,
-            'message': 'AI cache ve veritabani temizlendi'
+            'message': 'AI veritabani temizlendi'
         })
     except Exception:
         logger.exception('clear_ai_cache basarisiz')
@@ -691,21 +457,6 @@ def get_ai_stats(request):
         'total': total,
         'by_source': by_source,
         'last_update': last_update,
-        'cached': cache.get('ai_entries') is not None
-    })
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def export_ai_news(request):
-    """AI Haberlerini JSON olarak disari aktar"""
-    entries = AINewsEntry.objects.all().order_by('-published_date')
-    serializer = AINewsEntrySerializer(entries, many=True)
-
-    return Response({
-        'success': True,
-        'data': serializer.data,
-        'exported_at': datetime.now().isoformat(),
-        'count': len(serializer.data)
     })
 
 
@@ -722,13 +473,100 @@ def get_saglik(request):
     """
     from django.utils.timezone import now
 
+    from . import gemini, kayit_cevirmenleri
     from .fetch_runs import bolum_ozetleri, ceviri_kuyrugu_ozeti
 
     govde = cache.get('saglik_ozeti')
     if govde is None:
+        # Birincil Gemini hep; yedek (gemini2/openrouter/deepl, sayac oneki) yalniz ayarliysa: anahtar
+        # (ve gerekiyorsa model) dolu. Ozetler anahtar degeri tasimaz (G7, PR-C).
+        butce = {'gemini': gemini.butce_ozeti()}
+        butce.update({cevirmen.onek: cevirmen.butce_ozeti()
+                      for cevirmen in kayit_cevirmenleri.YEDEKLER if cevirmen.ayarli()})
         govde = {'generated_at': now().isoformat(), 'sections': bolum_ozetleri(),
-                 'translation_queue': ceviri_kuyrugu_ozeti()}
+                 'translation_queue': ceviri_kuyrugu_ozeti(),
+                 'translation_budget': butce}
         cache.set('saglik_ozeti', govde, SAGLIK_CACHE_SURESI)
+    return Response(govde)
+
+
+GUNDEM_CACHE_SURESI = 120
+GUNDEM_CACHE_ANAHTARI = 'gundem_ozeti'
+
+
+def _gundem_ogeleri(simdi):
+    """Bes bolumden son 72 saatin kayitlari (CVE yok); her model tek sorgu, yalniz gerekli alanlar."""
+    from datetime import timedelta
+
+    from .gundem import PENCERE_SAAT, Ogeler
+
+    alt = simdi - timedelta(hours=PENCERE_SAAT)
+    kaynaklar = (('news', NewsArticle, 'date'), ('kubernetes', KubernetesEntry, 'published_date'),
+                 ('sre', SREEntry, 'published_date'), ('devtools', DevToolsEntry, 'published_date'),
+                 ('ai', AINewsEntry, 'published_date'))
+    ogeler = []
+    for bolum, model, yayin_alani in kaynaklar:
+        satirlar = model.objects.filter(created_at__gte=alt).values(
+            'id', 'source', 'original_title', 'created_at', yayin_alani, 'translation_provider', 'turkish_title')
+        ogeler.extend(
+            Ogeler(bolum=bolum, id=s['id'], source=s['source'], baslik=s['original_title'],
+                   created_at=s['created_at'], yayin=s[yayin_alani], ceviri=s['translation_provider'],
+                   tr_baslik=s['turkish_title'])
+            for s in satirlar)
+    return ogeler
+
+
+def _gundem_hesapla():
+    """Gundem yanit govdesi: secilen olaylar, temsilci kayitlar bolumun kendi serilestiricisiyle."""
+    from django.utils.timezone import now
+
+    from . import gundem
+
+    simdi = now()
+    secilenler = gundem.olaylari_sec(_gundem_ogeleri(simdi), simdi)
+    serilestiriciler = {'news': (NewsArticle, NewsArticleSerializer),
+                        'kubernetes': (KubernetesEntry, KubernetesEntrySerializer),
+                        'sre': (SREEntry, SREEntrySerializer),
+                        'devtools': (DevToolsEntry, DevToolsEntrySerializer),
+                        'ai': (AINewsEntry, AINewsEntrySerializer)}
+    idler = {}
+    for olay in secilenler:
+        idler.setdefault(olay['temsilci'].bolum, []).append(olay['temsilci'].id)
+    kayitlar = {}
+    for bolum, liste in idler.items():
+        model, serilestirici = serilestiriciler[bolum]
+        for kayit in model.objects.filter(id__in=liste):
+            kayitlar[(bolum, kayit.id)] = serilestirici(kayit).data
+    olaylar = [{
+        'bolum': olay['temsilci'].bolum,
+        'kayit': kayitlar[(olay['temsilci'].bolum, olay['temsilci'].id)],
+        'kaynak_sayisi': olay['kaynak_sayisi'],
+        'kaynaklar': olay['kaynaklar'],
+        'makale_sayisi': olay['makale_sayisi'],
+        'bolumler': olay['bolumler'],
+        'puan': round(olay['puan'], 2),
+        'ilk': olay['ilk'].isoformat(),
+        'son': olay['son'].isoformat(),
+    } for olay in secilenler]
+    return {'success': True, 'olaylar': olaylar, 'hesaplandi': simdi.isoformat()}
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_gundem(request):
+    """Ana sayfa Gundem karti (2026-11-05): son 72 saatin cok kaynakli olaylari, en cok 6 oge.
+
+    Tokensizdir (arayuz anonim), 120 sn cache'lenir. Hesap hatasi ana sayfayi bozmaz: 500 yerine
+    200 + success False doner ve onbellege yazilmaz. LLM ve dis istek yok.
+    """
+    govde = cache.get(GUNDEM_CACHE_ANAHTARI)
+    if govde is None:
+        try:
+            govde = _gundem_hesapla()
+        except Exception:
+            logger.exception('Gundem hesaplanamadi')
+            return Response({'success': False, 'olaylar': []})
+        cache.set(GUNDEM_CACHE_ANAHTARI, govde, GUNDEM_CACHE_SURESI)
     return Response(govde)
 
 

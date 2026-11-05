@@ -9,7 +9,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Uygulama surumu** | `appVersion` 2026.10.3 (CalVer; imaj etiketi) |
 | **Helm chart** | 2.2.1 (SemVer; etiket `chart-2.2.1`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 603 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 161 Vitest testi, 18 dosya (`frontend/src/`) |
+| **Testler** | 872 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 278 Vitest testi, 24 dosya (`frontend/src/`) |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -51,7 +51,7 @@ Gorsel Archify ile uretildi; etkilesimli HTML surumu repo disinda tutulur.
           ┌──────────▼──┐   ┌──────▼─────────────────────┐
           │  Redis 7    │◄──┤  Celery Worker + Beat       │
           │  cache +    │   │  cekim · ceviri · retranslate│
-          │  broker     │   │  6 saatte bir / 2 saatte bir │
+          │  broker     │   │  6 saatte bir / saatlik tur │
           └─────────────┘   └──────┬───────────────┬──────┘
                                    │               │
                       ┌────────────▼────┐   ┌──────▼──────────────┐
@@ -79,16 +79,23 @@ Ayni kod uc bicimde calisir:
 - **Teknik terim korumasi** — 130+ terim (Kubernetes, Docker, Elasticsearch, CVE, CVSS, vb.) ceviri sirasinda bozulmaz
 - **Turkce imla post-processing** — Cumle basi buyuk harf, noktalama duzeltme, URL/surum koruma
 - **Parca tabanli ceviri** — Uzun makaleler cumle sinirlarindan 4500 karakterlik parcalara bolunerek cevrilir
-- **Genel Bakis** — Ana sayfa (`/`) zafiyet odaklidir: "Zafiyet Durumu · Son 24 Saat" basligi altinda kritik (24 sa), yuksek (7 gun) ve CISA KEV (7 gun) kutulari, son ziyaretten beri yeni kayit cumlesi, CVSS dagilim grafigi, "Oncelikli Zafiyetler" listesi, "Gundem" ve bir sonraki cekim saati; ozet sayilari yalniz `GET /api/ozet/`'ten, Gundem diger bes bolumun liste uclarindan gelir
+- **Genel Bakis** — Ana sayfa (`/`) zafiyet odaklidir: "Zafiyet Durumu · Son 24 Saat" basligi altinda kritik (24 sa), yuksek (7 gun) ve CISA KEV (7 gun) kutulari, son ziyaretten beri yeni kayit cumlesi, CVSS dagilim grafigi, "Oncelikli Zafiyetler" listesi, "Gundem" ve bir sonraki cekim saati; ozet sayilari yalniz `GET /api/ozet/`'ten, Gundem `GET /api/gundem/`'den gelir (asagidaki madde)
+- **Gundem** — Genel Bakis'teki kart, bes bolumun (Siber Guvenlik, Kubernetes, SRE, DevTools, Yapay Zeka; CVE haric) son 72 saatini tarar ve cok kaynakta birden yer alan buyuk olaylari one cikarir ([tasarim](docs/superpowers/specs/2026-11-05-gundem-puani-design.md)). Hesap sunucuda `news/gundem.py` icindedir; LLM ve dis istek yoktur:
+  - **Pencere:** `created_at` son 72 saat; ek olarak yayin tarihi 4 gunden eskiyse kayit disarida kalir (kaynak eski yazilari yeniden yayinlarsa sahte taze olay cikmaz)
+  - **Olay gruplama:** Ingilizce **orijinal basliklar** uzerinden. Uydurma adlar (`PHP2Shell` gibi) ve ayni CVE kimligi tek basina baglar; ortak nadir bir ozel ad + baslik benzerligi baglar; ayni kaynaktan iki makale ancak yuksek benzerlikte ayni olay sayilir. Secim aninda, ayni ozneyi tasiyan cok kaynakli olaylar birlestirilir (tek kaynakli satirlar bu birlestirmeye girmez)
+  - **Ozet basliklari:** cok konulu bultenler (THN "ThreatsDay" / "Weekly Recap", Help Net Security "Week in review", SecurityWeek "In Other News", "+ N more", iki ayri haberi `;` ile baglayan mansetler) iki olay arasinda kopru kurmaz; yalniz tek bir olaya uyuyorsa ona tekrar olarak katilir. Kaynak sayisina ve rozete girmez, temsilci olmaz; bir bulten tek kaynakli haberi "cok kaynakli" yapamaz
+  - **Puan:** her kaynagin tazelik carpani (24 saat yari omur) toplanir (ayri kaynak sayisi) + 0,5 x tekrar makalesi + 1,5 x etki sozcugu (hack, breach, zero-day gibi); tum yaslar esitse eski "ayri kaynak sayisi" olcusuyle ayni sonucu verir
+  - **Liste:** en cok 6 oge; once cok kaynakli olaylar (puan sirasiyla), kalan yerler en yeni kayitlarla dolar. Cok kaynakli satirda "N kaynak" rozeti vardir; kaynak adlari rozetin ipucunda ve ekran okuyucu adinda yer alir
 - **Ortak okuma paneli** — Tum bolumler ayni panelde acilir: metin varsayilan olarak Turkce okunur, "Orijinali goster" ile ingilizce asil metin acilir; cevrilmemis kayit orijinal metinle ve "Cevrilmedi: orijinal metin" uyarisiyla gosterilir, cevrilemeyen paragraflar isaretlenir; CVE kayitlarinda CVSS, KEV satiri ve kaynak baglantilari yer alir
 - **Paylasilabilir baglanti** — Panel acikken adres `?kayit=<id>` alir (ornek `/news?kayit=123`); adres kopyalanip acilinca ayni kayit okunur, geri tusu paneli kapatir, silinmis/bilinmeyen kimlik paneli kapali birakir
 - **Karanlik tema** — Yalnizca koyu tema (`<html data-bs-theme="dark">`); tema dugmesi yoktur. Vurgu `#7aa2ff` → `#b98bff`, kritik `#ff5d8f`, yuksek `#ffb35d`; sistem yazi tipleri, harici font/CDN yok (CSP degismez), `prefers-reduced-motion` icin animasyonlar durur ([tasarim](docs/superpowers/specs/2026-10-31-arayuz-yenileme-design.md))
 - **DevTools takibi** — Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle, LiteLLM, LangGraph, Langfuse, GitLab, Keycloak release guncellemeleri
 - **CISA KEV** — Aktif somurulen zafiyetler (Known Exploited Vulnerabilities) CVE bolumunde ayri kaynak; NVD API'sinin `hasKev` filtresiyle, eklenme tarihi ve federal son tarih bilgisiyle. Eklenme tarihi `CVEEntry.kev_added_date` alaninda (migration 0016) tutulur; NVD yolu bir KEV kaydini yeniden yazsa da bu tarihi ezmez; Genel Bakis'in KEV kutusu bu alana gore sayar
-- **Tarih filtresi** — 1-30 gun (haberler) / 1-90 gun (CVE, Kubernetes, SRE, Yapay Zeka) / 1-120 gun (DevTools) slider ile filtreleme (`news/serializers.py` sinirlari)
+- **Filtre, siralama ve sayfalama** — Alti bolumun hepsi ayni filtre cubugunu kullanir: Donem (1/3/7/14/30 gun veya Tumu, varsayilan 7), Siralama (yeni/eski; CVE'de CVSS), Kaynaklar, bolume ozel dugmeler (CVE: onem; Kubernetes: kategori). Gercek kayit sayisi satiri, numarali sayfalar (sayfa basina 25) ve adrese yazilan durum (`?gun=tumu&sirala=cvss&sayfa=2&onem=kritik&kaynak=...`) vardir; adres kopyalanip acilinca ayni gorunum gelir. Filtre ve siralama sunucuda `created_at` uzerinden, veritabanindan yapilir ([tasarim](docs/superpowers/specs/2026-11-05-filtre-siralama-sayfalama-design.md))
+- **Cekim penceresi** — Cek dugmesi `min(gun, 15)` gunluk kayit ceker (`news/serializers.py` sinirlari: 1-30 gun haberler, 1-90 CVE/Kubernetes/SRE/Yapay Zeka, 1-120 DevTools)
 - **Yeniden denemeli cekim** — Gecici 429/5xx ve baglanti hatalarinda 2 ek deneme, ussel bekleme, `Retry-After`'a uyum (`news/base_scraper.oturum_kur`); onceden tek bir 503 kaynagi o tur bos birakiyordu
-- **CVSS siddet filtresi** — Kritik / Yuksek / Orta / Dusuk (CVE sayfasi)
-- **HTML rapor disa aktarma** — Her bolumden koyu temali, yazdirilabilir HTML rapor indirilebilir
+- **CVSS siddet filtresi** — Kritik / Yuksek / Orta / Dusuk (CVE sayfasi); sunucuda CVSS araliklariyla (`onem`) uygulanir, "Tumunu goruntule" `/cve?sirala=cvss` acar
+- **HTML rapor disa aktarma** — Her bolumden koyu temali, yazdirilabilir HTML rapor indirilebilir; rapor o anki filtre ve siralamayi kullanir, en fazla 500 kayit icerir ve fazlaysa raporda not duser (`utils/rapor.js`). Okuma paneli, kaydi sayfadan cikmis olsa da acik kalir
 - **Entegrasyon API (`/api/v1/`)** — Token'li, imlecli delta okuma; OpenAPI 3 semasi ve Swagger UI; manuel tetikleme ve is takibi ([ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md))
 - **Cekim gorunurlugu** — Her cekim `FetchRun` olarak kaydedilir; `GET /api/v1/status/` bolum basina tazelik ve son durum verir ([ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md))
 - **Ceviri rozetleri** — Her kayit saglayicisini tasir (LibreTranslate / Gemini); bekleyen cevirilerde Ingilizce metin kaybolmaz
@@ -194,7 +201,7 @@ Ayni kod uc bicimde calisir:
 | **Frontend** | React 18, Vite 6, React Bootstrap 2.9, React Router DOM 7, Axios, react-hot-toast; Node 22; yalniz koyu tema (sistem yazi tipleri, `src/styles/tema.css`) |
 | **Veri** | PostgreSQL 16 (compose ve K8s; SQLite yalniz `DEBUG=True` ile hostta), Redis 7 (cache + Celery broker, django-redis) |
 | **Scraping** | BeautifulSoup4, lxml, Requests |
-| **Ceviri** | Cekim aninda yerel LibreTranslate 1.9.6 (aninda Turkce, rozetli); retranslate 2 saatte bir bekleyen ve LibreTranslate kayitlarini Gemini API (gemini-3.5-flash-lite, ucretsiz katman, kayit basina tek istek) ile yukseltir + merkezi post-processing |
+| **Ceviri** | Cekim aninda yerel LibreTranslate 1.9.6 (aninda Turkce, rozetli); retranslate saatlik turlarla (gunde 20) bekleyen ve onemli LibreTranslate kayitlarini (CVE'de yalniz CVSS >= 7 ya da KEV) Gemini API (gemini-3.5-flash-lite, ucretsiz katman, kayit basina tek istek) ile yeniden eskiye dogru yukseltir + merkezi post-processing |
 | **Konteyner / dagitim** | Docker Compose, cok asamali Dockerfile'lar (non-root, digest sabitli taban imajlar), Nginx 1.31 (frontend imaji), Helm chart `tech-radar` |
 | **Platform (ayri repolar)** | `yerel-platform`: paylasilan PostgreSQL + Terraform (Argo CD, Vault, VSO); `yerel-gitops`: Argo CD Application'lari ve ortam degerleri |
 | **CI / guvenlik** | GitHub Actions, CodeQL, Trivy, gitleaks, OWASP ZAP, Dependency Review, zizmor, OpenSSF Scorecard, Dependabot, kubeconform |
@@ -213,7 +220,7 @@ Tam surumler [`requirements.txt`](requirements.txt) ve [`frontend/package.json`]
 
 ### Hizli Baslangic
 
-`.env.example`'i `.env` olarak kopyalayin. `SECRET_KEY` (`openssl rand -hex 32`) ve `DB_PASSWORD` (yerel-platform'daki `cybernews` kullanicisinin parolasi) zorunludur; `GEMINI_API_KEY` istege baglidir (bos birakilirsa Gemini hic denenmez, sistem LibreTranslate ile calisir). Veritabani ayri `yerel-platform` reposundaki paylasilan PostgreSQL'dir; compose'dan once orada `docker compose up -d` calismis olmalidir:
+`.env.example`'i `.env` olarak kopyalayin. `SECRET_KEY` (`openssl rand -hex 32`) ve `DB_PASSWORD` (yerel-platform'daki `cybernews` kullanicisinin parolasi) zorunludur; `GEMINI_API_KEY` istege baglidir (bos birakilirsa Gemini hic denenmez, sistem LibreTranslate ile calisir); `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `DEEPL_API_KEY` ve `GEMINI_FALLBACK_MODEL` ucretsiz yedek ceviri zincirini acar (bos = kapali, bkz. [Ceviri Sistemi](#6-ucretsiz-yedek-ceviri-zinciri)). Veritabani ayri `yerel-platform` reposundaki paylasilan PostgreSQL'dir; compose'dan once orada `docker compose up -d` calismis olmalidir:
 
 ```bash
 git clone https://github.com/AdanedhelWrites/tech-radar.git
@@ -300,7 +307,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-603 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+872 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -315,7 +322,7 @@ scripts/pg_test.sh --sqlite test news.tests.test_cursor
 
 Frontend'de ESLint (flat config, `frontend/eslint.config.js`; `npm run lint`) CI'da build'den once kosar: `@eslint/js` onerilenleri, `react-hooks/rules-of-hooks` (hata) ve `exhaustive-deps` (uyari). Bolum sayfalarindaki 5 sn'lik liste yenileme `hooks/useAraliklaYenile` ile sekme arka plandayken durur.
 
-Frontend birim testleri Vitest + Testing Library ile `frontend/src/**/*.test.{js,jsx}` altindadir (`npm test`); CI'da lint ile build arasinda kosar. 161 test, 18 dosya; kapsam: HTML kacisi (`utils/html.js`), goreli zaman (`utils/zaman`), aralikli yenileme hook'u, ceviri rozeti, saglik seridi (`SaglikSeridi`), Genel Bakis (`genel/`), ortak okuma paneli (`okuma/`, `utils/okuma*.js`), `?kayit=` baglantisi (`useSeciliKayit`), bolum sayfalari (`bolum/`), CVE listesi ve son ziyaret (`utils/sonZiyaret.js`, `useZiyaretTabani`). Worker baslatma zaman asimi gorulurse (Windows bind mount'ta yavas kurulum) `npm test -- --maxWorkers=2` ile kosun; o da asarsa `frontend`'i konteynerin kendi dosya sistemine (or. `/tmp`) kopyalayip orada kosun (tum takim ~10 sn).
+Frontend birim testleri Vitest + Testing Library ile `frontend/src/**/*.test.{js,jsx}` altindadir (`npm test`); CI'da lint ile build arasinda kosar. 278 test, 24 dosya; kapsam: liste sorgusu hook'lari (`useListeSorgusu`), sayfa cubugu (`SayfaCubugu`), rapor olusturma (`utils/rapor.js`), HTML kacisi (`utils/html.js`), goreli zaman (`utils/zaman`), aralikli yenileme hook'u, ceviri rozeti, saglik seridi (`SaglikSeridi`), Genel Bakis (`genel/`), ortak okuma paneli (`okuma/`, `utils/okuma*.js`), `?kayit=` baglantisi (`useSeciliKayit`), bolum sayfalari (`bolum/`), CVE listesi ve son ziyaret (`utils/sonZiyaret.js`, `useZiyaretTabani`). Worker baslatma zaman asimi gorulurse (Windows bind mount'ta yavas kurulum) `npm test -- --maxWorkers=2` ile kosun; o da asarsa `frontend`'i konteynerin kendi dosya sistemine (or. `/tmp`) kopyalayip orada kosun (tum takim ~10 sn).
 
 CI (`Backend (Django testleri)`) testleri PostgreSQL 16 servisiyle, `DEBUG=False` ve gercek bir `SECRET_KEY` ile kosar; migration'larin eksiksiz oldugu (`makemigrations --check`) ayni iste dogrulanir. Yeni bir test yazarken kodu gecici olarak bozup testin kirmiziya dondugunu gorun; mock'lanmis saglayici testlerinde "yesil ama hicbir seyi sinamiyor" tuzagi kolaydir.
 
@@ -389,17 +396,35 @@ Her bolum (news, cve, k8s, sre, devtools, ai) ayni endpoint yapisini kullanir:
 
 | Method | Endpoint Deseni | Aciklama |
 |--------|-----------------|----------|
-| GET | `/api/{bolum}/` | Kayitli verileri listele |
+| GET | `/api/{bolum}/` | Kayitli verileri listele (filtre, siralama ve sayfalama parametreleri asagida) |
 | POST | `/api/{bolum}/fetch/` | Arka planda cekim baslat — Celery task (body: `{"days": 7, "sources": [...]}`) |
 | POST | `/api/{bolum}/clear/` | Tum verileri sil (**yonetici oturumu gerekir**, aksi halde 403) |
-| GET | `/api/{bolum}/stats/` | Istatistikleri getir |
-| GET | `/api/{bolum}/export/` | HTML rapor olarak disa aktar |
-| GET | `/api/saglik/` | Bolum basina son basarili cekim, son durum, ceviri bekleyen/vazgecilen, sessiz kaynaklar (anonim, 60 sn cache) |
+| GET | `/api/{bolum}/stats/` | Istatistikleri getir: `{success, total, by_source, last_update}`; CVE'de ayrica `by_severity`, Kubernetes'te `by_category`, DevTools'ta `by_type` |
+| GET | `/api/saglik/` | Bolum basina son basarili cekim, son durum, ceviri bekleyen/vazgecilen, yukseltmeden vazgecilen (`upgrade_given_up`), sessiz kaynaklar; ust duzeyde `translation_budget.gemini` (Gemini gunluk butcesi) (anonim, 60 sn cache) |
+| GET | `/api/gundem/` | Gundem karti: son 72 saatin en cok 6 olayi, CVE haric (anonim, 120 sn cache). Yanit `{success, olaylar[], hesaplandi}`; her olay `{bolum, kayit, kaynak_sayisi, kaynaklar[], makale_sayisi, bolumler[], puan, ilk, son}` (`kayit` bolumun kendi serilestiricisinin ciktisidir). Hesap hatasinda 500 yerine `200 {success: false, olaylar: []}` doner ve cache'e yazilmaz |
 | GET | `/api/ozet/` | Genel Bakis ozeti: `critical_count` (CVSS >= 9.0, son 24 sa), `high_count` (7.0-8.9, son 7 gun), `kev_count` (`kev_added_date` son 7 gun), `priority` (en fazla 5 oncelikli CVE), `chart` (CVSS noktalari), `unscored_count`, `sources{total,silent}`, `fetch{last_success_at,next_at}`; `?since=<ISO tarih>` ile ek olarak `new_since_count` (anonim, 60 sn cache; `new_since_count` cache'e girmez) |
 
 **Bolum isimleri:** `news` (Siber Guvenlik, fetch endpoint: `/api/fetch/`), `cve`, `k8s`, `sre`, `devtools`, `ai`
 
-> **Not:** Siber guvenlik bolumunun fetch, clear, stats ve export endpoint'leri `/api/news/` altinda degil, dogrudan `/api/` altindadir: `/api/fetch/`, `/api/clear/`, `/api/stats/`, `/api/export/`
+### Liste parametreleri
+
+Alti liste ucu (`/api/news/`, `/api/cve/`, `/api/k8s/`, `/api/sre/`, `/api/devtools/`, `/api/ai/`) sorguyu veritabanindan yapar; bolum basina liste cache'i yoktur (eski 100 kayitlik cache 2026-11-05'te kaldirildi). Filtre ve siralama `created_at` alanina gore calisir. Gecersiz deger hata vermez, varsayilana duser.
+
+| Parametre | Degerler | Aciklama |
+|-----------|----------|----------|
+| `gun` | `1`, `3`, `7`, `14`, `30` | Son N gun; yoksa tum kayitlar |
+| `sirala` | `yeni` (varsayilan), `eski`; CVE'de ayrica `cvss` | Siralama |
+| `sayfa` | 1, 2, ... | Sayfa numarasi; son sayfayi asan deger son sayfaya indirilir |
+| `boyut` | varsayilan 25, en fazla 100 | Sayfa boyutu |
+| `kaynak` | virgulle ayrilmis liste | Kaynak adi tam eslesme |
+| `onem` | CVE: `kritik`, `yuksek`, `orta`, `dusuk` | CVSS araliklari |
+| `kategori` | Kubernetes: `kubernetes` | Kategori filtresi |
+
+Yanit: `{success, data, cached, count, toplam, sayfa, sayfa_sayisi, boyut}`. `cached` geriye uyumluluk icin kalir ve her zaman `false`'tur; `count` sayfadaki kayit sayisi, `toplam` filtreye uyan tum kayit sayisidir. Ornek: `/api/cve/?gun=30&sirala=cvss&onem=kritik&sayfa=2`. `/api/v1/` degismedi.
+
+> **Not:** Siber guvenlik bolumunun fetch, clear ve stats endpoint'leri `/api/news/` altinda degil, dogrudan `/api/` altindadir: `/api/fetch/`, `/api/clear/`, `/api/stats/`
+>
+> **Kaldirilan uclar (2026-11-05):** `/api/{bolum}/export/` (tum tabloyu tek yanitta donduruyordu). HTML rapor arayuzde liste ucundan kurulur (`frontend/src/utils/rapor.js`); toplu veri isteyen dis tuketiciler `/api/v1/` imlecli listesini kullanir.
 
 ---
 
@@ -578,19 +603,22 @@ cybersecurity_news/
 │
 ├── news/                       # Ana Django uygulamasi
 │   ├── models.py               # NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEntry, AINewsEntry
-│   ├── views.py                # API endpoint'leri (6 bolum x 5 endpoint = 30)
-│   ├── tasks.py                # Celery task'lari (cekim + ceviri + cache)
+│   ├── views.py                # API endpoint'leri (6 bolum x 4 endpoint + saglik, ozet, gundem)
+│   ├── tasks.py                # Celery task'lari (cekim + ceviri)
 │   ├── serializers.py          # DRF serializer'lari
 │   ├── urls.py                 # API URL pattern'leri
 │   ├── translation_utils.py    # Merkezi ceviri modulu (terim koruma + post-processing)
 │   ├── translation_providers.py# Saglayici zinciri: LibreTranslate (cekim) + devre kesici
-│   ├── gemini.py               # Gemini API istemcisi, hiz siniri, gunluk butce, CVE payi
-│   ├── retranslate.py          # Bekleyenleri cevir + LibreTranslate kayitlarini Gemini'ye yukselt
-│   ├── cache_utils.py          # Redis cache anahtarlari ve temizleme
+│   ├── gemini.py               # Gemini API istemcisi, hiz siniri, gunluk butce, tur payi
+│   ├── kayit_cevirmenleri.py   # Ucretsiz yedek cevirmenler: Gemini 2. model, OpenRouter, DeepL Free + zincir
+│   ├── retranslate.py          # Bekleyenleri cevir + LibreTranslate kayitlarini Gemini'ye yukselt (yedek zincirle)
+│   ├── liste_sorgusu.py        # Liste ucleri icin filtre, siralama ve sayfalama sorgusu
+│   ├── gundem.py               # Gundem: olay gruplama ve puan (saf fonksiyonlar, /api/gundem/)
 │   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
 │   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
-│   ├── tests/                  # 603 test (v1 sozlesmesi, ceviri, saklama, migration, ayar)
+│   ├── tests/                  # 872 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
+│   │   └── fixtures/gundem_basliklari.json  # Gundem gruplama testlerinin gercek baslik ornekleri
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
 │   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
 │   ├── cve_scraper.py          # 5 CVE kaynagi scraper'i
@@ -632,9 +660,15 @@ cybersecurity_news/
 │   │   │   ├── CeviriEtiketi.jsx       # Ceviri saglayici rozeti
 │   │   │   ├── genel/                  # Genel Bakis: durum kutulari, CVSS grafigi, oncelikli liste, gundem
 │   │   │   ├── bolum/BolumSayfasi.jsx  # Bolum sayfalari icin ortak liste + panel iskeleti
+│   │   │   ├── bolum/HaberBolumu.jsx   # Haber bolumleri icin ortak filtre cubugu + liste
+│   │   │   ├── bolum/SayfaCubugu.jsx   # Numarali sayfa cubugu
+│   │   │   ├── bolum/secenekler.js     # Donem, siralama ve onem secenekleri
 │   │   │   ├── cve/CveSatiri.jsx       # CVE liste satiri
 │   │   │   └── okuma/OkumaPaneli.jsx   # Ortak okuma paneli (Turkce varsayilan, orijinal istege bagli)
 │   │   ├── hooks/useSeciliKayit.js     # ?kayit= derin baglantisi
+│   │   ├── hooks/useListeSorgusu.js    # Filtre/siralama/sayfa durumu <-> adres
+│   │   ├── hooks/useBolumVerisi.js     # Bolum listesini sunucudan ceker (sayfali)
+│   │   ├── utils/rapor.js              # Mevcut filtrelerle HTML rapor (en fazla 500 kayit)
 │   │   └── services/
 │   │       └── api.js          # Axios API servisleri
 │   ├── Dockerfile              # Production build: Node 22 + Nginx 1.31 (non-root)
@@ -680,7 +714,7 @@ cybersecurity_news/
 ├── entrypoint.sh               # Startup: wait-for-db + migrate + collectstatic (compose)
 ├── requirements.txt            # Python bagimliliklari (surumler sabit)
 ├── SECURITY.md                 # Zafiyet bildirimi: GitHub private vulnerability reporting
-├── .env.example                # SECRET_KEY, DB_PASSWORD (zorunlu), GEMINI_API_KEY, GITHUB_TOKEN
+├── .env.example                # SECRET_KEY, DB_PASSWORD (zorunlu), GEMINI_API_KEY, yedek ceviri anahtarlari, GITHUB_TOKEN
 ├── .gitleaksignore             # Gecmis commit'lere sabitli placeholder baseline'i (silinmez)
 ├── .gitignore                  # .env, .fazb/, db.sqlite3*, staticfiles/, node_modules
 ├── .dockerignore               # .env ve .env.* imaja girmez
@@ -710,7 +744,7 @@ Terimler uzunluktan kisaya siralanarak islenir — kisa terimlerin kelime icinde
 
 ### 2. Parca Tabanli Ceviri
 
-Uzun metinler cumle sinirlarindan 4500 karakterlik parcalara bolunur (saglayici istek boyutu sinirlarini asmamak icin). Her parca icin ayri terim koruma uygulanir. LibreTranslate bu parcalari kendi icinde ayrica 160 karakterlik alt parcalara boler (`LIBRETRANSLATE_CHUNK_CHARS`); Gemini yukseltmesi kayit basina tek istekte calisir.
+Uzun metinler cumle sinirlarindan 4500 karakterlik parcalara bolunur (saglayici istek boyutu sinirlarini asmamak icin). Her parca icin ayri terim koruma uygulanir. LibreTranslate bu parcalari kendi icinde ayrica 160 karakterlik alt parcalara boler (`LIBRETRANSLATE_CHUNK_CHARS`); Gemini yukseltmesi ise birden cok kaydi tek istekte paketler (bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)).
 
 ### 3. Turkce Post-Processing
 
@@ -726,18 +760,43 @@ Ceviri sonrasi otomatik duzeltmeler:
 ### 4. Hiz Siniri ve Devre Kesici
 
 - **LibreTranslate (cekim aninda)** — Baglanti hatasi, zaman asimi veya 5xx gelirse kendi Redis devre kesicisi `LIBRETRANSLATE_COOLDOWN` (60 sn, varsayilan) boyunca acilir; 4xx devre kesiciyi acmaz. Yeniden deneme ve ayri bir hiz siniri yoktur, eszamanlilik compose CPU siniriyla dogal olarak sinirlanir.
-- **Gemini (retranslate yukseltmesi)** — Istekler arasi en az `GEMINI_MIN_INTERVAL` saniye (Redis uzerinden tum worker'lar icin ortak), gunluk `GEMINI_DAILY_BUDGET` istek tavani, 429/5xx sonrasi `GEMINI_COOLDOWN` saniye devre kesici.
+- **Gemini (retranslate yukseltmesi)** — Istekler arasi en az `GEMINI_MIN_INTERVAL` saniye (Redis uzerinden tum worker'lar icin ortak), gunluk `GEMINI_DAILY_BUDGET` istek tavani (retranslate turlarina yayilir, bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)), gecici 500/502/503/504 ve baglanti kopmasi once `GEMINI_GECICI_BEKLEMELER` (varsayilan `5,15` sn) ile yeniden denenir; 429/5xx ve 401/403/404 sonrasi `GEMINI_COOLDOWN` saniye devre kesici.
 - **Kayip yok** — Hicbir saglayici cevirmezse haber tam Ingilizce metniyle kaydedilir ve `needs_translation=True` isaretlenir; sonraki cekimde veya `retranslate_pending` turunde otomatik olarak yeniden denenir.
 
 ### 5. Retranslate ve Gemini Yukseltme
 
-`retranslate_pending` Celery Beat gorevi her 2 saatte bir (tek saatlerde, dakika 05) calisir ve iki isi yapar: bekleyen (`needs_translation=True`) kayitlari LibreTranslate ile cevirir, ardindan `translation_provider='libretranslate'` kayitlari Gemini API (`gemini-3.5-flash-lite`) ile kayit basina tek istekte yukseltir. Yukseltme bolum basina `RETRANSLATE_UPGRADE_BATCH` kayitla sinirlidir. Eski `google` etiketli kayitlar yukseltilmez, etiketli kalir.
+`retranslate_pending` Celery Beat gorevi (`retranslate-pending-hourly`) saatlik calisir: dakika 05, saatler 1-5, 7-11, 13-17 ve 19-23; cekim saatleri (00/06/12/18) atlanir, yani gunde 20 tur. Her tur iki isi yapar: bekleyen (`needs_translation=True`) kayitlari LibreTranslate ile cevirir (bolum basina imlec sirasiyla), ardindan `translation_provider='libretranslate'` kayitlari Gemini API (`gemini-3.5-flash-lite`) ile yukseltir; birden cok kayit tek istekte (paket) cevrilir.
+
+- **Onem sinifi:** CVE'lerde yalniz CVSS >= 7.0 ya da CISA KEV'deki kayitlar Gemini adayidir; digerleri (dusuk/orta skorlu ya da skoru olmayan) kalici olarak LibreTranslate cevirisiyle kalir, ne bekleyen ne yukseltme asamasinda Gemini'ye gitmez. Diger bolumlerde butun kayitlar adaydir.
+- **Yeni kayit once:** Yukseltme asamasinin imleci yoktur; her tur bolum basina en fazla `RETRANSLATE_UPGRADE_BATCH` kaydi `created_at` azalan sirayla (en yeniden eskiye) alir. Eski LibreTranslate birikimi butce kaldikca geriye dogru erir.
+- **Bolum onceligi:** Sira CVE, haber, AI, SRE, DevTools, Kubernetes'tir ve katidir: ustteki bolumun adaylari bitmeden alttaki Gemini payi almaz. Bolumler icin ayrilmis bir pay yoktur (`GEMINI_CVE_RESERVE` kaldirildi, bkz. [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md)).
+- **Paketleme:** Yukseltme asamasi adaylari siraya sadik kalarak paketler; paket `GEMINI_BATCH_CHARS` (varsayilan 10000) karakteri ya da `GEMINI_BATCH_MAX` (varsayilan 15) kaydi asmaz. Yapili Kubernetes degisiklik kayitlari paketlenmez, tek basina gider. Paket cevirisi kayit basina dogrulanir; ek olarak capa capraz denetimi (CVE/GHSA numarasi, URL, kod parcasi, 3+ parcali surum) cevirisi baska kaydin capasini tasiyan kaydi reddeder (ayni bicimli yer degisimi onlenir); capasiz kayitlar etkilenmez. Paketli K8s cevirileri de ayni yapi isareti denetiminden gecer.
+- **Bolme:** Kesilen (MAX_TOKENS), bozuk yanitli (SAFETY vb. tamamlanmamis ya da cozulemeyen JSON, `yanit_bozuk`) ya da kayda ozgu 4xx alan paket ikiye bolunup ayni turda yeniden denenir; yalniz hala basarisiz olan tek kayit deneme sayacini artirir. Bekleyen asama kayit basina calismaya devam eder.
+- **Tur payi:** Gunluk butce (`GEMINI_DAILY_BUDGET`, varsayilan 450) gune yayilir. Bir turun Gemini payi `ceil(kalan gunluk butce / Pasifik gece yarisina kadar kalan tur sayisi)`'dir ve istek (paket) basina sayilir, kayit basina degil; kullanilmayan pay sonraki turlara kalir. Pay biterse yukseltme asamasi `stopped_reason='gemini_tur_payi'` ile durur, bekleyen kayitlar LibreTranslate ile surer; gunluk butce bitmisse sebep `gemini_budget` olur.
+- **Deneme sayaci:** Icerik hatasi (Gemini cevirmedi ya da dogrulama gecmedi) `translation_attempts`'i artirir; `RETRANSLATE_MAX_ATTEMPTS`'a ulasan kayit yukseltme adayi olmaktan cikar (`/api/saglik/` `sections[ad].upgrade_given_up`). Aktarim ve kota hatalari (zaman asimi, baglanti, 429, 5xx) sayaci artirmaz. Gemini 401/403/404 (anahtar, yetki ya da model adi hatasi) ve anahtar/hesap sorunu bildiren 400 (`error.details[].reason=API_KEY_INVALID` ya da `error.status` FAILED_PRECONDITION / PERMISSION_DENIED / UNAUTHENTICATED) devre kesiciyi acar ve butceyi geri verir; sayac artmaz. Diger 400'ler kayda ozgu icerik hatasidir. Beklenmeyen istisna (kod hatasi) da devre kesiciyi acar. Savunma katmani: bir bolumde ayni turda 5 ardisik icerik hatasi (`ARDISIK_HATA_SINIRI`) gelirse o bolumun yukseltmesi o tur durur, kalan adaylar sayilmaz (tur sonucunda `sections[ad].stopped_reason='ardisik_icerik_hatasi'`).
+- **Tekil tur kilidi:** Tur, Redis kilidi `retranslate:kilit` ile korunur (sahip jetonu, TTL `min(RETRANSLATE_TIME_BUDGET + 600, CELERY_TASK_TIME_LIMIT + 60)` sn; olu worker'in kilidi sonraki saatlik turu atlatmaz). Onceki tur surerken baslayan tur `{'skipped': 'locked'}` doner ve `FetchRun` satiri birakmaz.
+- **Gorunurluk:** `/api/saglik/` `translation_budget.gemini` (`used`, `limit`, `period`, `available`, `cooldown`) dondurur; ana sayfa saglik seridi "Gemini kullanilan/sinir" gosterir. Bekleyen var ve son 6 bitmis tur (~6 saat) hic kayit cevirmediyse bolum `stalled` sayilir.
+
+Eski `google` etiketli kayitlar yukseltilmez, etiketli kalir.
 
 **Anahtar alma:** Google AI Studio (aistudio.google.com) → Get API key → Create API key; `cybersecurity_news/.env` icine `GEMINI_API_KEY=...` (gitignore'da). Kart gerekmez; kota asilirsa 429 doner, sistem LibreTranslate ile surer.
 
-**Rozetler:** Her kayit `translation_provider` tasir; arayuzde `Makine çevirisi: LibreTranslate` (sari), `Çeviri: Gemini`, `Çeviri: Google` (eski kayitlar).
+**Rozetler:** Her kayit `translation_provider` tasir; arayuzde `Makine çevirisi: LibreTranslate` (sari), `Çeviri: Gemini`, `Çeviri: OpenRouter`, `Çeviri: DeepL`, `Çeviri: Google` (eski kayitlar).
 
 Kuyruktan dusen kayitlar (`translation_attempts >= RETRANSLATE_MAX_ATTEMPTS`) arayuzde "Cevrilmedi: orijinal metin" rozetiyle gosterilir (rozet kosulu: `needs_translation` ve saglayici bos ve `translation_attempts >= 1`; hic denenmemis taze kayit rozet almaz); admin'de "Ceviri denemelerini sifirla" eylemi secili kayitlari yeniden kuyruga alir. `GEMINI_MAX_CHARS` (12.000) ustu kayitlar bilerek Ingilizce kalir (2026-10-14 karari).
+
+### 6. Ucretsiz Yedek Ceviri Zinciri
+
+Gemini'nin ucretsiz kotasi (gunde ~450 istek) yetmedigi ya da Gemini kapali oldugu gunlerde retranslate, ek ucretsiz saglayicilara duser. Zincir sirasi: **Gemini birincil** (`GEMINI_MODEL`) → **Gemini ikinci model** (`GEMINI_FALLBACK_MODEL`) → **OpenRouter** (ucretsiz model) → **DeepL API Free**. Anahtarlari/modeli bos olan halka zincirde yoktur; hepsi bossa davranis yedeksiz kurulumla aynidir (LibreTranslate ile surer).
+
+- **Ne zaman devreye girer:** Yalniz birincil Gemini gercekten kullanilamazken: gunluk butcesi bitmis, devre kesicisi acik ya da anahtari yok. Bir turun payi (`gemini_tur_payi`) bitmesi yedegi tetiklemez; kayit sonraki turu bekler. Yedekler tur payina tabi degildir, kendi sayac ve devre kesicileriyle sinirlidir. Istek duzeyi bir hata secilen yedegi kapatirsa ayni paket/kayit siradaki halkayla yeniden denenir (deneme sayaci artmaz). Bir yedegin ciktisi dogrulamadan gecmezse kayit ayni turda onu denememis siradaki hazir yedege gider; yalniz boyle yedek kalmadiginda deneme sayaci bir kez artar (ardisik hata serisine de bir kez girer; bekleyen asamada LibreTranslate yine son caredir). Birincil Gemini'nin reddi hemen sayilir, cunku birincil hazirken yedekler kullanilmaz. Yeniden secim paket basina sinirlidir (1 + yedek sayisi), yani bir paket sonsuza dek donmaz.
+- **Kimler gider:** Onem sinifi aynen gecerlidir: CVE'de yalniz CVSS >= 7 ya da KEV adaydir; CVSS < 7, skorsuz ve KEV disi CVE hicbir cevirmene (yedekler dahil) gitmez, LibreTranslate cevirisiyle kalir. Dogrulama (alan, yapi isareti, capa capraz denetimi) tum saglayicilara ayni uygulanir.
+- **Yazilan etiket:** Basarili ceviride `translation_provider` secilen saglayicinin adidir: `gemini` (birincil ve ikinci model), `openrouter` ya da `deepl`. `libretranslate` etiketli kayitlar yukseltme adayidir; OpenRouter/DeepL ile cevrilmis kayitlar sonradan tekrar yukseltilmez.
+- **Yalniz ucretsiz garantileri:** OpenRouter model adi `:free` ile bitmiyorsa (ya da bossa) hazir degil sayilir ve istek atilmaz; anahtar girilmis ama model bos ya da ucretli ise surec basina bir kez uyari loglanir. DeepL yalniz `api-free.deepl.com` ucuna gider (Pro ucu kodda yoktur); `:fx` ile bitmeyen (Free olmayan) `DEEPL_API_KEY` kullanilmaz, surec basina bir kez uyari loglanir (anahtar loga yazilmaz). Gemini ikinci model ayni anahtarin ayri ucretsiz kotasini kullanir. Gemini birincil ve ikinci model yalniz Google projesinde faturalandirma hesabi (billing) yoksa ucretsiz kalir; faturalandirma acik projede ucretsiz katmani olmayan bir model ucretlendirilir. Hicbir halka ucretli moda gecmez; kota bitince durur.
+- **Sayaclar ve donemler:** Gemini ve ikinci model gunluk (Pasifik gunu; `gemini`, `gemini2` onekleri); OpenRouter gunluk (UTC; `OPENROUTER_DAILY_BUDGET`, aralik `OPENROUTER_MIN_INTERVAL`); DeepL **aylik karakter** sayaci (UTC ayi, `DEEPL_MONTHLY_CHARS`). DeepL 456 (kota doldu) dondurur ya da kalan karakter bir istegi karsilamiyorsa sayac ay tavanina doldurulur ve DeepL ay sonuna kadar kapanir (ay degisince sayac kendiliginden sifirlanir).
+- **Gorunurluk:** `/api/saglik/` `translation_budget` birincil `gemini`'ye ek olarak yalniz ayarli yedekleri listeler (`gemini2`, `openrouter`, `deepl`); anahtar degerleri hicbir ozette yer almaz. Ana sayfa saglik seridi, kullanimi 0'dan buyuk olan yedegi gosterir. Rozetler: `Çeviri: OpenRouter`, `Çeviri: DeepL` (Gemini ikinci modeli `Çeviri: Gemini` gosterir).
+- **Anahtarlar:** `OPENROUTER_API_KEY` ve `DEEPL_API_KEY` degerlerini kullanici kendisi alir ve kendi `.env` dosyasina yazar (gitignore'da); depoya, imaja ve ornek dosyaya gercek deger girmez. Docker Compose bu degiskenleri `teknoloji-api` ve `teknoloji-worker`'a gecirir; Helm'de `secrets.openrouterApiKey` / `secrets.deeplApiKey` (chart 3.2.0).
+- **Dagitim sirasi:** Migration `0017` (`translation_provider` secenekleri `openrouter` ve `deepl`) yalniz secenek listesini degistirir, PostgreSQL'de islem yapmaz; yine de once `migrate`, sonra yeni kod dagitilir.
 
 ---
 
@@ -754,7 +813,7 @@ Kuyruktan dusen kayitlar (`translation_attempts >= RETRANSLATE_MAX_ATTEMPTS`) ar
 | DevTools | `fetch_devtools_task` | :40 | 30 |
 | Yapay Zeka | `fetch_ai_news_task` | :50 | 30 |
 
-Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabaninda zaten cevrilmis kayitlar tekrar cevrilmez; yalnizca yeni haberler ve ceviri bekleyen (`needs_translation`) kayitlar LibreTranslate'e gonderilir. Gun araligi task varsayilanidir; her cekim (manuel "Getir" dahil) bu araligin disinda kalan eski kayitlari siler. Bekleyen ve LibreTranslate kayitlarinin Gemini ile yukseltilmesi ayri bir Beat gorevidir (bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)): `retranslate_pending_task`, tek saatlerde dakika 05.
+Tum cekimler (manuel "Getir" dahil) `skip_existing=True` ile calisir: veritabaninda zaten cevrilmis kayitlar tekrar cevrilmez; yalnizca yeni haberler ve ceviri bekleyen (`needs_translation`) kayitlar LibreTranslate'e gonderilir. Gun araligi task varsayilanidir; her cekim (manuel "Getir" dahil) bu araligin disinda kalan eski kayitlari siler. Bekleyen ve LibreTranslate kayitlarinin Gemini ile yukseltilmesi ayri bir Beat gorevidir (bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)): `retranslate_pending_task`, saatlik, dakika 05 (cekim saatleri 00/06/12/18 atlanir; gunde 20 tur).
 
 Her cekim bir `FetchRun` satiri birakir (bolum, baslangic/bitis, `fetched_count`, `saved_count`, durum, hata ozeti, kaynak basina `by_source`). Son durumlar `GET /api/v1/status/` ile okunur; Beat'in gercekten calistigini kontrol etmenin en kisa yolu budur ([ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md)).
 
@@ -825,7 +884,7 @@ helm upgrade --install tech-radar ./helm/tech-radar \
   --wait --wait-for-jobs --timeout 15m
 ```
 
-`secrets.secretKey` ve `secrets.dbPassword` zorunludur (bos birakilirsa render reddedilir); PostgreSQL ve uygulama ayni `dbPassword`'u kullanir. `secrets.geminiApiKey` istege baglidir. Uretimde harici secret yonetimi (external-secrets, sealed-secrets, vault) tercih edin: Secret'i chart disinda yonetiyorsaniz `secrets.existingSecret=<ad>` verin; chart Secret olusturmaz, `secrets.*` zorunlu olmaz. Secret `SECRET_KEY`, `DB_USER`, `DB_PASSWORD`, `GEMINI_API_KEY` anahtarlarini icermelidir; `GITHUB_TOKEN` ve `NVD_API_KEY` istege baglidir (pod'a `optional: true` ile baglanir, yoksa ozellik kapali kalir). Chart 2.2.0'dan itibaren `config.app.logLevel/logFormat`, `sourceSilentRuns`, `celeryTaskSoftTimeLimit/celeryTaskTimeLimit`, `axesFailureLimit/axesCooloffMinutes` degerleri ConfigMap'e yazilir ([CHANGELOG](helm/tech-radar/CHANGELOG.md)).
+`secrets.secretKey` ve `secrets.dbPassword` zorunludur (bos birakilirsa render reddedilir); PostgreSQL ve uygulama ayni `dbPassword`'u kullanir. `secrets.geminiApiKey` istege baglidir; ucretsiz yedek ceviri anahtarlari `secrets.openrouterApiKey` ve `secrets.deeplApiKey` ile modeller/butceler `config.app.geminiFallbackModel`, `openrouterModel`, `openrouterDailyBudget`, `deeplMonthlyChars` vb. (chart 3.2.0) de bos/kapali gelir. Uretimde harici secret yonetimi (external-secrets, sealed-secrets, vault) tercih edin: Secret'i chart disinda yonetiyorsaniz `secrets.existingSecret=<ad>` verin; chart Secret olusturmaz, `secrets.*` zorunlu olmaz. Secret `SECRET_KEY`, `DB_USER`, `DB_PASSWORD`, `GEMINI_API_KEY` anahtarlarini icermelidir; `GITHUB_TOKEN` ve `NVD_API_KEY` istege baglidir (pod'a `optional: true` ile baglanir, yoksa ozellik kapali kalir). Chart 2.2.0'dan itibaren `config.app.logLevel/logFormat`, `sourceSilentRuns`, `celeryTaskSoftTimeLimit/celeryTaskTimeLimit`, `axesFailureLimit/axesCooloffMinutes` degerleri ConfigMap'e yazilir ([CHANGELOG](helm/tech-radar/CHANGELOG.md)).
 
 ### Nasil calisir
 
@@ -918,7 +977,7 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 
 | Is akisi | Tetik | Mod | Ne yapar |
 |---|---|---|---|
-| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 603 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (161 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
+| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 872 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (278 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
 | `Dependency Review` | PR | **Kapi** | HIGH/CRITICAL zafiyetli bagimlilik getiren PR'i durdurur |
 | `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
 | `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |
@@ -998,6 +1057,19 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,...` | Frontend origin'leri |
 | `CSRF_TRUSTED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Admin oturumuyla POST yapabilecek frontend origin'leri (Vite proxy `changeOrigin` kullandigi icin gerekli) |
 | `GEMINI_API_KEY` | (bos) | Google AI Studio anahtari; bos ise Gemini hic denenmez |
+| `GEMINI_FALLBACK_MODEL` | (bos) | Gemini ikinci model adi (ayni `GEMINI_API_KEY`, ayri Google kotasi); yalniz Gemini birincil kullanilamazken denenir. Bos: zincirde yok |
+| `GEMINI_FALLBACK_DAILY_BUDGET` | `450` | Ikinci modelin gunluk istek butcesi (Pasifik gunu; sayac oneki `gemini2`) |
+| `OPENROUTER_API_KEY` | (bos) | OpenRouter anahtari (openrouter.ai/keys); bos ise OpenRouter hic denenmez. Yalniz `openrouter.ai`'ye gider; log, ozet ve hata metnine yazilmaz |
+| `OPENROUTER_MODEL` | (bos) | OpenRouter modeli. Adi `:free` ile bitmelidir; aksi halde (ve bossa) kullanilmaz, ucretli model yanlislikla secilemez |
+| `OPENROUTER_DAILY_BUDGET` | `50` | Gunluk istek butcesi (UTC gunu); kredisiz hesapta ucretsiz modeller ~50 istek/gun |
+| `OPENROUTER_MIN_INTERVAL` | `4` | Istekler arasi en az saniye (~20 istek/dk altinda) |
+| `OPENROUTER_TIMEOUT` | `60` | Istek zaman asimi (sn) |
+| `OPENROUTER_COOLDOWN` | `600` | Hata sonrasi devre kesici bekleme (sn) |
+| `DEEPL_API_KEY` | (bos) | DeepL API Free anahtari (`:fx` ile biter); bos ise DeepL hic denenmez. Yalniz `api-free.deepl.com`'a gider |
+| `DEEPL_MONTHLY_CHARS` | `450000` | Aylik karakter butcesi (UTC ayi); DeepL Free siniri 500.000, 50.000 guvenlik payi |
+| `DEEPL_MIN_INTERVAL` | `1` | Istekler arasi en az saniye |
+| `DEEPL_TIMEOUT` | `30` | Istek zaman asimi (sn) |
+| `DEEPL_COOLDOWN` | `600` | Hata sonrasi devre kesici bekleme (sn) |
 | `GITHUB_TOKEN` | (bos) | Istege bagli. GitHub Releases/Tags/Advisory isteklerinde Bearer baslik (anonim limit 60/saat/IP, token ile 5000). Yalniz `api.github.com` isteklerine eklenir; "Public repositories (read-only)" fine-grained token yeterlidir |
 | `NVD_API_KEY` | (bos) | Istege bagli. NVD isteklerinde `apiKey` basligi (anonim 5 istek/30 sn, anahtarla 50). CVE turu 3 NVD istegi yapar (KEV, yayinlanan, guncel); 429'da kaynak bos doner. Ucretsiz, nvd.nist.gov/developers'tan e-posta ile; yalniz `services.nvd.nist.gov`'a gider |
 | `CELERY_TASK_SOFT_TIME_LIMIT` | `1500` | Cekim gorevi bu sureyi asinca task icinde `SoftTimeLimitExceeded` yukselir; gorev `failure` ile kapanir, kilit serbest kalir |
@@ -1006,14 +1078,16 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `LOG_LEVEL` | `INFO` | Uygulama loglarinin seviyesi (`DEBUG` cekim ayraclarini da gosterir); Django/Celery kendi gurultusu `WARNING`'de kalir |
 | `LOG_FORMAT` | `text` | `text`: `2026-10-08 17:05:32 WARNING news.devtools_scraper: [GitLab] Atom hatasi: ...`; `json`: satir basina bir JSON nesnesi (`ts`, `level`, `logger`, `msg`, `exc`) — Loki/ELK icin ([`cybernews/loglama.py`](cybernews/loglama.py)) |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model |
-| `GEMINI_DAILY_BUDGET` | `400` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD) |
+| `GEMINI_DAILY_BUDGET` | `450` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD). Retranslate turlarina yayilir: tur payi = kalan butce / Pasifik gece yarisina kadar kalan tur. Bolumler butceyi paylasir; Gemini adayi kayit siniri: CVE'de CVSS >= 7 ya da KEV, digerlerinde hepsi; bolum sirasi CVE, haber, AI, SRE, DevTools, Kubernetes (kati) |
 | `GEMINI_MIN_INTERVAL` | `5` | Istekler arasi saniye (15 RPM'in altinda) |
 | `GEMINI_COOLDOWN` | `600` | 429/5xx sonrasi bekleme (sn) |
+| `GEMINI_GECICI_BEKLEMELER` | `5,15` | Gecici 5xx / baglanti kopmasinda devre kesiciden once yeniden deneme beklemeleri (sn, virgulle); bos = yeniden deneme yok |
 | `GEMINI_TIMEOUT` | `60` | Istek zaman asimi (sn) |
 | `GEMINI_MAX_CHARS` | `12000` | Bu uzunlugun ustundeki kayit Gemini'ye gitmez |
-| `GEMINI_CVE_RESERVE` | `0.5` | Gunluk Gemini butcesinin CVE'ye ayrilan payi; CVE tavani 400, diger bolumler 200 ([ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md)) |
+| `GEMINI_BATCH_CHARS` | `10000` | Yukseltme paketinin toplam karakter siniri (bir istekte birden cok kayit) |
+| `GEMINI_BATCH_MAX` | `15` | Yukseltme paketindeki en fazla kayit sayisi |
 | `RETRANSLATE_BATCH` | `100` | Retranslate turunda bolum basina taranan bekleyen kayit sayisi |
-| `RETRANSLATE_UPGRADE_BATCH` | `40` | Tur ve bolum basina yukseltme siniri |
+| `RETRANSLATE_UPGRADE_BATCH` | `40` | Tur ve bolum basina yukseltme siniri (en yeni kayittan baslar) |
 | `RETRANSLATE_MAX_ATTEMPTS` | `5` | Bir kaydin icerik hatasiyla (saglayici reddetti / dogrulama gecmedi) kac kez denenecegi; esige ulasan kayit kuyruktan duser (`needs_translation` kalir) ve `/api/v1/status/` `translation_given_up` ile sayilir. Basarili cevirinin sayaci sifirlar. Sayaci elle sifirlamak (admin ya da shell) kaydi yeniden kuyruga alir |
 | `TRANSLATE_MIN_RATIO` | `0.4` | Ceviri kirpilma esigi: 80+ karakterlik metinde cikti/girdi orani bunun altindaysa ceviri reddedilir, kayit `needs_translation` kalir |
 | `RETENTION_DAYS` | `90` | Saklama penceresi; `updated_at` bundan eski kayitlar cekim basinda silinir (cekim penceresinden ayridir) |
@@ -1038,7 +1112,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 
 ## Bilinen Kisitlamalar
 
-- LibreTranslate cevirileri Gemini'ye gore daha dusuk kalitede olabilir (ozel ad/guvenlik terimi hatalari otomatik dogrulamayla yakalanmaz); rozetten ayirt edilir, `retranslate_pending` Gemini ile yukseltene kadar boyle kalir. Gemini gunluk butcesi (`GEMINI_DAILY_BUDGET`, varsayilan 400) asilirsa yukseltme bir sonraki gune kalir (bkz. [Hiz Siniri ve Devre Kesici](#4-hiz-siniri-ve-devre-kesici))
+- LibreTranslate cevirileri Gemini'ye gore daha dusuk kalitede olabilir (ozel ad/guvenlik terimi hatalari otomatik dogrulamayla yakalanmaz); rozetten ayirt edilir, `retranslate_pending` Gemini ile yukseltene kadar boyle kalir. Gemini gunluk butcesi (`GEMINI_DAILY_BUDGET`, varsayilan 450) asilirsa yukseltme bir sonraki gune kalir; CVE'lerden CVSS < 7 ve KEV disi olanlar ise butce ne olursa olsun kalici olarak LibreTranslate'te kalir (bkz. [Hiz Siniri ve Devre Kesici](#4-hiz-siniri-ve-devre-kesici))
 - Dark Reading HTML scraping'e 403 doner, bu yuzden RSS feed kullanilir
 - Gunicorn timeout 300 saniye — cok fazla kaynak secilirse zaman asimi olabilir
 - Her fetch'te toplam makale sayisi **30 ile sinirlidir** (Gunicorn timeout'undan kacinmak icin)
@@ -1103,7 +1177,7 @@ Kapsam disi (bilincli): gercek bir kumeye kurulum, imaj registry'si ve release y
 | [ADR-0002](docs/ADR-0002-AI-Benchmark.md) | AI Benchmark / Leaderboard bileseni | Proposed (ertelendi) |
 | [ADR-0003](docs/ADR-0003-Entegrasyon-API-v1.md) | Dis tuketiciler icin `/api/v1/` entegrasyon katmani (imlecli delta, token, refresh, ceviri dogrulugu) | Accepted (A1–A5b uygulandi, canlida dogrulandi) |
 | [ADR-0004](docs/ADR-0004-Ceviri-Saglayici-Zinciri.md) | Ceviri saglayici zinciri (LibreTranslate yedek; 2026-09-15: Google kaldirildi, Gemini yukseltme) | Accepted (degisiklik 2026-09-15) |
-| [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md) | Saklama olcusu `updated_at` (sil/yeniden yaz dongusu) ve CVE'ye Gemini butce onceligi | Accepted (uygulandi 2026-09-18, canlida dogrulandi) |
+| [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md) | Saklama olcusu `updated_at` (sil/yeniden yaz dongusu) ve CVE'ye Gemini butce onceligi | Accepted (uygulandi 2026-09-18, canlida dogrulandi; 2026-11-02: CVE rezervi kaldirildi, yerine onem sinifi) |
 | [ADR-0006](docs/ADR-0006-FetchRun-Gorunurlugu-ve-Status-Ucu.md) | `FetchRun` gorunurlugu, durum semantigi ve dar `GET /api/v1/status/` ucu (ADR-0003 bolum 11'in yerine gecer) | Accepted (uygulandi 2026-09-21, canlida dogrulandi) |
 | [ADR-0007](docs/ADR-0007-PostgreSQL-Gecisi-ve-Helm-Dogrulamasi.md) | SQLite'tan paylasilan yerel PostgreSQL'e kayipsiz gecis ve Helm chart dogrulamasi (Faz B) | Accepted (B1 2026-10-02 ve B2 2026-10-03 uygulandi; docker-desktop'ta dogrulandi) |
 | [ADR-0008](docs/ADR-0008-Yerel-GitOps-Terraform-ArgoCD-Vault.md) | Yerel GitOps: iki asamali Terraform, Argo CD "app of apps", Vault + Vault Secrets Operator, chart 2.1.0 (B3) | Accepted (B3a + B3b 2026-10-04 uygulandi; T1-T12 docker-desktop'ta gecti) |

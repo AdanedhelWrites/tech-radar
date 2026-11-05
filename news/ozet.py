@@ -23,6 +23,52 @@ ONCELIK_LIMITI = 5
 GRAFIK_LIMITI = 40
 
 
+GRAFIK_BANTLARI = (('kritik', KRITIK_ESIK, None), ('yuksek', YUKSEK_ESIK, KRITIK_ESIK),
+                   ('orta', GRAFIK_ESIK, YUKSEK_ESIK))
+
+
+def _bant_paylari(sayilar: dict, limit: int) -> dict:
+    """GRAFIK_LIMITI noktayi bantlara gercek sayilariyla orantili dagitir (en buyuk kalan yontemi).
+
+    2026-11-04: grafik en yuksek 40 skoru aliyordu; haftada 200+ kritik oldugu icin hep "40 kritik, 0 yuksek"
+    gorunuyordu. Bos olmayan bant en az bir nokta alir ki dagilim gorunsun.
+    """
+    toplam = sum(sayilar.values())
+    if toplam <= limit:
+        return dict(sayilar)
+    paylar = {ad: (sayilar[ad] * limit // toplam) for ad in sayilar}
+    for ad, sayi in sayilar.items():
+        if sayi and not paylar[ad]:
+            paylar[ad] = 1
+    kalanlar = sorted(sayilar, key=lambda ad: (sayilar[ad] * limit / toplam) - paylar[ad], reverse=True)
+    for ad in kalanlar:
+        if sum(paylar.values()) >= limit:
+            break
+        if paylar[ad] < sayilar[ad]:
+            paylar[ad] += 1
+    while sum(paylar.values()) > limit:  # en az-bir kurali limiti astiysa en buyuk banttan dus
+        en_buyuk = max(paylar, key=paylar.get)
+        paylar[en_buyuk] -= 1
+    return paylar
+
+
+def _grafik(son_hafta):
+    """Bant basina orantili orneklenmis grafik noktalari ve bantlarin gercek sayilari."""
+    sayilar, sorgular = {}, {}
+    for ad, alt, ust in GRAFIK_BANTLARI:
+        sorgu = son_hafta.filter(cvss_score__gte=alt)
+        if ust is not None:
+            sorgu = sorgu.filter(cvss_score__lt=ust)
+        sorgular[ad] = sorgu
+        sayilar[ad] = sorgu.count()
+    noktalar = []
+    for ad, pay in _bant_paylari(sayilar, GRAFIK_LIMITI).items():
+        if pay:
+            noktalar += list(sorgular[ad].order_by('-cvss_score', '-created_at', 'cve_id')
+                             .values('cve_id', 'cvss_score')[:pay])
+    return noktalar, sayilar
+
+
 def yeni_kayit_sayisi(since) -> int:
     """created_at'i `since`'ten sonra olan CVE sayisi."""
     return CVEEntry.objects.filter(created_at__gt=since).count()
@@ -61,8 +107,7 @@ def ozet_hesapla(simdi=None) -> dict:
                  .annotate(kev_sirasi=Case(When(kev_yeni, then=0), default=1, output_field=IntegerField()))
                  .order_by(F('cvss_score').desc(nulls_last=True), 'kev_sirasi', '-created_at')[:ONCELIK_LIMITI])
 
-    grafik = list(son_hafta.filter(cvss_score__gte=GRAFIK_ESIK).order_by('-cvss_score', '-created_at', 'cve_id')
-                  .values('cve_id', 'cvss_score')[:GRAFIK_LIMITI])
+    grafik, bant_sayilari = _grafik(son_hafta)
     skorsuz = son_hafta.filter(Q(cvss_score__isnull=True) | Q(cvss_score__lt=GRAFIK_ESIK)).count()
 
     bolumler = bolum_ozetleri()
@@ -74,6 +119,7 @@ def ozet_hesapla(simdi=None) -> dict:
         'kev_count': kev,
         'priority': CVEEntrySerializer(oncelikli, many=True).data,
         'chart': grafik,
+        'chart_counts': bant_sayilari,
         'unscored_count': skorsuz,
         'sources': {
             'total': sum(len(bolum_kaynaklari(b)) for b in BOLUMLER),

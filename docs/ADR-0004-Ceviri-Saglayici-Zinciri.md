@@ -1,5 +1,7 @@
 # ADR 0004: Ceviri Saglayici Zinciri (Google once, LibreTranslate yedek)
 
+> **Not (2026-11-03):** Kayit duzeyi zincire ucretsiz yedekler eklendi: Gemini ikinci model, OpenRouter (yalniz `:free` model) ve DeepL API Free. `translation_provider` artik `openrouter` ve `deepl` degerlerini de alir (migration `0017`, yalniz secenek listesi). `/api/v1` tuketicisi icin degisiklik eklemelidir: alan ve tip ayni, yalniz yeni deger gorulebilir; bilinmeyen degerleri tolere etmeyen istemciler guncellenmelidir. Gemini ikinci modeli `gemini` olarak yazilir. Bu belgenin gerisi karar anindaki durumu anlatir; yedek zincirin tasarimi ve kurallari: [`superpowers/specs/2026-11-02-ceviri-yayma-design.md`](superpowers/specs/2026-11-02-ceviri-yayma-design.md) G6/G7.
+
 ## Status
 Accepted — 2026-09-14 (uygulandi; PR #27 `1d70f46`, migration `0009_translation_provider`, canlida dogrulandi). Degisiklik 2026-09-15: Google kaldirildi, Gemini yukseltme (bkz. asagida).
 

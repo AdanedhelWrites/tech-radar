@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ozetApi, newsApi, k8sApi, sreApi, devtoolsApi, aiApi } from '../../services/api'
+import { ozetApi, gundemApi } from '../../services/api'
 import useAraliklaYenile from '../../hooks/useAraliklaYenile'
 import { sonZiyaretOku, sonZiyaretYaz } from '../../utils/sonZiyaret'
 import useZiyaretTabani from '../../hooks/useZiyaretTabani'
-import { gundemBirlestir } from '../../utils/gundem'
 import { goreliZaman } from '../../utils/zaman'
 import SaglikSeridi from '../SaglikSeridi'
 import OkumaPaneli from '../okuma/OkumaPaneli'
@@ -16,24 +15,16 @@ import Gundem from './Gundem'
 // zafiyetler ve diger bes bolumden gundem. Ozet sayilari yalniz /api/ozet/'ten gelir (spec §5).
 
 const YENILEME_MS = 5 * 60 * 1000
-const GUNDEM_ADEDI = 6
-const GUNDEM_UCLARI = [
-  { bolum: 'news', getir: () => newsApi.getNews() },
-  { bolum: 'kubernetes', getir: () => k8sApi.getK8s() },
-  { bolum: 'sre', getir: () => sreApi.getSRE() },
-  { bolum: 'devtools', getir: () => devtoolsApi.getDevTools() },
-  { bolum: 'ai', getir: () => aiApi.getAINews() },
-]
 
 const zamanDamgasi = (iso) => {
   const t = Date.parse(iso)
   return Number.isNaN(t) ? null : t
 }
 
-// Listelerdeki en yeni created_at (ISO, API'nin yazdigi bicimde). Yoksa null.
-const enYeniZaman = (kayitlar) => kayitlar.reduce((enYeni, kayit) => {
-  const t = zamanDamgasi(kayit?.created_at)
-  return t != null && (enYeni == null || t > zamanDamgasi(enYeni)) ? kayit.created_at : enYeni
+// Zaman listesindeki en yeni ISO deger (ISO, API'nin yazdigi bicimde). Yoksa null.
+const enYeniZaman = (zamanlar) => zamanlar.reduce((enYeni, zaman) => {
+  const t = zamanDamgasi(zaman)
+  return t != null && (enYeni == null || t > zamanDamgasi(enYeni)) ? zaman : enYeni
 }, null)
 
 const saatDakika = (iso) => {
@@ -65,18 +56,19 @@ export default function GenelBakis() {
   }, [sonZiyaret])
 
   const gundemYukle = useCallback(async () => {
-    // Bir bolumun hatasi digerlerini dusurmez; hepsi hata verirse gundem hata gosterir
-    const sonuclar = await Promise.allSettled(GUNDEM_UCLARI.map(u => u.getir()))
-    if (sonuclar.every(s => s.status === 'rejected')) {
+    // Hesap sunucuda yapilir; {success: false} ya da istek hatasi yalniz karti "alinamadi" yapar
+    try {
+      const yanit = await gundemApi.getGundem()
+      const olaylar = yanit?.data?.olaylar
+      if (yanit?.data?.success === false || !Array.isArray(olaylar)) {
+        setGundemHata(true)
+        return
+      }
+      setGundem(olaylar)
+      setGundemHata(false)
+    } catch {
       setGundemHata(true)
-      return
     }
-    const listeler = sonuclar.map((s, i) => {
-      const kayitlar = s.status === 'fulfilled' ? s.value?.data?.data : null
-      return { bolum: GUNDEM_UCLARI[i].bolum, kayitlar: Array.isArray(kayitlar) ? kayitlar : [] }
-    })
-    setGundem(gundemBirlestir(listeler, GUNDEM_ADEDI))
-    setGundemHata(false)
   }, [])
 
   const yukle = useCallback(() => {
@@ -87,9 +79,9 @@ export default function GenelBakis() {
   useEffect(() => { yukle() }, [yukle])
   useAraliklaYenile(yukle, YENILEME_MS)
 
-  // Son ziyaret degeri: oncelikli liste ve gundemdeki en yeni created_at (spec §6)
+  // Son ziyaret degeri: oncelikli listenin created_at'i ve gundem olaylarinin son zamani (spec 2026-11-05 §7)
   useEffect(() => {
-    enYeniRef.current = enYeniZaman([...(ozet?.priority || []), ...(gundem || []).map(g => g.kayit)])
+    enYeniRef.current = enYeniZaman([...(ozet?.priority || []).map(k => k?.created_at), ...(gundem || []).map(o => o.son)])
   }, [ozet, gundem])
 
   useEffect(() => {
@@ -119,7 +111,7 @@ export default function GenelBakis() {
     <div className="genel-bakis">
       <section className={grafikVar ? 'genel-kafa' : 'genel-kafa grafiksiz'}>
         <DurumOzeti ozet={ozet} hata={ozetHata} />
-        {grafikVar && <CvssGrafigi noktalar={ozet?.chart || []} skorsuz={ozet?.unscored_count || 0} />}
+        {grafikVar && <CvssGrafigi noktalar={ozet?.chart || []} skorsuz={ozet?.unscored_count || 0} sayilar={ozet?.chart_counts} />}
       </section>
 
       <div className="genel-izgara">
@@ -129,7 +121,7 @@ export default function GenelBakis() {
           sonZiyaret={sonZiyaret}
           onSec={setSecili}
         />
-        <Gundem ogeler={gundem} hata={gundemHata} onSec={setSecili} />
+        <Gundem olaylar={gundem} hata={gundemHata} onSec={setSecili} />
       </div>
 
       <div className="genel-alt">

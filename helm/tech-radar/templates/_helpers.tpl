@@ -177,6 +177,18 @@ env:
         name: {{ include "tech-radar.secretAdi" . }}
         key: NVD_API_KEY
         optional: true
+  - name: OPENROUTER_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "tech-radar.secretAdi" . }}
+        key: OPENROUTER_API_KEY
+        optional: true
+  - name: DEEPL_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "tech-radar.secretAdi" . }}
+        key: DEEPL_API_KEY
+        optional: true
 {{- end }}
 
 {{/*
