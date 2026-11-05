@@ -10,7 +10,7 @@ from .models import NewsArticle, CVEEntry, KubernetesEntry, SREEntry, DevToolsEn
 from .translation_utils import (
     consume_translation_failures, consume_translation_providers, kayit_saglayicisi,
 )
-from .kaynaklar import kaynak_sayaclari, kaynak_yazildi
+from .kaynaklar import kayit_tavani, kaynak_sayaclari, kaynak_yazildi
 
 from scraper_multi import MultiSourceScraper
 from .cve_scraper import MultiCVEScraper
@@ -63,11 +63,12 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
         _saklama_temizligi(NewsArticle)
 
         scraper = MultiSourceScraper()
-        articles = scraper.fetch_all_news(days=days, selected_sources=selected_sources)
+        articles = scraper.fetch_all_news(days=days, selected_sources=selected_sources, sinirla=False)
         kaynaktan_gelen = len(articles)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         kaynak_sayaci = kaynak_sayaclari('news', selected_sources, articles)
         if skip_existing:
             articles = _drop_existing(articles, NewsArticle, 'link')
+        articles = kayit_tavani(articles, len(kaynak_sayaci))
         if articles:
             saved_count = 0
             consume_translation_failures()
@@ -208,11 +209,12 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
         _saklama_temizligi(SREEntry)
 
         scraper = MultiSREScraper()
-        entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        entries = scraper.fetch_all(days=days, selected_sources=selected_sources, sinirla=False)
         kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         kaynak_sayaci = kaynak_sayaclari('sre', selected_sources, entries)
         if skip_existing:
             entries = _drop_existing(entries, SREEntry, 'link')
+        entries = kayit_tavani(entries, len(kaynak_sayaci))
         if entries:
             saved_count = 0
             consume_translation_failures()
@@ -252,11 +254,12 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
         _saklama_temizligi(DevToolsEntry)
 
         scraper = MultiDevToolsScraper()
-        entries = scraper.fetch_all(days=days, selected_sources=selected_sources)
+        entries = scraper.fetch_all(days=days, selected_sources=selected_sources, sinirla=False)
         kaynaktan_gelen = len(entries)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         kaynak_sayaci = kaynak_sayaclari('devtools', selected_sources, entries)
         if skip_existing:
             entries = _drop_existing(entries, DevToolsEntry, 'link')
+        entries = kayit_tavani(entries, len(kaynak_sayaci))
         if entries:
             saved_count = 0
             consume_translation_failures()

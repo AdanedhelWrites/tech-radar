@@ -9,7 +9,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Uygulama surumu** | `appVersion` 2026.10.3 (CalVer; imaj etiketi) |
 | **Helm chart** | 2.2.1 (SemVer; etiket `chart-2.2.1`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 860 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 278 Vitest testi, 24 dosya (`frontend/src/`) |
+| **Testler** | 872 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 278 Vitest testi, 24 dosya (`frontend/src/`) |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -307,7 +307,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-860 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+872 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -617,7 +617,7 @@ cybersecurity_news/
 │   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
 │   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
-│   ├── tests/                  # 860 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
+│   ├── tests/                  # 872 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
 │   │   └── fixtures/gundem_basliklari.json  # Gundem gruplama testlerinin gercek baslik ornekleri
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
 │   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
@@ -760,7 +760,7 @@ Ceviri sonrasi otomatik duzeltmeler:
 ### 4. Hiz Siniri ve Devre Kesici
 
 - **LibreTranslate (cekim aninda)** — Baglanti hatasi, zaman asimi veya 5xx gelirse kendi Redis devre kesicisi `LIBRETRANSLATE_COOLDOWN` (60 sn, varsayilan) boyunca acilir; 4xx devre kesiciyi acmaz. Yeniden deneme ve ayri bir hiz siniri yoktur, eszamanlilik compose CPU siniriyla dogal olarak sinirlanir.
-- **Gemini (retranslate yukseltmesi)** — Istekler arasi en az `GEMINI_MIN_INTERVAL` saniye (Redis uzerinden tum worker'lar icin ortak), gunluk `GEMINI_DAILY_BUDGET` istek tavani (retranslate turlarina yayilir, bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)), 429/5xx ve 401/403/404 sonrasi `GEMINI_COOLDOWN` saniye devre kesici.
+- **Gemini (retranslate yukseltmesi)** — Istekler arasi en az `GEMINI_MIN_INTERVAL` saniye (Redis uzerinden tum worker'lar icin ortak), gunluk `GEMINI_DAILY_BUDGET` istek tavani (retranslate turlarina yayilir, bkz. [Retranslate ve Gemini Yukseltme](#5-retranslate-ve-gemini-yukseltme)), gecici 500/502/503/504 ve baglanti kopmasi once `GEMINI_GECICI_BEKLEMELER` (varsayilan `5,15` sn) ile yeniden denenir; 429/5xx ve 401/403/404 sonrasi `GEMINI_COOLDOWN` saniye devre kesici.
 - **Kayip yok** — Hicbir saglayici cevirmezse haber tam Ingilizce metniyle kaydedilir ve `needs_translation=True` isaretlenir; sonraki cekimde veya `retranslate_pending` turunde otomatik olarak yeniden denenir.
 
 ### 5. Retranslate ve Gemini Yukseltme
@@ -977,7 +977,7 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 
 | Is akisi | Tetik | Mod | Ne yapar |
 |---|---|---|---|
-| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 860 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (278 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
+| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 872 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (278 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
 | `Dependency Review` | PR | **Kapi** | HIGH/CRITICAL zafiyetli bagimlilik getiren PR'i durdurur |
 | `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
 | `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |
@@ -1081,6 +1081,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `GEMINI_DAILY_BUDGET` | `450` | Gunluk istek butcesi (Pasifik gunu; ucretsiz katman 500 RPD). Retranslate turlarina yayilir: tur payi = kalan butce / Pasifik gece yarisina kadar kalan tur. Bolumler butceyi paylasir; Gemini adayi kayit siniri: CVE'de CVSS >= 7 ya da KEV, digerlerinde hepsi; bolum sirasi CVE, haber, AI, SRE, DevTools, Kubernetes (kati) |
 | `GEMINI_MIN_INTERVAL` | `5` | Istekler arasi saniye (15 RPM'in altinda) |
 | `GEMINI_COOLDOWN` | `600` | 429/5xx sonrasi bekleme (sn) |
+| `GEMINI_GECICI_BEKLEMELER` | `5,15` | Gecici 5xx / baglanti kopmasinda devre kesiciden once yeniden deneme beklemeleri (sn, virgulle); bos = yeniden deneme yok |
 | `GEMINI_TIMEOUT` | `60` | Istek zaman asimi (sn) |
 | `GEMINI_MAX_CHARS` | `12000` | Bu uzunlugun ustundeki kayit Gemini'ye gitmez |
 | `GEMINI_BATCH_CHARS` | `10000` | Yukseltme paketinin toplam karakter siniri (bir istekte birden cok kayit) |
