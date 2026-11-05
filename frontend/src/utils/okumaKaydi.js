@@ -90,6 +90,11 @@ const kayitIskeleti = (kayit) => ({
   ham: kayit || {},
 })
 
+// Tekil CWE listesi (sira korunur): eski NVD kayitlarinda ayni CWE iki kez gelebiliyordu;
+// rozet anahtari CWE kimligi oldugu icin yineleme React anahtar cakismasi yaratir.
+export const cweListesi = (cve) =>
+  Array.isArray(cve?.cwe_ids) ? [...new Set(cve.cwe_ids.filter(Boolean).map(String))] : []
+
 export const cveOkumaKaydi = (cve) => {
   const orijinal = kevOnekiAyir(metin(cve?.original_description))
   const tr = kevOnekiAyir(metin(cve?.turkish_description))
@@ -98,7 +103,7 @@ export const cveOkumaKaydi = (cve) => {
   const kevEklenme = cve?.kev_added_date || onek.kevEklenme
   const kevMeta = kevEklenme ? { kevEklenme, sonTarih: onek.sonTarih } : null
   const kev = cve?.source === 'CISA KEV' || !!kevMeta
-  const cweler = Array.isArray(cve?.cwe_ids) ? cve.cwe_ids.filter(Boolean) : []
+  const cweler = cweListesi(cve)
   const urunler = metin(cve?.affected_products).trim()
 
   return {
