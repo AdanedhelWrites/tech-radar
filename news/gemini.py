@@ -23,6 +23,7 @@ modul globallerinden (_gate, _butce, GEMINI_*) okur. Diger cevirmenler: kayit_ce
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Optional, Set
@@ -57,6 +58,21 @@ SISTEMIK_HTTP = (401, 403, 404)
 # 400 FAILED_PRECONDITION ile doner. Kayit sucu sayilsa birikim bir gunde deneme tavanina ulasirdi.
 SISTEMIK_DURUM = frozenset({'FAILED_PRECONDITION', 'PERMISSION_DENIED', 'UNAUTHENTICATED'})
 SISTEMIK_SEBEP = frozenset({'API_KEY_INVALID'})
+# Gecici sunucu hatalari ("This model is currently experiencing high demand" 503 vb.): devre kesici
+# acilmadan once bu beklemelerle (sn) yeniden denenir; hepsi tukenirse devre kesici acilir. Sayac
+# mantiksal istek basina bir kez artar (yeniden denemeler ayrica sayilmaz).
+GECICI_HTTP = frozenset({500, 502, 503, 504})
+GECICI_HATA_BEKLEMELERI = tuple(
+    float(s) for s in os.environ.get('GEMINI_GECICI_BEKLEMELER', '5,15').split(',') if s.strip())
+
+
+def _uyu(saniye: float) -> None:
+    time.sleep(saniye)
+
+
+def _gecici_ag_hatasi(hata: Exception) -> bool:
+    """Baglanti kopmasi gecicidir; zaman asimi degildir (60 sn beklemeyi tekrarlamaya degmez)."""
+    return isinstance(hata, requests.ConnectionError) and not isinstance(hata, requests.Timeout)
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 MAX_RATIO = 3.0
 ECHO_MIN_WORDS = 4
@@ -604,6 +620,10 @@ class KayitCevirmeni:
             return bos
         return ozet
 
+    def _gecici_hata_bekle(self, sebep: str, saniye: float, etiket: str) -> None:
+        self._log.info(f"  [{self.log_adi}] gecici hata ({sebep}); {etiket} {saniye:g} sn sonra yeniden denenecek.")
+        _uyu(saniye)
+
     def _devre_kesici(self, sebep: str) -> None:
         self._log.warning(f"  [{self.log_adi}] erisilemiyor ({sebep}); {self.bekleme} sn atlanacak.")
         self._kapi().start_cooldown(self.bekleme)
@@ -613,6 +633,7 @@ class KayitCevirmeni:
         """Kota kurallariyla tek istek atar. 200 yanitini ya da None doner (sebep loglandi).
 
         hazir() kontrolu cagirana aittir. Sayac istek ONCESI miktar kadar artar; tavan asildiysa istek atilmaz.
+        Gecici hata (GECICI_HTTP, baglanti kopmasi) -> GECICI_HATA_BEKLEMELERI ile yeniden denenir.
         kesici_http / 5xx / ag hatasi / beklenmeyen istisna -> devre kesici, sayac geri alinmaz.
         Diger 200 disi yanitlar -> sayac geri alinir; sistemikse (_sistemik_hata) devre kesici de acilir.
         etiket ve kayit_sayisi yalniz log icindir (kayit_sayisi >= 2 olan istegin 4xx'i WARNING)."""
@@ -631,18 +652,29 @@ class KayitCevirmeni:
                               f"{etiket} cevrilmedi.")
             return None
 
-        self._kapi().wait_for_slot(self.aralik())
-        try:
-            yanit = requests.post(self._istek_adresi(), headers=self._basliklar(), json=govde,
-                                  timeout=self.zaman_asimi)
-        except requests.RequestException as hata:
-            self._devre_kesici(type(hata).__name__)
-            return None
-        except Exception as hata:  # beklenmeyen hata retranslate'i durdurmasin
-            # Kod hatasi her kayitta tekrarlar: kaydin sucu sayilmasin, devre kesici acilsin
-            self._log.warning(f"  [{self.log_adi}] beklenmeyen hata: {type(hata).__name__}")
-            self._devre_kesici(type(hata).__name__)
-            return None
+        beklemeler = tuple(GECICI_HATA_BEKLEMELERI)
+        for deneme in range(len(beklemeler) + 1):
+            self._kapi().wait_for_slot(self.aralik())
+            try:
+                yanit = requests.post(self._istek_adresi(), headers=self._basliklar(), json=govde,
+                                      timeout=self.zaman_asimi)
+            except requests.RequestException as hata:
+                if deneme < len(beklemeler) and _gecici_ag_hatasi(hata):
+                    self._gecici_hata_bekle(type(hata).__name__, beklemeler[deneme], etiket)
+                    continue
+                self._devre_kesici(type(hata).__name__)
+                return None
+            except Exception as hata:  # beklenmeyen hata retranslate'i durdurmasin
+                # Kod hatasi her kayitta tekrarlar: kaydin sucu sayilmasin, devre kesici acilsin
+                self._log.warning(f"  [{self.log_adi}] beklenmeyen hata: {type(hata).__name__}")
+                self._devre_kesici(type(hata).__name__)
+                return None
+            if deneme < len(beklemeler) and yanit.status_code in GECICI_HTTP:
+                # "high demand" 503 gibi gecici sunucu hatalari genelde saniyeler icinde gecer.
+                # Hemen devre kesici acilirsa saatlik turun tamami bosa gider (2026-11-05: 12 tur).
+                self._gecici_hata_bekle(f'HTTP {yanit.status_code}', beklemeler[deneme], etiket)
+                continue
+            break
 
         if yanit.status_code in self.kesici_http or yanit.status_code >= 500:
             self._kesici_yaniti(yanit.status_code)

@@ -402,12 +402,15 @@ class MultiSREScraper(SREScraper):
             'DZone DevOps': self.dzone_devops,
         }
 
-    def fetch_all(self, days: int = 30, selected_sources: list = None, max_total: int = 30) -> List[Dict]:
-        """Tum kaynaklardan SRE haberi ceker"""
+    def fetch_all(self, days: int = 30, selected_sources: list = None, max_total: int = 30,
+                  sinirla: bool = True) -> List[Dict]:
+        """Tum kaynaklardan SRE haberi ceker. sinirla: bkz. MultiSourceScraper.fetch_all_news."""
+        from news.kaynaklar import kayit_tavani
+
         all_entries = []
 
         log.info("=" * 80)
-        log.info(f"TUM SRE KAYNAKLARINDAN HABER CEKILIYOR ({days} gun, maks {max_total})")
+        log.info(f"TUM SRE KAYNAKLARINDAN HABER CEKILIYOR ({days} gun)")
         log.info("=" * 80)
 
         sources = dict(self.sources)
@@ -415,16 +418,10 @@ class MultiSREScraper(SREScraper):
         if selected_sources:
             sources = {k: v for k, v in sources.items() if k in selected_sources}
 
-        per_source_limit = max(5, max_total // max(len(sources), 1))
-
         for source_name, scraper in sources.items():
             try:
                 entries = scraper.fetch_entries(days=days)
-                if len(entries) > per_source_limit:
-                    entries = entries[:per_source_limit]
-                    log.info(f"  -> {source_name}: {per_source_limit} haber (sinirlandirildi)")
-                else:
-                    log.info(f"  -> {source_name}: {len(entries)} haber")
+                log.info(f"  -> {source_name}: {len(entries)} haber")
                 all_entries.extend(entries)
             except Exception as e:
                 log.warning(f"  -> {source_name}: HATA - {e}")
@@ -432,9 +429,8 @@ class MultiSREScraper(SREScraper):
         # Tarihe gore sirala
         all_entries.sort(key=lambda x: x['date'], reverse=True)
 
-        # Toplam sinir
-        if len(all_entries) > max_total:
-            all_entries = all_entries[:max_total]
+        if sinirla:
+            all_entries = kayit_tavani(all_entries, len(sources), max_total)
 
         # Duplicate link kontrolu
         seen_links = set()

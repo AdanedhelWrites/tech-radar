@@ -940,7 +940,13 @@ class MultiDevToolsScraper(DevToolsScraper):
             'Keycloak': GitHubReleasesScraper('Keycloak', 'keycloak/keycloak', r'^\d+\.\d+\.\d+$'),
         }
 
-    def fetch_all(self, days: int = 60, selected_sources: list = None, max_total: int = 30) -> List[Dict]:
+    def fetch_all(self, days: int = 60, selected_sources: list = None, max_total: int = 30,
+                  sinirla: bool = True) -> List[Dict]:
+        """sinirla: bkz. MultiSourceScraper.fetch_all_news. Toplam tavan en az 3 x kaynak sayisi:
+        14 kaynakta sabit 30 tavan, gunluk yayinlayan LiteLLM/Langfuse'un aylik yayinlayan
+        Keycloak/GitLab'i tarih siralamasinda dusurmesine yol acardi."""
+        from news.kaynaklar import kayit_tavani
+
         all_entries = []
 
         sources = dict(self.scrapers)
@@ -948,32 +954,22 @@ class MultiDevToolsScraper(DevToolsScraper):
             selected_lower = {s.lower() for s in selected_sources}
             sources = {k: v for k, v in sources.items() if k.lower() in selected_lower}
 
-        # 14 kaynakta sabit 30 tavan, gunluk yayinlayan LiteLLM/Langfuse'un aylik
-        # yayinlayan Keycloak/GitLab'i tarih siralamasinda dusurmesine yol acardi.
-        max_total = max(max_total, 3 * len(sources))
-
         log.info("=" * 80)
-        log.info(f"TUM DEVTOOLS KAYNAKLARINDAN GUNCELLEME CEKILIYOR ({days} gun, maks {max_total})")
+        log.info(f"TUM DEVTOOLS KAYNAKLARINDAN GUNCELLEME CEKILIYOR ({days} gun)")
         log.info("=" * 80)
-
-        per_source_limit = max(5, max_total // max(len(sources), 1))
 
         for source_name, scraper in sources.items():
             try:
                 entries = scraper.fetch_entries(days=days)
-                if len(entries) > per_source_limit:
-                    entries = entries[:per_source_limit]
-                    log.info(f"  -> {source_name}: {per_source_limit} guncelleme (sinirlandirildi)")
-                else:
-                    log.info(f"  -> {source_name}: {len(entries)} guncelleme")
+                log.info(f"  -> {source_name}: {len(entries)} guncelleme")
                 all_entries.extend(entries)
             except Exception as e:
                 log.warning(f"  -> {source_name}: HATA - {e}")
 
         all_entries.sort(key=lambda x: x['date'], reverse=True)
 
-        if len(all_entries) > max_total:
-            all_entries = all_entries[:max_total]
+        if sinirla:
+            all_entries = kayit_tavani(all_entries, len(sources), max_total)
 
         # Duplicate link kontrolu
         seen_links = set()

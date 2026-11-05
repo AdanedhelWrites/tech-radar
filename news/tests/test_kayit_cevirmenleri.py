@@ -77,6 +77,11 @@ class CevirmenTestMixin:
             yama = mock.patch.object(gemini, hedef, deger)
             yama.start()
             self.addCleanup(yama.stop)
+        # Gecici hata beklemeleri gercekten uyumasin
+        self.uykular = []
+        yama = mock.patch.object(gemini, '_uyu', side_effect=self.uykular.append)
+        yama.start()
+        self.addCleanup(yama.stop)
 
     def _post(self, *yanitlar, side_effect=None):
         if side_effect is None and len(yanitlar) == 1:
@@ -259,6 +264,17 @@ class OpenRouterTests(CevirmenTestMixin, SimpleTestCase):
             else:
                 govde[kimlik] = deger
         return _or_yanit(govde=govde)
+
+    def test_openrouter_gecici_503_yeniden_denenir(self):
+        """Yeniden deneme ortak tabanda (_istek_at): yedek saglayicilar da gecici hatada turu kaybetmez."""
+        post = self._post(_or_yanit(durum=503), self._cevap())
+        sonuc = self.openrouter.paket_cevir(KAYITLAR)
+        self.assertFalse(sonuc.istek_hatasi)
+        self.assertEqual(sonuc.ceviriler, PAKET_CEVIRI)
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(self.uykular, [5.0])
+        self.assertFalse(self.openrouter._gate.cooldown_active())
+        self.assertEqual(self.openrouter.butce_kullanimi(), 1)
 
     def test_openrouter_ucretli_model_reddedilir(self):
         post = self._post(self._cevap())

@@ -96,6 +96,33 @@ def kaynak_yazildi(sayac: Dict[str, Dict[str, int]], ad: str) -> None:
     sayac.setdefault(ad or '', {'fetched': 0, 'saved': 0})['saved'] += 1
 
 
+def kayit_tavani(entries: List[dict], kaynak_sayisi: int, max_total: int = 30) -> List[dict]:
+    """Bir turda islenecek kayitlari sinirlar: kaynak basina pay, sonra tarihe gore toplam tavan.
+
+    Tavan ceviri yukunu sinirlamak icindir; bu yuzden task'lar onu _drop_existing'den SONRA,
+    yalniz yeni kayitlara uygular (2026-11-05). Once uygulandiginda, uyku sonrasi gibi kayit
+    biriken turlarda tarihce geride kalan YENI haberler (CyberScoop, Dark Reading, Krebs)
+    kesiliyor ve bir sonraki turda da kesildigi icin hic kaydedilmiyordu; sayac da 0
+    gorundugu icin kaynak sagligi yaniliyordu. Tavan disinda kalan yeni kayitlar silinmez:
+    bir sonraki turda yine yenidir ve sirasi gelince islenir.
+
+    Pay ve tavan eski fetch_all kurallariyla ayni: toplam en az 3 x kaynak sayisi, kaynak
+    basina en az 5. Kaynagin kendi sirasi (en yeni once) korunur.
+    """
+    kaynak_sayisi = max(kaynak_sayisi, 1)
+    max_total = max(max_total, 3 * kaynak_sayisi)
+    pay = max(5, max_total // kaynak_sayisi)
+    sayac: Dict[str, int] = {}
+    secilen = []
+    for e in entries:
+        ad = e.get('source') or ''
+        if sayac.get(ad, 0) < pay:
+            sayac[ad] = sayac.get(ad, 0) + 1
+            secilen.append(e)
+    secilen.sort(key=lambda x: x.get('date') or '', reverse=True)
+    return secilen[:max_total]
+
+
 def kaynak_durumlari(bolum: str, model) -> Dict[str, dict]:
     """Status ucu: kaynak basina sessizlik bilgisi.
 

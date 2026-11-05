@@ -44,6 +44,11 @@ class GeminiTestMixin:
             yama = mock.patch.object(gemini, hedef, deger)
             yama.start()
             self.addCleanup(yama.stop)
+        # Gecici hata beklemeleri gercekten uyumasin; cagrilar self.uykular'dan okunur
+        self.uykular = []
+        yama = mock.patch.object(gemini, '_uyu', side_effect=self.uykular.append)
+        yama.start()
+        self.addCleanup(yama.stop)
 
     def _post(self, *yanitlar, side_effect=None):
         if side_effect is not None:
@@ -217,6 +222,52 @@ class GeminiHataTests(GeminiTestMixin, SimpleTestCase):
         self._post(_yanit(durum=503))
         self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
         self.assertTrue(gemini._gate.cooldown_active())
+
+    def test_gecici_503_yeniden_denenir_sonra_basarir(self):
+        """2026-11-05: 'high demand' 503 her turun ilk isteginde devre kesiciyi acip turu bosa harciyordu."""
+        post = self._post(_yanit(durum=503), _yanit(govde=CEVIRI))
+        self.assertEqual(gemini.kaydi_cevir(ALANLAR), CEVIRI)
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(self.uykular, [5.0])
+        self.assertFalse(gemini._gate.cooldown_active())
+        self.assertEqual(gemini.butce_kullanimi(), 1, 'Yeniden deneme ayrica sayilmaz')
+
+    def test_gecici_5xx_suruyorsa_beklemeler_tukenince_devre_kesici(self):
+        for durum in (500, 502, 503, 504):
+            with self.subTest(durum=durum):
+                gemini._gate = tu._LocalGate()
+                self.uykular.clear()
+                post = self._post(_yanit(durum=durum))
+                self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+                self.assertEqual(post.call_count, 3)
+                self.assertEqual(self.uykular, [5.0, 15.0])
+                self.assertTrue(gemini._gate.cooldown_active())
+
+    def test_paket_503_sonra_basarir(self):
+        post = self._post(_yanit(durum=503), _yanit(govde=PAKET_CEVIRI))
+        sonuc = gemini.paket_cevir(KAYITLAR)
+        self.assertFalse(sonuc.istek_hatasi)
+        self.assertEqual(sonuc.ceviriler, PAKET_CEVIRI)
+        self.assertEqual(post.call_count, 2)
+        self.assertFalse(gemini._gate.cooldown_active())
+
+    def test_baglanti_kopmasi_yeniden_denenir(self):
+        post = self._post(side_effect=[requests.ConnectionError('kopuk'), _yanit(govde=CEVIRI)])
+        self.assertEqual(gemini.kaydi_cevir(ALANLAR), CEVIRI)
+        self.assertEqual(post.call_count, 2)
+
+    def test_zaman_asimi_429_ve_kalici_5xx_disi_yeniden_denenmez(self):
+        for etki in (requests.Timeout('zaman asimi'), requests.ConnectTimeout('baglanti zaman asimi'),
+                     _yanit(durum=429, ham='{"error": {"status": "RESOURCE_EXHAUSTED"}}'),
+                     _yanit(durum=501)):
+            with self.subTest(etki=etki):
+                gemini._gate = tu._LocalGate()
+                self.uykular.clear()
+                post = (self._post(side_effect=etki) if isinstance(etki, Exception) else self._post(etki))
+                self.assertIsNone(gemini.kaydi_cevir(ALANLAR))
+                self.assertEqual(post.call_count, 1)
+                self.assertEqual(self.uykular, [])
+                self.assertTrue(gemini._gate.cooldown_active())
 
     def test_baglanti_hatasi_devre_kesiciyi_acar(self):
         self._post(side_effect=requests.ConnectionError('kopuk'))
