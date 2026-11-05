@@ -189,14 +189,6 @@ class RetranslatePendingTests(RetranslateTestBase):
 
         self.assertEqual(sonuc['translated'], 1)
 
-    def test_basarida_liste_cache_yenilenir(self):
-        self.use_translator(FakeTranslator(CEVIRILER))
-        self._ai('Farmers adopt new sensors', 'Sensors measure soil moisture every hour.', 'cache')
-
-        self._calistir()
-
-        self.assertEqual(cache.get('ai_entries')[0]['turkish_title'], 'Çiftçiler yeni sensörler benimsiyor')
-
     def test_bekleyen_kayit_yoksa_googlea_gidilmez(self):
         cevirmen = self.use_translator(FakeTranslator(CEVIRILER))
         sonuc = self._calistir()

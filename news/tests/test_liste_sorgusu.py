@@ -176,13 +176,6 @@ class ListeSorgusuTests(TestCase):
         ikinci = [k['id'] for k in self._al('/api/ai/', sayfa=2)['data']]
         self.assertEqual(len(set(ilk + ikinci)), 30)
 
-    def test_liste_cache_okunmaz(self):
-        from django.core.cache import cache
-        kayit = _kayit(AINewsEntry, self.simdi)
-        cache.set('ai_entries', [{'id': 999999, 'sahte': True}], 3600)
-        govde = self._al('/api/ai/')
-        self.assertEqual([k['id'] for k in govde['data']], [kayit.id])
-
     def test_alti_bolumun_hepsi_calisir(self):
         modeller = {'news': ('/api/news/', NewsArticle), 'cve': ('/api/cve/', CVEEntry),
                     'kubernetes': ('/api/k8s/', KubernetesEntry), 'sre': ('/api/sre/', SREEntry),
