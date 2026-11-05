@@ -37,11 +37,29 @@ def _kisalt(metin: str) -> str:
     return metin[:kesim if kesim > 0 else BASLIK_MAX_KARAKTER - 1].rstrip(' .;:,') + '…'
 
 
+# 2026-11-04'e kadar GitHub Advisory scraper'i ozeti 80 karakterde kesiyordu ("... via Dual-Header Inco",
+# 877 kayit). Tam ozet saklanmadigi icin geri getirilemez; kesik kelime atilip ucuna "…" konur. Ozeti tam
+# 80 karakter olup tam kelimeyle biten nadir bir baslik da "…" alabilir; bu bedel kabul edildi.
+ESKI_GHSA_KESIM = 80
+
+
+def _eski_kesik_baslik(cve_id: str, baslik: str) -> str:
+    onek = f'{cve_id} - '
+    ozet = (baslik or '')[len(onek):] if (baslik or '').startswith(onek) else ''
+    if len(ozet) != ESKI_GHSA_KESIM or ozet[-1] in '.!?)':
+        return baslik
+    kesim = ozet.rfind(' ')
+    return f"{onek}{ozet[:kesim].rstrip(' .;:,-') if kesim > 0 else ozet}…"
+
+
 def cve_basligi(cve_id: str, baslik: str, tr_aciklama: str, orijinal_aciklama: str) -> str:
-    """Sablon baslik ise aciklamadan ozet baslik dondurur; degilse basligi aynen dondurur."""
+    """Sablon baslik ise aciklamadan ozet baslik dondurur; eski kesik GHSA basligini kelime sinirinda
+    bitirir; degilse basligi aynen dondurur."""
     eslesme = _SABLON.match((baslik or '').strip())
     aciklama = (tr_aciklama or '').strip() or (orijinal_aciklama or '').strip()
-    if not eslesme or not aciklama:
+    if not eslesme:
+        return _eski_kesik_baslik(cve_id, baslik)
+    if not aciklama:
         return baslik
 
     linux = _LINUX.match(aciklama)

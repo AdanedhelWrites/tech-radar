@@ -53,6 +53,30 @@ class V1TestCase(TestCase):
 from unittest import mock
 
 
+class RetranslateKilitMixin:
+    """retranslate_pending_task'i cagiran testler icin kilit izolasyonu.
+
+    setUp'ta kilit anahtari benzersiz bir adla degistirilir ve news.retranslate._canli_redis test
+    istemcisine yonlendirilir; boylece testler (canli compose yiginiyla kosulsa bile) canlidaki
+    `retranslate:kilit` anahtarina dokunmaz. Test sonunda benzersiz anahtar silinir.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.kilit_redis, self.kilit_anahtari = self.kilit_ortami()
+
+    def kilit_ortami(self):
+        from news import tasks
+        redis_client = test_redis_client()
+        anahtar = f'test-retranslate-kilit-{uuid.uuid4().hex}:kilit'
+        self.addCleanup(redis_client.delete, anahtar)
+        for yama in (mock.patch.object(tasks, 'RETRANSLATE_KILIT_ANAHTARI', anahtar),
+                     mock.patch('news.retranslate._canli_redis', return_value=redis_client)):
+            yama.start()
+            self.addCleanup(yama.stop)
+        return redis_client, anahtar
+
+
 class RefreshTestMixin:
     """Tetikleme testleri icin guvenli ortam.
 

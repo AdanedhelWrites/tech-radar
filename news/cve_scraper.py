@@ -18,6 +18,23 @@ import logging
 log = logging.getLogger(__name__)
 
 
+def tekil_cwe(cwe_ids) -> List[str]:
+    """CWE listesini sirayi koruyarak tekillestirir, bos degerleri atar."""
+    return list(dict.fromkeys(c for c in (cwe_ids or []) if c))
+
+
+def nvd_cwe_listesi(weaknesses) -> List[str]:
+    """NVD 'weaknesses' alanindan tekil CWE kimlikleri.
+
+    NVD ayni CWE'yi hem kendi analizinden (Primary) hem CNA'dan (Secondary)
+    ayri kayit olarak verebilir; ikisi de alinirsa liste yinelenir.
+    """
+    return tekil_cwe(
+        d.get('value', '') for w in (weaknesses or [])
+        for d in w.get('description', []) if d.get('value', '').startswith('CWE-')
+    )
+
+
 class CVEScraper(BaseRSSScraper):
     """CVE Scraper temel sınıfı"""
 
@@ -108,8 +125,7 @@ class CVEScraper(BaseRSSScraper):
             return None
 
         references = [r['url'] for r in cve_data.get('references', []) if r.get('url')]
-        cwe_ids = [d['value'] for w in cve_data.get('weaknesses', [])
-                   for d in w.get('description', []) if d.get('value', '').startswith('CWE-')]
+        cwe_ids = nvd_cwe_listesi(cve_data.get('weaknesses'))
 
         def _tarih(deger):
             try:
@@ -241,12 +257,8 @@ class NVDScraper(CVEScraper):
                         if ref.get('url'):
                             references.append(ref['url'])
                     
-                    cwe_ids = []
-                    for weakness in cve_data.get('weaknesses', []):
-                        for desc in weakness.get('description', []):
-                            if desc.get('value', '').startswith('CWE-'):
-                                cwe_ids.append(desc['value'])
-                    
+                    cwe_ids = nvd_cwe_listesi(cve_data.get('weaknesses'))
+
                     published = cve_data.get('published', '')
                     modified = cve_data.get('lastModified', '')
                     
@@ -374,11 +386,7 @@ class GitHubAdvisoryScraper(CVEScraper):
                         pub_date = datetime.now().date()
                     
                     # CWE'ler
-                    cwe_ids = []
-                    for cwe in adv.get('cwes', []):
-                        cwe_id = cwe.get('cwe_id', '')
-                        if cwe_id:
-                            cwe_ids.append(cwe_id)
+                    cwe_ids = tekil_cwe(cwe.get('cwe_id', '') for cwe in adv.get('cwes', []))
                     
                     # Etkilenen ürünler
                     affected = []
@@ -401,7 +409,9 @@ class GitHubAdvisoryScraper(CVEScraper):
                     cve = {
                         'cve_id': cve_id,
                         'source': 'GitHub Advisory',
-                        'original_title': f"{cve_id} - {summary[:80]}" if summary else f"{cve_id} - Güvenlik Açığı",
+                        # 2026-11-04: ozet 80 karakterde kelime ortasindan kesiliyordu ("... Dual-Header Inco");
+                        # GHSA ozetleri kisadir, tamami saklanir. Eski kayitlar API'de duzeltilir (cve_basligi).
+                        'original_title': f"{cve_id} - {summary.strip()}" if summary else f"{cve_id} - Güvenlik Açığı",
                         'original_description': description[:4000] if description else 'Açıklama bulunamadı',
                         'severity': severity,
                         'cvss_score': cvss_score,
@@ -683,12 +693,8 @@ class NVDRecentScraper(CVEScraper):
                     except:
                         published_date = datetime.now().date()
                     
-                    cwe_ids = []
-                    for weakness in cve_data.get('weaknesses', []):
-                        for desc in weakness.get('description', []):
-                            if desc.get('value', '').startswith('CWE-'):
-                                cwe_ids.append(desc['value'])
-                    
+                    cwe_ids = nvd_cwe_listesi(cve_data.get('weaknesses'))
+
                     references = []
                     for ref in cve_data.get('references', []):
                         if ref.get('url'):

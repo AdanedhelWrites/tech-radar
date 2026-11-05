@@ -27,7 +27,7 @@ from news.tests.saglayici_yardimcilari import SahteSaglayici
 ERROR_PAGE = ('Error 500 (Server Error)!!1500.That’s an error.There was an error. '
               'Please try again later.That’s all we know.')
 
-# Task'lar sonuc listesini cache'e yazar; testler canli Redis cache'ini ezmesin
+# Testler canli Redis cache'ine yazmasin (eski liste cache'i 2026-11-05'te kaldirildi; korunur)
 LOCMEM_CACHE = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
 
 

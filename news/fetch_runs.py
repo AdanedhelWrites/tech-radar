@@ -149,6 +149,18 @@ def tur_bitti(sender=None, task_id=None, retval=None, state=None, **kwargs):
                 _kapat(task_id, status='success')
             return
 
+        if retval.get('skipped'):
+            # Tekil kilit yuzunden atlanan tur (retranslate_pending_task -> {'skipped': 'locked'}):
+            # is yapilmadi. 'success' + saved_count 0 satiri ceviri_kuyrugu_ozeti'ni yaniltirdi
+            # (ust uste atlanan turlar "takili" sayilirdi), bu yuzden satir hic birakilmaz.
+            # Bilinen sinir: atlanan turun task_prerun'u (tur_basladi), kilidi tutan calisan turun
+            # 'running' satirini interrupted/failure yapmis olabilir; o tur bitince postrun
+            # (_kapat, pk ile) satiri gercek sonucuyla ustune yazar. Arada gecici yanlis gorunum olur.
+            kayit_id = _acik_turlar.pop(task_id, None)
+            if kayit_id is not None:
+                FetchRun.objects.filter(pk=kayit_id).delete()
+            return
+
         hata_var = 'error' in retval
         hata = str(retval.get('error') or '')[:HATA_TAVANI] if hata_var else ''
         bolum = _bolum(sender)
@@ -208,8 +220,8 @@ def tur_coktu(sender=None, task_id=None, exception=None, **kwargs):
 
 
 # Bu kadar ardisik bitmis retranslate turu hic kayit cevirmediyse (ve bekleyen varsa) kuyruk takili sayilir.
-# Tur 2 saatte bir: 3 tur ~6 saat ilerlemesizlik demektir.
-TAKILMA_TUR_SAYISI = 3
+# Turlar saatlik (gunde 20, 00/06/12/18 atlanir): 6 tur ~6 saat ilerlemesizlik demektir.
+TAKILMA_TUR_SAYISI = 6
 
 
 def ceviri_kuyrugu_ozeti() -> dict:
@@ -259,6 +271,10 @@ def bolum_ozetleri() -> dict:
             'pending_translation': model.objects.filter(needs_translation=True).count(),
             'translation_given_up': model.objects.filter(
                 needs_translation=True, translation_attempts__gte=RETRANSLATE_MAX_ATTEMPTS).count(),
+            # Libre ile cevrilip Gemini yukseltmesinden vazgecilen (deneme tavani dolan) kayitlar
+            'upgrade_given_up': model.objects.filter(
+                translation_provider='libretranslate', needs_translation=False,
+                translation_attempts__gte=RETRANSLATE_MAX_ATTEMPTS).count(),
             'silent_sources': [k for k, v in kaynaklar.items() if v['silent']],
         }
     return ozet
