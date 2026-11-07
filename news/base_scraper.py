@@ -38,6 +38,26 @@ def oturum_kur(headers: Optional[Dict[str, str]] = None) -> requests.Session:
     return oturum
 
 
+# "Nov 07, 2026", "November 7, 2026", "Sept. 3, 2026": metnin icinde aranir. 2026-11-07 olcumu: The Hacker
+# News tarih metninin basinda ikon yazi tipi karakteri var ('Nov 07, 2026'); tam esleme bekleyen
+# strptime 439 kaydin hepsinde dustu ve kayitlara cekim gunu yazildi.
+_AY_TARIHI = re.compile(
+    r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})(?!\d)', re.I)
+_AYLAR = {ad: i for i, ad in enumerate(
+    ('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'), 1)}
+
+
+def ay_tarihi_coz(metin: str) -> Optional[datetime]:
+    """Metindeki ilk "Ay G, YYYY" tarihini (Ingilizce, tam ya da kisa ay adi) dondurur; yoksa None."""
+    eslesme = _AY_TARIHI.search(metin or '')
+    if not eslesme:
+        return None
+    try:
+        return datetime(int(eslesme.group(3)), _AYLAR[eslesme.group(1).lower()], int(eslesme.group(2)))
+    except ValueError:  # 31 Subat gibi
+        return None
+
+
 def kok_alan(host: str) -> str:
     """Kayitli kok alan yaklasimi: son iki etiket (api.theregister.com -> theregister.com)."""
     parcalar = (host or '').lower().strip('.').split('.')
@@ -165,6 +185,8 @@ class BaseRSSScraper:
         self._aktif_kok = kok_alan(urlsplit(feed_url).hostname or '')
         try:
             resp = self.session.get(feed_url, timeout=20)
+            # 403/bot engeli sayfasi bos XML gibi ayrisip sessizce 0 kayit veriyordu; durum kodu loga yazilsin
+            resp.raise_for_status()
             soup = BeautifulSoup(resp.content, 'xml')
             items = soup.find_all('item')
             if not items:

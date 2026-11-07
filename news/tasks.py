@@ -3,6 +3,7 @@ import os
 import uuid
 from celery import shared_task
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
 
@@ -11,6 +12,7 @@ from .translation_utils import (
     consume_translation_failures, consume_translation_providers, kayit_saglayicisi,
 )
 from .kaynaklar import kayit_tavani, kaynak_sayaclari, kaynak_yazildi
+from .gundem import CEVIRI_SIRASI, CEVIRISIZ_SIRA
 
 from scraper_multi import MultiSourceScraper
 from .cve_scraper import MultiCVEScraper
@@ -52,6 +54,38 @@ def _drop_existing(entries, model, field, key='link'):
     return [e for e in entries if e.get(key) not in existing]
 
 
+# Scraper ile saatlik retranslate yarisi (2026-11-07 inceleme): _drop_existing listesi tur basinda alinir,
+# scraper dakikalarca cevirirken retranslate ayni bekleyen kaydi Gemini ile cevirebilir; turun sonundaki
+# update_or_create o ceviriyi LibreTranslate ciktisiyla ya da basarisiz cevirinin Ingilizcesiyle eziyordu.
+# Kural: cevrilmis (needs_translation=False) bir kaydin ceviri alanlari ancak en az ayni kalitede bir
+# basarili ceviriyle ezilir; diger alanlar (kaynak, tarih, CVSS...) her zaman yazilir.
+CEVIRI_ALANLARI = frozenset({'turkish_title', 'turkish_description', 'turkish_summary',
+                             'needs_translation', 'translation_provider'})
+
+
+def _ceviri_sirasi(saglayici) -> int:
+    return CEVIRI_SIRASI.get((saglayici or '').strip().lower(), CEVIRISIZ_SIRA)
+
+
+def _ceviriyi_dusurur(mevcut, yeni: dict) -> bool:
+    if mevcut.needs_translation:
+        return False
+    if yeni.get('needs_translation'):
+        return True
+    return _ceviri_sirasi(yeni.get('translation_provider')) > _ceviri_sirasi(mevcut.translation_provider)
+
+
+def _kaydet(model, defaults: dict, **anahtar):
+    """update_or_create; mevcut kaydin daha iyi cevirisi ezilmez (bkz. CEVIRI_ALANLARI). Satir kilidiyle:
+    retranslate'in _yaz'i ile ayni anda yazilmaz."""
+    with transaction.atomic():
+        mevcut = (model.objects.select_for_update().filter(**anahtar)
+                  .only('id', 'needs_translation', 'translation_provider').first())
+        if mevcut is not None and _ceviriyi_dusurur(mevcut, defaults):
+            defaults = {alan: deger for alan, deger in defaults.items() if alan not in CEVIRI_ALANLARI}
+        return model.objects.update_or_create(**anahtar, defaults=defaults)
+
+
 # Not: `needs_translation` degeri, generator kaydi cevirip yield ettikten sonra
 # okunur; consume_translation_failures() sayaci her kayitta sifirlar.
 # translation_provider ayni anda okunur: kaydin cevirisinde kullanilan
@@ -78,7 +112,8 @@ def fetch_news_task(days=7, selected_sources=None, clear_existing=False, skip_ex
             for article in scraper.process_news(articles):
                 basarisizlik = consume_translation_failures()
                 ceviri_hatalari += basarisizlik
-                NewsArticle.objects.update_or_create(
+                _kaydet(
+                    NewsArticle,
                     link=article['link'],
                     defaults={
                         'source': article['source'],
@@ -158,7 +193,7 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
                 # yazdiginda (anahtar yok) mevcut tarih None ile ezilmesin
                 if cve.get('kev_added_date'):
                     defaults['kev_added_date'] = cve['kev_added_date']
-                CVEEntry.objects.update_or_create(cve_id=cve['cve_id'], defaults=defaults)
+                _kaydet(CVEEntry, defaults, cve_id=cve['cve_id'])
                 saved_count += 1
                 kaynak_yazildi(kaynak_sayaci, cve['source'])
             return {'success': True, 'count': saved_count,
@@ -190,7 +225,8 @@ def fetch_k8s_task(days=30, selected_sources=None, skip_existing=True):
             for entry in scraper.process_entries(entries):
                 basarisizlik = consume_translation_failures()
                 ceviri_hatalari += basarisizlik
-                KubernetesEntry.objects.update_or_create(
+                _kaydet(
+                    KubernetesEntry,
                     link=entry['link'],
                     defaults={
                         'source': entry['source'],
@@ -237,7 +273,8 @@ def fetch_sre_task(days=30, selected_sources=None, skip_existing=True):
             for entry in scraper.process_entries(entries):
                 basarisizlik = consume_translation_failures()
                 ceviri_hatalari += basarisizlik
-                SREEntry.objects.update_or_create(
+                _kaydet(
+                    SREEntry,
                     link=entry['link'],
                     defaults={
                         'source': entry['source'],
@@ -282,7 +319,8 @@ def fetch_devtools_task(days=30, selected_sources=None, skip_existing=True):
             for entry in scraper.process_entries(entries):
                 basarisizlik = consume_translation_failures()
                 ceviri_hatalari += basarisizlik
-                DevToolsEntry.objects.update_or_create(
+                _kaydet(
+                    DevToolsEntry,
                     link=entry['link'],
                     defaults={
                         'source': entry['source'],
@@ -328,7 +366,8 @@ def fetch_ai_news_task(days=30, selected_sources=None, skip_existing=True):
             for entry in scraper.process_entries(entries):
                 basarisizlik = consume_translation_failures()
                 ceviri_hatalari += basarisizlik
-                AINewsEntry.objects.update_or_create(
+                _kaydet(
+                    AINewsEntry,
                     link=entry['link'],
                     defaults={
                         'source': entry['source'],

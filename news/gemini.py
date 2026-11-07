@@ -155,12 +155,50 @@ def _redis_client():
         return None
 
 
+# Redis'e ulasilamayinca kurulan yerel yedek (kapi ve sayac) bu kadar sn sonra Redis'i yeniden dener
+# (2026-11-07 inceleme): once yedek kalici kaliyordu; Redis donse de her worker sureci kendi sayaciyla
+# gunluk butcenin tamamini harcayabiliyordu. Yalniz yedek olarak kurulan nesneler (yedek=True) yeniden
+# denenir; testlerin verdigi yerel nesneler etkilenmez.
+REDIS_YENIDEN_DENEME_SN = 60
+
+
+def _yedek_kur(nesne):
+    nesne.yedek = True
+    nesne.kurulma = time.monotonic()
+    return nesne
+
+
+def _yedek_suresi_doldu(nesne) -> bool:
+    return (getattr(nesne, 'yedek', False)
+            and time.monotonic() - nesne.kurulma >= REDIS_YENIDEN_DENEME_SN)
+
+
+def _kapi_kur(mevcut, prefix: str):
+    """Redis varsa paylasilan kapi; yoksa yerel yedek (mevcut yedek varsa korunur, sayaci yeniden baslar)."""
+    client = _redis_client()
+    if client is not None:
+        return tu._RedisGate(client, prefix=prefix)
+    return _yedek_kur(mevcut if mevcut is not None else tu._LocalGate())
+
+
+def _sayac_kur(mevcut, prefix: str, ttl: int):
+    """Redis varsa paylasilan sayac; yoksa yerel yedek. Yedekten Redis'e donerken yedegin saydigi istekler
+    Redis sayacina eklenir: kesinti suresince harcanan butce kaybolmaz."""
+    client = _redis_client()
+    if client is None:
+        return _yedek_kur(mevcut if mevcut is not None else _LocalButce())
+    sayac = _RedisButce(client, prefix=prefix, ttl=ttl)
+    for anahtar, miktar in (getattr(mevcut, 'sayaclar', None) or {}).items():
+        if miktar:
+            sayac.artir(anahtar, miktar)
+    return sayac
+
+
 def _get_gate():
     """Aralik kapisi + devre kesici; Redis varsa tum worker'larda paylasilir."""
     global _gate
-    if _gate is None:
-        client = _redis_client()
-        _gate = tu._RedisGate(client, prefix='gemini') if client else tu._LocalGate()
+    if _gate is None or _yedek_suresi_doldu(_gate):
+        _gate = _kapi_kur(_gate, 'gemini')
     return _gate
 
 
@@ -209,9 +247,8 @@ class _RedisButce:
 
 def _get_butce():
     global _butce
-    if _butce is None:
-        client = _redis_client()
-        _butce = _RedisButce(client) if client else _LocalButce()
+    if _butce is None or _yedek_suresi_doldu(_butce):
+        _butce = _sayac_kur(_butce, 'gemini', 48 * 3600)
     return _butce
 
 
@@ -549,15 +586,13 @@ class KayitCevirmeni:
     # --- Durum ve ayarlar (birincil Gemini bunlari modul globallerine yonlendirir) ---
 
     def _kapi(self):
-        if self._gate is None:
-            client = _redis_client()
-            self._gate = tu._RedisGate(client, prefix=self.onek) if client else tu._LocalGate()
+        if self._gate is None or _yedek_suresi_doldu(self._gate):
+            self._gate = _kapi_kur(self._gate, self.onek)
         return self._gate
 
     def _sayac(self):
-        if self._butce is None:
-            client = _redis_client()
-            self._butce = _RedisButce(client, prefix=self.onek, ttl=self.sayac_ttl) if client else _LocalButce()
+        if self._butce is None or _yedek_suresi_doldu(self._butce):
+            self._butce = _sayac_kur(self._butce, self.onek, self.sayac_ttl)
         return self._butce
 
     def tavan(self) -> int:
