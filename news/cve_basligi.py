@@ -66,19 +66,13 @@ _ONEK = re.compile(r'^\s*CVE-\d{4}-\d+\s*[-–—:]?\s*', re.I)
 
 
 def onekli_baslik(cve_id: str, ceviri: str) -> str:
-    """Cevrilmis ozete "CVE-x - " onekini koyar. Ceviri onekle geldiyse (LibreTranslate tam basligi cevirir;
-    model ayiraci '–' ya da ':' yapabilir) once o atilir. Bos ceviride ''."""
+    """Cevrilmis ozete "CVE-x - " onekini koyar. Ceviri onekle geldiyse (model onegi tekrarlayabilir, ayiraci
+    '–' ya da ':' yapabilir; LibreTranslate yolu orijinal basligi aynen verir) once o atilir. Bos ceviride ''."""
     ozet = (ceviri or '').strip()
     if ozet.upper().startswith(cve_id.upper()):
         ozet = _ONEK.sub('', ozet, count=1).strip()
     return f'{cve_id} - {ozet}' if ozet else ''
 
-
-def turkce_baslik(cve_id: str, baslik: str, cevir) -> str:
-    """Saklanacak Turkce baslik: ozet varsa cevir(ozet) onekiyle, yoksa (sablon) baslik aynen.
-    cve_scraper.process_cves ve retranslate ayni kurali kullanir."""
-    ozet = baslik_ozeti(cve_id, baslik)
-    return (onekli_baslik(cve_id, cevir(ozet)) if ozet else '') or baslik
 
 
 def cve_basligi(cve_id: str, baslik: str, tr_aciklama: str, orijinal_aciklama: str) -> str:

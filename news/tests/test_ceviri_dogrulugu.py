@@ -10,7 +10,7 @@ from django.test import SimpleTestCase, TestCase
 import scraper_multi
 from news import ai_scraper, cve_scraper, devtools_scraper, gemini, k8s_scraper, retranslate, sre_scraper
 from news import translation_utils as tu
-from news.cve_basligi import baslik_ozeti, onekli_baslik, turkce_baslik
+from news.cve_basligi import baslik_ozeti, onekli_baslik
 from news.management.commands.bozuk_cevirileri_isaretle import ingilizce_kalmis
 from news.metin_temizle import temizle
 from news.models import AINewsEntry, CVEEntry, KubernetesEntry
@@ -167,21 +167,14 @@ class CveBaslikYardimcilariTests(SimpleTestCase):
                 self.assertEqual(onekli_baslik('CVE-2026-1', ceviri), 'CVE-2026-1 - SQL enjeksiyonu')
         self.assertEqual(onekli_baslik('CVE-2026-1', '  '), '')
 
-    def test_turkce_baslik(self):
-        cevir = mock.Mock(return_value='SQL enjeksiyonu')
-        self.assertEqual(turkce_baslik('CVE-2026-1', 'CVE-2026-1 - Güvenlik Açığı', cevir),
-                         'CVE-2026-1 - Güvenlik Açığı')
-        cevir.assert_not_called()
-        self.assertEqual(turkce_baslik('CVE-2026-1', 'CVE-2026-1 - SQL Injection', cevir),
-                         'CVE-2026-1 - SQL enjeksiyonu')
-        cevir.assert_called_once_with('SQL Injection')
-
-    def test_process_cves_ozet_basligi_cevirir(self):
-        with mock.patch.object(cve_scraper, 'translate_text', side_effect=lambda m: f'TR {m}'):
+    def test_process_cves_basligi_libretranslate_ile_cevirmez(self):
+        # 11-07: LibreTranslate kisa teknik basligi orijinalinden kotu ceviriyordu; baslik yalniz Gemini yolunda
+        with mock.patch.object(cve_scraper, 'translate_text', side_effect=lambda m: f'TR {m}') as cevir:
             kayit = next(cve_scraper.MultiCVEScraper().process_cves([
                 {'cve_id': 'CVE-2026-1', 'original_title': 'CVE-2026-1 - Stored XSS in Foo',
                  'original_description': 'Short.'}]))
-        self.assertEqual(kayit['turkish_title'], 'CVE-2026-1 - TR Stored XSS in Foo')
+        self.assertEqual(kayit['turkish_title'], 'CVE-2026-1 - Stored XSS in Foo')
+        cevir.assert_not_called()
 
 
 def _cve(no, baslik=None, cvss=9.8, provider='libretranslate', tr_aciklama=None, **ek):
@@ -208,6 +201,13 @@ class RetranslateCveBaslikTests(TestCase):
         kayit.refresh_from_db()
         self.assertEqual(kayit.turkish_title, "CVE-2026-3 - Foo'da kalıcı XSS")
 
+    def test_libretranslate_yolu_basligi_cevirmez(self):
+        kayit = _cve(9, 'CVE-2026-9 - Stored XSS in Foo')
+        with mock.patch.object(retranslate.tu, 'translate_text', side_effect=lambda m: f'LT {m}'):
+            alanlar = retranslate._cve(kayit)
+        self.assertEqual(alanlar['turkish_title'], 'CVE-2026-9 - Stored XSS in Foo')
+        self.assertEqual(alanlar['turkish_description'], f'LT {kayit.original_description}')
+
     def test_ascii_gemini_cevirisi_yukseltme_adayidir(self):
         ascii_ = _cve(4, provider='gemini', tr_aciklama='Uzaktaki saldirgan sunucudan istedigi dosyalari '
                                                          'okuyabilir ve hassas verileri ele gecirebilir.')
@@ -225,7 +225,7 @@ class CveBaslikCevirKomutuTests(SaglayiciZinciriMixin, TranslationGateMixin, Tes
 
     def setUp(self):
         super().setUp()
-        self.saglayicilari_ayarla(SahteSaglayici('libretranslate', lambda m: f'LT {m}'))
+        self.libre = self.saglayicilari_ayarla(SahteSaglayici('libretranslate', lambda m: f'LT {m}'))[0]
         self.onemli = _cve(11, 'CVE-2026-11 - Stored XSS in Foo', provider='gemini')
         self.dusuk = _cve(12, 'CVE-2026-12 - Open redirect in Bar', cvss=4.3, provider='gemini')
         self.sablon = _cve(13)
@@ -238,22 +238,24 @@ class CveBaslikCevirKomutuTests(SaglayiciZinciriMixin, TranslationGateMixin, Tes
         return cikti.getvalue()
 
     def test_rapor_yazmaz(self):
-        self.assertIn('Basligi cevrilmemis CVE: 2 (Gemini: 1, LibreTranslate: 1)', self._komut())
+        self.assertIn('Basligi cevrilmemis CVE: 2 (onem sinifinda: 1; digerleri Ingilizce kalir)', self._komut())
         self.onemli.refresh_from_db()
         self.assertEqual(self.onemli.turkish_title, self.onemli.original_title)
 
-    def test_onemli_gemini_digeri_libretranslate(self):
+    def test_yalniz_onemli_gemini_ile_cevrilir(self):
         def paket(kayitlar, bolum=None):
             return gemini.PaketSonucu(ceviriler={k: {'title': f'GM {v["title"]}'} for k, v in kayitlar.items()})
         with mock.patch.object(gemini, 'hazir', return_value=True), \
                 mock.patch.object(gemini, 'paket_cevir', side_effect=paket) as paket_cevir:
             cikti = self._komut('--uygula')
-        self.assertIn('Gemini: 1; LibreTranslate: 1', cikti)
+        self.assertIn('Gemini: 1; reddedilen (Ingilizce kalir): 0', cikti)
         self.assertEqual(paket_cevir.call_args[0][0], {'k0': {'title': 'Stored XSS in Foo'}})
         for kayit in (self.onemli, self.dusuk, self.sablon, self.cevrilmis):
             kayit.refresh_from_db()
         self.assertEqual(self.onemli.turkish_title, 'CVE-2026-11 - GM Stored XSS in Foo')
-        self.assertEqual(self.dusuk.turkish_title, 'CVE-2026-12 - LT Open redirect in Bar')
+        self.assertEqual(self.dusuk.turkish_title, 'CVE-2026-12 - Open redirect in Bar',
+                         'Dusuk/orta baslik LibreTranslate ile cevrilmez')
+        self.assertEqual(self.libre.cagrilar, [])
         self.assertEqual(self.sablon.turkish_title, 'CVE-2026-13 - Güvenlik Açığı')
         self.assertEqual(self.cevrilmis.turkish_title, 'CVE-2026-14 - Eski')
         self.assertEqual(self.onemli.translation_provider, 'gemini', 'Saglayici (aciklamanin) degismez')
@@ -265,12 +267,14 @@ class CveBaslikCevirKomutuTests(SaglayiciZinciriMixin, TranslationGateMixin, Tes
         self.onemli.refresh_from_db()
         self.assertEqual(self.onemli.turkish_title, self.onemli.original_title)
 
-    def test_gemini_reddi_libretranslatee_duser(self):
+    def test_gemini_reddi_ingilizce_birakir(self):
         with mock.patch.object(gemini, 'hazir', return_value=True), \
                 mock.patch.object(gemini, 'paket_cevir', return_value=gemini.PaketSonucu(reddedilen={'k0'})):
-            self._komut('--uygula')
+            cikti = self._komut('--uygula')
+        self.assertIn('reddedilen (Ingilizce kalir): 1', cikti)
         self.onemli.refresh_from_db()
-        self.assertEqual(self.onemli.turkish_title, 'CVE-2026-11 - LT Stored XSS in Foo')
+        self.assertEqual(self.onemli.turkish_title, self.onemli.original_title)
+        self.assertEqual(self.libre.cagrilar, [])
 
 
 class ReklamSuzgeciTests(SimpleTestCase):
