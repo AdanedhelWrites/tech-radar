@@ -13,7 +13,7 @@ from typing import List, Dict
 import time
 
 from news.translation_utils import (
-    translate_text, translate_long_text,
+    ceviri_basarisizligi_isaretle, translate_text, translate_long_text,
     _protect_terms, _restore_terms,
 )
 import logging
@@ -814,6 +814,7 @@ class MultiK8sScraper(K8sScraper):
                 yield entry
             except Exception as e:
                 log.warning(f"Isleme hatasi: {e}")
+                ceviri_basarisizligi_isaretle()
                 entry['turkish_title'] = entry['original_title']
                 entry['turkish_description'] = entry['original_description']
                 yield entry

@@ -9,7 +9,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Uygulama surumu** | `appVersion` 2026.10.3 (CalVer; imaj etiketi) |
 | **Helm chart** | 2.2.1 (SemVer; etiket `chart-2.2.1`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 892 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 282 Vitest testi, 25 dosya (`frontend/src/`) |
+| **Testler** | 922 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 282 Vitest testi, 25 dosya (`frontend/src/`) |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -309,7 +309,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-892 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+922 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -357,7 +357,8 @@ Frontend icin `frontend/` altinda `npm install && npm run dev` yeterlidir; `vite
 |---|---|
 | `manage.py veri_tasi_dump <dosya>` | Tam hassasiyetli (mikrosaniye koruyan) JSON dump; hassas icerik, commit edilmez |
 | `manage.py veri_ozeti` | Model basina satir sayisi ve alan ozeti; iki veritabanini karsilastirmak icin |
-| `manage.py bozuk_cevirileri_isaretle` | Turkce metninde `XTRM` yer tutucu kalintisi olan kayitlari bulup `needs_translation` isaretler |
+| `manage.py bozuk_cevirileri_isaretle` | Turkce metninde `XTRM` yer tutucu kalintisi olan ya da Ingilizce kalmis (Turkce harf yok, kelimelerin %90'i orijinalde) 'cevrildi' kayitlari bulup `needs_translation` isaretler, deneme sayacini sifirlar; varsayilan rapor, `--uygula` yazar |
+| `manage.py cve_baslik_cevir` | Basligi Ingilizce kalmis GHSA/KEV CVE basliklarini bir kez cevirir (CVSS >= 7 / KEV Gemini paketiyle, digerleri LibreTranslate); yalniz `turkish_title` yazilir; varsayilan rapor, `--uygula` yazar |
 | `scripts/pg_test.sh` | Tek kullanimlik PostgreSQL + Redis'e karsi `manage.py`; canli yigina dokunmaz |
 | `scripts/ornek_istemci.py` | `/api/v1/` delta senkron ornegi (yalniz standart kutuphane) |
 | `scripts/helm_yerel_dogrulama.sh imaj\|kur\|sok` | Chart'i yalniz `docker-desktop`'ta gercek kurulumla dogrular (S1-S7) |
@@ -618,8 +619,8 @@ cybersecurity_news/
 │   ├── gundem.py               # Gundem: olay gruplama ve puan (saf fonksiyonlar, /api/gundem/)
 │   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
 │   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
-│   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle
-│   ├── tests/                  # 892 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
+│   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle, cve_baslik_cevir, cve_aciklama_tamamla
+│   ├── tests/                  # 922 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
 │   │   └── fixtures/gundem_basliklari.json  # Gundem gruplama testlerinin gercek baslik ornekleri
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
 │   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
@@ -779,7 +780,9 @@ Ceviri sonrasi otomatik duzeltmeler:
 - **Tekil tur kilidi:** Tur, Redis kilidi `retranslate:kilit` ile korunur (sahip jetonu, TTL `min(RETRANSLATE_TIME_BUDGET + 600, CELERY_TASK_TIME_LIMIT + 60)` sn; olu worker'in kilidi sonraki saatlik turu atlatmaz). Onceki tur surerken baslayan tur `{'skipped': 'locked'}` doner ve `FetchRun` satiri birakmaz.
 - **Gorunurluk:** `/api/saglik/` `translation_budget.gemini` (`used`, `limit`, `period`, `available`, `cooldown`) dondurur; ana sayfa saglik seridi "Gemini kullanilan/sinir" gosterir. Bekleyen var ve son 6 bitmis tur (~6 saat) hic kayit cevirmediyse bolum `stalled` sayilir.
 
-Eski `google` etiketli kayitlar yukseltilmez, etiketli kalir.
+Eski `google` etiketli kayitlar yukseltilmez, etiketli kalir. 2026-10-21'den once ASCII'ye kaymis Gemini cevirileri (en az 10 kelime, hic Turkce harf yok; Gemini dogrulamasinin `turkce harf yok` kuraliyla ayni olcut, `retranslate._ascii_gemini_cevirisi`) de yukseltme adayidir; onem sinifi kurali onlara da uygulanir.
+
+**Ceviri dogrulugu (2026-11-07):** Son islem (`turkish_post_process`) yer tutucular geri konmadan once calisir; noktali ve alt cizgili tanimlayicilar (`os.environ.get`, `blazer_usb.c`) ve kod parcalari hem terim korumasinda hem son islemde korunur. Gemini her alanin capalarini (CVE/GHSA numarasi, URL, kod parcasi, surum) cevirisinde aynen arar, eksikse reddeder (tek kayit ve paket yolu); talimat bir terim sozlugu tasir (vulnerability -> guvenlik acigi, exploit -> istismar...; commit/branch/pipeline gibi terimler Ingilizce kalir). GHSA ozeti ve KEV zafiyet adi tasiyan CVE basliklari cevrilir (`cve_basligi.turkce_baslik`). Scraper'in ceviri istisnasi dali kaydi `needs_translation` olarak yazar. Etkinlik reklami paragraflari (TechCrunch, KubeCon kayit cagrisi) ceviriden once atilir (`metin_temizle._reklam_mi`).
 
 **Anahtar alma:** Google AI Studio (aistudio.google.com) → Get API key → Create API key; `cybersecurity_news/.env` icine `GEMINI_API_KEY=...` (gitignore'da). Kart gerekmez; kota asilirsa 429 doner, sistem LibreTranslate ile surer.
 
@@ -979,7 +982,7 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 
 | Is akisi | Tetik | Mod | Ne yapar |
 |---|---|---|---|
-| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 892 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (282 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
+| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 922 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (282 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
 | `Dependency Review` | PR | **Kapi** | HIGH/CRITICAL zafiyetli bagimlilik getiren PR'i durdurur |
 | `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
 | `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |

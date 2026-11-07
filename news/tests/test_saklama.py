@@ -38,7 +38,7 @@ class CVESaklamaTests(TestCase):
     def _cve(self, no, yayim_gun_once):
         return CVEEntry.objects.create(
             cve_id=f'CVE-2026-{no}', source='NVD Güncel',
-            original_title=f'CVE-2026-{no} - Guvenlik Acigi',
+            original_title=f'CVE-2026-{no} - Güvenlik Açığı',
             original_description='Ornek aciklama metni.',
             published_date=date.today() - timedelta(days=yayim_gun_once),
             link=f'https://ornek.test/cve/{no}')

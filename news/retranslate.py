@@ -8,7 +8,8 @@ Redis'te bir imlec ({prefix}:cursor:{bolum}); icerik yuzunden cevrilemeyen
 kayit sirada kalir ama imlec onu gecer; sona gelinince imlec silinir. Gorev
 yalnizca HICBIR saglayici (Gemini dahil) hazir degilse durur; imlec o kaydi gecmez.
 
-Asama 2 — Yukseltme (needs_translation=False, translation_provider='libretranslate'),
+Asama 2 — Yukseltme (needs_translation=False, translation_provider='libretranslate' ya da ASCII'ye
+kaymis eski Gemini cevirisi: _ascii_gemini_cevirisi),
 yalnizca Gemini ile (spec 2026-11-02-ceviri-yayma G1-G2, G5 deneme sayaci). Imlec
 yoktur: her tur en yeni adaylardan baslar (created_at azalan). Adaylar paketlenir (G5,
 _paketle: GEMINI_BATCH_CHARS / GEMINI_BATCH_MAX); bir paket tek istektir (gemini.paket_cevir).
@@ -67,6 +68,7 @@ from django.utils import timezone
 from . import gemini
 from . import kayit_cevirmenleri
 from . import translation_utils as tu
+from .cve_basligi import baslik_ozeti, onekli_baslik, turkce_baslik
 from .api_v1.cursor import InvalidCursor, apply_cursor, decode_cursor, encode_cursor
 from .models import (
     AINewsEntry, CVEEntry, DevToolsEntry, KubernetesEntry, NewsArticle, SREEntry,
@@ -233,10 +235,11 @@ def _baslik_ve_uzun_aciklama(kayit) -> Dict[str, str]:
 
 
 def _cve(kayit) -> Dict[str, str]:
-    # cve_scraper.process_cves ile ayni: baslik cevrilmez, 30 karakterden kisa aciklama oldugu gibi kalir
+    # cve_scraper.process_cves ile ayni: sablon baslik cevrilmez (GHSA ozeti / KEV adi cevrilir), 30
+    # karakterden kisa aciklama oldugu gibi kalir
     aciklama = kayit.original_description or ''
     return {
-        'turkish_title': kayit.original_title,
+        'turkish_title': turkce_baslik(kayit.cve_id, kayit.original_title, tu.translate_text),
         'turkish_description': tu.translate_text(aciklama) if len(aciklama.strip()) > 30 else aciklama,
     }
 
@@ -262,8 +265,12 @@ def _gemini_alanlari(ad: str, kayit) -> Dict[str, str]:
     """Gemini'ye gidecek alanlar (spec 3.3). Bos sozluk: kayit Gemini adayi degil."""
     aciklama = (kayit.original_description or '').strip()
     if ad == 'cve':
-        # cve_scraper kurali: baslik cevrilmez, 30 karakterden kisa aciklama oldugu gibi kalir
-        alanlar = {'description': aciklama} if len(aciklama) > 30 else {}
+        # cve_scraper kurali: yalniz baslik ozeti (onek _yaz'da geri konur); 30 karakterden kisa aciklama
+        # oldugu gibi kalir
+        taslak = {'title': baslik_ozeti(kayit.cve_id, kayit.original_title)}
+        if len(aciklama) > 30:
+            taslak['description'] = aciklama
+        alanlar = {alan: metin for alan, metin in taslak.items() if metin}
     else:
         taslak = {'title': (kayit.original_title or '').strip()}
         if aciklama:  # 2026-09-15 haber kurali: orijinal bossa Turkce govdeye dokunma
@@ -393,6 +400,10 @@ def _yaz(kayit, alanlar, saglayici) -> bool:
     OperationalError (ornegin 'database is locked') gecici bir altyapi hatasidir,
     kaydin yoklugu degil; yutulmaz, yukari cikar.
     """
+    if isinstance(kayit, CVEEntry) and 'turkish_title' in alanlar:
+        # Kayit cevirmeni yalniz ozeti cevirir; LibreTranslate yolu onekli basligi verir. Ikisi de tek bicime
+        alanlar = dict(alanlar, turkish_title=onekli_baslik(kayit.cve_id, alanlar['turkish_title'])
+                       or kayit.original_title)
     for alan, deger in alanlar.items():
         setattr(kayit, alan, deger)
     kayit.needs_translation = False
@@ -474,11 +485,27 @@ def _bekleyenler(ad, model, cevir, redis_client, prefix, sinir, sonuc, bitis=Non
     return cevrilen, basarisiz, durdu
 
 
+# 2026-10-21'den (talimat ve 'turkce harf yok' denetimi) once Gemini cevirilerinin bir kismi ASCII'ye kaydi
+# ('kimligi dogrulanmamis saldirgan'; 11-07 olcumu: 4766 CVE + 122 diger kayit). gemini._alan_sorunu'nun
+# 'turkce harf yok' kurali (>= TURKCE_HARF_MIN_KELIME kelime, hic Turkce harf yok) SQL'de aynen uygulanir:
+# en az 10 ardisik >= 2 harfli kelime. Ayni kurala gore kabul edilmis bir ceviri bu yuzden yeniden aday
+# olamaz (kisa, kod agirlikli changelog her turda yeniden cevrilip butce yemez); yeniden reddedilen kayit
+# deneme tavanindan duser.
+_TURKCE_HARF_DESENI = '[çğıöşüÇĞİÖŞÜ]'
+_ASCII_KELIME_DESENI = '([A-Za-z]{2,}[^A-Za-z]+){%d}[A-Za-z]{2,}' % (gemini.TURKCE_HARF_MIN_KELIME - 1)
+
+
+def _ascii_gemini_cevirisi() -> Q:
+    return (Q(translation_provider='gemini', turkish_description__regex=_ASCII_KELIME_DESENI)
+            & ~Q(turkish_description__regex=_TURKCE_HARF_DESENI))
+
+
 def _yukseltme_adaylari(ad, model, sinir) -> list:
-    """En yeni yukseltme adaylari (G2). Sorgu guncel skora bakar: NVD skoru sonradan
-    esigi gecen CVE sonraki turda kendiliginden aday olur."""
-    sorgu = model.objects.filter(needs_translation=False, translation_provider='libretranslate',
-                                 translation_attempts__lt=RETRANSLATE_MAX_ATTEMPTS)
+    """En yeni yukseltme adaylari (G2): LibreTranslate cevirileri ve ASCII'ye kaymis eski Gemini cevirileri
+    (_ascii_gemini_cevirisi). Sorgu guncel skora bakar: NVD skoru sonradan esigi gecen CVE sonraki turda
+    kendiliginden aday olur."""
+    sorgu = model.objects.filter(Q(translation_provider='libretranslate') | _ascii_gemini_cevirisi(),
+                                 needs_translation=False, translation_attempts__lt=RETRANSLATE_MAX_ATTEMPTS)
     if ad == 'cve':
         sorgu = sorgu.filter(Q(cvss_score__gte=CVE_GEMINI_ESIGI) | Q(kev_added_date__isnull=False))
     return list(sorgu.order_by('-created_at', '-id')[:sinir])

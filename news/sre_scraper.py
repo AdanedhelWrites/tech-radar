@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import re
 from typing import List, Dict
 
-from news.translation_utils import translate_text, translate_long_text
+from news.translation_utils import ceviri_basarisizligi_isaretle, translate_text, translate_long_text
 from news.metin_temizle import kayit_hazirla
 from news.base_scraper import BaseRSSScraper, oturum_kur
 import logging
@@ -462,6 +462,7 @@ class MultiSREScraper(SREScraper):
                 try:
                     translated_title = translate_text(entry['title'])
                 except Exception:
+                    ceviri_basarisizligi_isaretle()
                     translated_title = entry['title']
 
                 # Icerik cevirisi
@@ -478,6 +479,7 @@ class MultiSREScraper(SREScraper):
                 }
             except Exception as e:
                 log.warning(f"  SRE haber isleme hatasi: {e}")
+                ceviri_basarisizligi_isaretle()
                 yield {
                     'original_title': entry['title'],
                     'turkish_title': entry['title'],

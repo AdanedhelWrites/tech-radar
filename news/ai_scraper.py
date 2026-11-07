@@ -1,6 +1,6 @@
 from typing import List, Dict
 from news.base_scraper import BaseRSSScraper
-from news.translation_utils import translate_text, translate_long_text
+from news.translation_utils import ceviri_basarisizligi_isaretle, translate_text, translate_long_text
 from news.metin_temizle import kayit_hazirla
 import logging
 
@@ -69,6 +69,7 @@ class MultiAINewsScraper:
                 }
             except Exception as e:
                 log.warning(f'Ceviri hatasi ({entry["source"]}) : {e}')
+                ceviri_basarisizligi_isaretle()
                 yield {
                     'source': entry['source'],
                     'original_title': entry['title'],
