@@ -1,4 +1,5 @@
 // Zafiyet durumu basligi, alt cumle ve dort ozet kutusu (spec 2026-10-31 G3, pencereler §6).
+// Her kutu kendi penceresini yazar (2026-11-07): kritik 24 saat, yuksek ve KEV 7 gun; ust etiket pencere tasimaz.
 // Kritik yoksa baslik sakin bir cumleye doner; bos durum da rahatlatici olmali.
 
 const sayi = (deger) => (Number.isFinite(deger) ? deger : 0)
@@ -40,15 +41,15 @@ function OzetIcerigi({ ozet }) {
   return (
     <>
       {kritik > 0 ? (
-        <h1 className="durum-baslik"><b>{`${kritik} kritik zafiyet`}</b> değerlendirme bekliyor</h1>
+        <h1 className="durum-baslik">Son 24 saatte <b>{`${kritik} kritik zafiyet`}</b> eklendi</h1>
       ) : (
         <h1 className="durum-baslik sakin">Son 24 saatte kritik zafiyet yok</h1>
       )}
       {cumle && <p className="durum-cumle">{cumle}</p>}
       <div className="ozet-kutulari">
-        <OzetKutusu deger={kritik} etiket="Kritik (CVSS ≥ 9.0)" ton={kritik > 0 ? 'kritik' : 'saglikli'} />
+        <OzetKutusu deger={kritik} etiket="Kritik (CVSS ≥ 9.0), son 24 saat" ton={kritik > 0 ? 'kritik' : 'saglikli'} />
         <OzetKutusu deger={yuksek} etiket="Yüksek, son 7 gün" ton={yuksek > 0 ? 'yuksek' : ''} />
-        <OzetKutusu deger={kev} etiket="Aktif istismar (KEV)" />
+        <OzetKutusu deger={kev} etiket="KEV'e eklenen, son 7 gün" />
         <OzetKutusu
           deger={`${toplam - sessiz}/${toplam}`}
           etiket="Kaynak erişilebilir"
@@ -63,7 +64,7 @@ function OzetIcerigi({ ozet }) {
 export default function DurumOzeti({ ozet, hata }) {
   return (
     <div className="durum-ozeti">
-      <div className="etiket-kucuk">Zafiyet Durumu · Son 24 Saat</div>
+      <div className="etiket-kucuk">Zafiyet Durumu</div>
       {hata ? (
         <p className="durum-hata">Özet bilgisi alınamadı.</p>
       ) : ozet ? (

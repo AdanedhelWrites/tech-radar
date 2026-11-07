@@ -24,6 +24,6 @@ describe('CvssGrafigi', () => {
 
     expect(screen.getByRole('img')).toHaveAttribute(
       'aria-label', 'CVSS dağılımı, son 7 gün: 1 kritik, 1 yüksek, 1 orta')
-    expect(screen.getByText('2 skorsuz')).toBeInTheDocument()
+    expect(screen.getByText('2 düşük / skorsuz')).toBeInTheDocument()
   })
 })

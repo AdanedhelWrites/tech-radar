@@ -103,9 +103,12 @@ def ozet_hesapla(simdi=None) -> dict:
     yuksek = son_hafta.filter(cvss_score__gte=YUKSEK_ESIK, cvss_score__lt=KRITIK_ESIK).count()
     kev = kayitlar.filter(kev_yeni).count()
 
-    oncelikli = (son_hafta.filter(Q(cvss_score__gte=YUKSEK_ESIK) | kev_yeni)
+    # Aktif istismar (son 7 gunde KEV'e eklenen) once, sonra CVSS (2026-11-07). Onceden CVSS once siralaniyordu;
+    # haftada 200+ kritik oldugu icin KEV'deki 8.x bir CVE ilk bese hic giremiyordu. KEV adayi created_at'e
+    # bakmaz: daha once yazilmis bir CVE sonradan KEV'e eklenince de listeye girer (cve_guncelleme).
+    oncelikli = (kayitlar.filter(Q(created_at__gte=hafta_basi, cvss_score__gte=YUKSEK_ESIK) | kev_yeni)
                  .annotate(kev_sirasi=Case(When(kev_yeni, then=0), default=1, output_field=IntegerField()))
-                 .order_by(F('cvss_score').desc(nulls_last=True), 'kev_sirasi', '-created_at')[:ONCELIK_LIMITI])
+                 .order_by('kev_sirasi', F('cvss_score').desc(nulls_last=True), '-created_at')[:ONCELIK_LIMITI])
 
     grafik, bant_sayilari = _grafik(son_hafta)
     skorsuz = son_hafta.filter(Q(cvss_score__isnull=True) | Q(cvss_score__lt=GRAFIK_ESIK)).count()

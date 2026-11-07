@@ -43,7 +43,7 @@ export default function CvssGrafigi({ noktalar, skorsuz, sayilar }) {
 
   return (
     <div className="cam-kart cvss-grafigi">
-      <div className="etiket-kucuk text-center">CVSS Dağılımı</div>
+      <div className="etiket-kucuk text-center">CVSS Dağılımı · Son 7 Gün</div>
       <div className="cvss-polar" role="img" aria-label={ozet}>
         {cizilen.map(n => (
           <span
@@ -58,7 +58,7 @@ export default function CvssGrafigi({ noktalar, skorsuz, sayilar }) {
         <span><i className="kritik" aria-hidden="true" />{`Kritik ${say('kritik')}`}</span>
         <span><i className="yuksek" aria-hidden="true" />{`Yüksek ${say('yuksek')}`}</span>
         <span><i className="orta" aria-hidden="true" />{`Orta ${say('orta')}`}</span>
-        {skorsuz > 0 && <span className="skorsuz">{`${skorsuz} skorsuz`}</span>}
+        {skorsuz > 0 && <span className="skorsuz">{`${skorsuz} düşük / skorsuz`}</span>}
       </div>
     </div>
   )

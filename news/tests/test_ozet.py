@@ -65,7 +65,8 @@ class OzetUcuTests(V1TestCase):
         g = self.client.get('/api/ozet/').json()
 
         self.assertEqual(g['kev_count'], 1)
-        self.assertEqual(g['priority'], [])    # eski kayit created_at penceresinin disinda
+        # Sonradan KEV'e eklenen eski kayit da oncelikli listeye girer (2026-11-07); 9 gun once eklenen girmez
+        self.assertEqual(len(g['priority']), 1)
 
     def test_priority_sirasi_ve_limit(self):
         for i, skor in enumerate([7.0, 9.8, 7.4, 8.1, 9.0, 7.9, 8.8]):
@@ -84,14 +85,24 @@ class OzetUcuTests(V1TestCase):
 
         self.assertEqual(idler, [kev.cve_id, yeni.cve_id, eski.cve_id])
 
-    def test_priority_skorsuz_kev_adaydir_ve_sona_kalir(self):
+    def test_priority_skorsuz_kev_adaydir_ve_one_gecer(self):
         skorlu = _cve(7.2, saat_once=5)
         skorsuz_kev = _cve(None, saat_once=5, kev_gun_once=0)
         _cve(None, saat_once=5)
 
         idler = [k['cve_id'] for k in self.client.get('/api/ozet/').json()['priority']]
 
-        self.assertEqual(idler, [skorlu.cve_id, skorsuz_kev.cve_id])
+        self.assertEqual(idler, [skorsuz_kev.cve_id, skorlu.cve_id])
+
+    def test_priority_kev_yuksek_skorlu_kritiklerin_onune_gecer(self):
+        kritikler = [_cve(9.9, saat_once=i + 1) for i in range(6)]
+        kev = _cve(8.1, saat_once=3, kev_gun_once=1)
+
+        idler = [k['cve_id'] for k in self.client.get('/api/ozet/').json()['priority']]
+
+        self.assertEqual(idler[0], kev.cve_id)
+        self.assertEqual(len(idler), 5)
+        self.assertTrue(set(idler[1:]) <= {k.cve_id for k in kritikler})
 
     def test_chart_skorsuzlari_ayirir(self):
         _cve(None)

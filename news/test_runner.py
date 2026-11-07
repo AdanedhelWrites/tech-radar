@@ -37,6 +37,14 @@ class GuvenliTestRunner(DiscoverRunner):
         for cevirmen in kayit_cevirmenleri.YEDEKLER:
             cevirmen._gate = tu._LocalGate()
             cevirmen._butce = gemini._LocalButce()
+        # Canli .env'deki GEMINI_FALLBACK_MODEL testlere sizmasin (CI'da bos; konteynerde dolu oldugu
+        # icin bir retranslate testi yalniz yerelde dusuyordu, 2026-11-07). Yedegi isteyen test kendisi yamalar.
+        kayit_cevirmenleri.GEMINI_FALLBACK_MODEL = ''
+        kayit_cevirmenleri.GEMINI2.model = ''
+
+        # NVD hiz siniri araligi testlerde beklemesin (istekler zaten mock'lanir)
+        from news import cve_scraper
+        cve_scraper.NVD_ISTEK_ARALIGI = 0
 
     def teardown_test_environment(self, **kwargs):
         self._libretranslate_kapali.disable()
