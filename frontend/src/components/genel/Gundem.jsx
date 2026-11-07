@@ -2,7 +2,8 @@ import { haberOkumaKaydi, cevrilmediMi } from '../../utils/okumaKaydi'
 import { goreliZaman } from '../../utils/zaman'
 
 // Gundem sutunu (spec 2026-11-05 G4): sunucunun olay puanina gore sirali olaylari; olay temsilci
-// kayitla gosterilir, 2+ kaynakli olayda "N kaynak" rozeti (ipucunda kaynak adlari) bulunur.
+// kayitla gosterilir, 2+ kaynakli olayda "N kaynak" rozeti (ipucunda kaynak adlari) bulunur. Okuma
+// paneli diger kaynaklarin baslik ve baglantilarini da listeler (olay.diger_kaynaklar, 2026-11-07).
 // Bolum rengi tema.css'te (.bolum-<ad>); renk tek basina anlam tasimaz, bolum adi yazili.
 
 const BOLUM_ADI = {
@@ -27,7 +28,11 @@ export default function Gundem({ olaylar, hata, onSec }) {
           const zaman = goreliZaman(olay.son || kayit.created_at)
           return (
             <li key={`${bolum}-${kayit.id}`}>
-              <button type="button" className="gundem-ogesi" onClick={() => onSec(haberOkumaKaydi(kayit, bolum))}>
+              <button
+                type="button"
+                className="gundem-ogesi"
+                onClick={() => onSec({ ...haberOkumaKaydi(kayit, bolum), digerKaynaklar: olay.diger_kaynaklar || [] })}
+              >
                 <span className={`gundem-nokta bolum-${bolum}`} aria-hidden="true" />
                 <span className="gundem-baslik" lang={cevrilmediMi(kayit) ? 'en' : 'tr'}>{kayit.turkish_title || kayit.original_title}</span>
                 <small>

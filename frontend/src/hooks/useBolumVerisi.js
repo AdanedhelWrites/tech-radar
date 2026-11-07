@@ -118,6 +118,14 @@ export default function useBolumVerisi({
     }
   }
 
+  // Paylasilan ?kayit=<id> acik sayfada yoksa tekil kayit ayni liste ucundan istenir (useSeciliKayit).
+  // Kayit yoksa null; ag hatasi firlatir.
+  const listeGetir = api.liste
+  const tekilGetir = useCallback(async (id) => {
+    const yanit = await listeGetir({ id })
+    return yanit.data?.success ? (yanit.data.data?.[0] ?? null) : null
+  }, [listeGetir])
+
   const listeHatasi = liste.hata && liste.hata !== kapatilanListeHatasi ? metinler.yuklemeHatasi : null
   const hatayiKapat = () => {
     if (hata) setHata(null)
@@ -136,6 +144,8 @@ export default function useBolumVerisi({
     kaynaklar,
     seciliKaynaklar,
     onKaynakDegis: kaynakDegis,
+    ara: sorgu.ara,
+    onAraDegis: (ara) => degistir({ ara }),
     kaynakSayilari: istatistik.by_source,
     yukleniyor: liste.yukleniyor,
     cekiliyor,
@@ -155,6 +165,7 @@ export default function useBolumVerisi({
     liste,
     istatistik,
     cubukOzellikleri,
+    tekilGetir,
     // Ekranda gosterilecek hata metni (eylem hatasi once) ve kapatma islevi
     hata: hata || listeHatasi,
     hatayiKapat,

@@ -9,7 +9,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Uygulama surumu** | `appVersion` 2026.10.3 (CalVer; imaj etiketi) |
 | **Helm chart** | 2.2.1 (SemVer; etiket `chart-2.2.1`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 922 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 282 Vitest testi, 25 dosya (`frontend/src/`) |
+| **Testler** | 926 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 291 Vitest testi, 24 dosya (`frontend/src/`) |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -87,11 +87,11 @@ Ayni kod uc bicimde calisir:
   - **Puan:** her kaynagin tazelik carpani (24 saat yari omur) toplanir (ayri kaynak sayisi) + 0,5 x tekrar makalesi + 1,5 x etki sozcugu (hack, breach, zero-day gibi); tum yaslar esitse eski "ayri kaynak sayisi" olcusuyle ayni sonucu verir
   - **Liste:** en cok 6 oge; once cok kaynakli olaylar (puan sirasiyla), kalan yerler en yeni kayitlarla dolar. Cok kaynakli satirda "N kaynak" rozeti vardir; kaynak adlari rozetin ipucunda ve ekran okuyucu adinda yer alir
 - **Ortak okuma paneli** — Tum bolumler ayni panelde acilir: metin varsayilan olarak Turkce okunur, "Orijinali goster" ile ingilizce asil metin acilir; cevrilmemis kayit orijinal metinle ve "Cevrilmedi: orijinal metin" uyarisiyla gosterilir, cevrilemeyen paragraflar isaretlenir; CVE kayitlarinda CVSS, KEV satiri ve kaynak baglantilari yer alir
-- **Paylasilabilir baglanti** — Panel acikken adres `?kayit=<id>` alir (ornek `/news?kayit=123`); adres kopyalanip acilinca ayni kayit okunur, geri tusu paneli kapatir, silinmis/bilinmeyen kimlik paneli kapali birakir
+- **Paylasilabilir baglanti** — Panel acikken adres `?kayit=<id>` alir (ornek `/news?kayit=123`); adres kopyalanip acilinca ayni kayit okunur, geri tusu paneli kapatir. Kayit acik sayfada yoksa (baska sayfa, filtre disi, eski) liste ucundan `?id=` ile istenir; silinmis/bilinmeyen kimlikte "Kayit bulunamadi" bildirimi cikar ve parametre adresten silinir
 - **Karanlik tema** — Yalnizca koyu tema (`<html data-bs-theme="dark">`); tema dugmesi yoktur. Vurgu `#7aa2ff` → `#b98bff`, kritik `#ff5d8f`, yuksek `#ffb35d`; sistem yazi tipleri, harici font/CDN yok (CSP degismez), `prefers-reduced-motion` icin animasyonlar durur ([tasarim](docs/superpowers/specs/2026-10-31-arayuz-yenileme-design.md))
 - **DevTools takibi** — Seq, Ceph, MongoDB, PostgreSQL, RabbitMQ, Elasticsearch+Kibana, Redis, Moodle, LiteLLM, LangGraph, Langfuse, GitLab, Keycloak release guncellemeleri
 - **CISA KEV** — Aktif somurulen zafiyetler (Known Exploited Vulnerabilities) CVE bolumunde ayri kaynak; NVD API'sinin `hasKev` filtresiyle, eklenme tarihi ve federal son tarih bilgisiyle. Eklenme tarihi `CVEEntry.kev_added_date` alaninda (migration 0016) tutulur; NVD yolu bir KEV kaydini yeniden yazsa da bu tarihi ezmez; Genel Bakis'in KEV kutusu bu alana gore sayar
-- **Filtre, siralama ve sayfalama** — Alti bolumun hepsi ayni filtre cubugunu kullanir: Donem (1/3/7/14/30 gun veya Tumu, varsayilan 7), Siralama (yeni/eski; CVE'de CVSS), Kaynaklar, bolume ozel dugmeler (CVE: onem; Kubernetes: kategori). Gercek kayit sayisi satiri, numarali sayfalar (sayfa basina 25) ve adrese yazilan durum (`?gun=tumu&sirala=cvss&sayfa=2&onem=kritik&kaynak=...`) vardir; adres kopyalanip acilinca ayni gorunum gelir. Filtre ve siralama sunucuda `created_at` uzerinden, veritabanindan yapilir ([tasarim](docs/superpowers/specs/2026-11-05-filtre-siralama-sayfalama-design.md))
+- **Filtre, siralama ve sayfalama** — Alti bolumun hepsi ayni filtre cubugunu kullanir: Donem (1/3/7/14/30 gun veya Tumu, varsayilan 7), Siralama (yeni/eski; CVE'de CVSS), Kaynaklar, bolume ozel dugmeler (CVE: onem; Kubernetes: kategori) ve Arama kutusu (`?ara=`; basliklarda ve aciklamalarda, CVE'de kimlikte de; 2 karakterden kisa arama suzmez). Liste 5 sn'de bir yalniz ilk sayfada sessizce yenilenir (sonraki sayfalar kaymasin); yeni sorgu hatayla biterse eski liste yerine "Yeniden dene" kutusu cikar. Bilinmeyen adreste "Sayfa bulunamadi" sayfasi gosterilir. Gercek kayit sayisi satiri, numarali sayfalar (sayfa basina 25) ve adrese yazilan durum (`?gun=tumu&sirala=cvss&sayfa=2&onem=kritik&kaynak=...`) vardir; adres kopyalanip acilinca ayni gorunum gelir. Filtre ve siralama sunucuda `created_at` uzerinden, veritabanindan yapilir ([tasarim](docs/superpowers/specs/2026-11-05-filtre-siralama-sayfalama-design.md))
 - **Cekim penceresi** — Cek dugmesi `min(gun, 15)` gunluk kayit ceker (`news/serializers.py` sinirlari: 1-30 gun haberler, 1-90 CVE/Kubernetes/SRE/Yapay Zeka, 1-120 DevTools)
 - **Yeniden denemeli cekim** — Gecici 429/5xx ve baglanti hatalarinda 2 ek deneme, ussel bekleme, `Retry-After`'a uyum (`news/base_scraper.oturum_kur`); onceden tek bir 503 kaynagi o tur bos birakiyordu
 - **CVSS siddet filtresi** — Kritik / Yuksek / Orta / Dusuk (CVE sayfasi); sunucuda CVSS araliklariyla (`onem`) uygulanir, "Tumunu goruntule" `/cve?sirala=cvss` acar
@@ -309,7 +309,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-922 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+926 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -324,7 +324,7 @@ scripts/pg_test.sh --sqlite test news.tests.test_cursor
 
 Frontend'de ESLint (flat config, `frontend/eslint.config.js`; `npm run lint`) CI'da build'den once kosar: `@eslint/js` onerilenleri, `react-hooks/rules-of-hooks` (hata) ve `exhaustive-deps` (uyari). Bolum sayfalarindaki 5 sn'lik liste yenileme `hooks/useAraliklaYenile` ile sekme arka plandayken durur.
 
-Frontend birim testleri Vitest + Testing Library ile `frontend/src/**/*.test.{js,jsx}` altindadir (`npm test`); CI'da lint ile build arasinda kosar. 282 test, 25 dosya; kapsam: liste sorgusu hook'lari (`useListeSorgusu`), sayfa cubugu (`SayfaCubugu`), rapor olusturma (`utils/rapor.js`), HTML kacisi (`utils/html.js`), goreli zaman (`utils/zaman`), aralikli yenileme hook'u, ceviri rozeti, saglik seridi (`SaglikSeridi`), Genel Bakis (`genel/`), ortak okuma paneli (`okuma/`, `utils/okuma*.js`), `?kayit=` baglantisi (`useSeciliKayit`), bolum sayfalari (`bolum/`), CVE listesi ve son ziyaret (`utils/sonZiyaret.js`, `useZiyaretTabani`). Worker baslatma zaman asimi gorulurse (Windows bind mount'ta yavas kurulum) `npm test -- --maxWorkers=2` ile kosun; o da asarsa `frontend`'i konteynerin kendi dosya sistemine (or. `/tmp`) kopyalayip orada kosun (tum takim ~10 sn).
+Frontend birim testleri Vitest + Testing Library ile `frontend/src/**/*.test.{js,jsx}` altindadir (`npm test`); CI'da lint ile build arasinda kosar. 291 test, 24 dosya; kapsam: liste sorgusu hook'lari (`useListeSorgusu`), sayfa cubugu (`SayfaCubugu`), rapor olusturma (`utils/rapor.js`), HTML kacisi (`utils/html.js`), goreli zaman (`utils/zaman`), aralikli yenileme hook'u, ceviri rozeti, saglik seridi (`SaglikSeridi`), Genel Bakis (`genel/`), ortak okuma paneli (`okuma/`, `utils/okuma*.js`), `?kayit=` baglantisi (`useSeciliKayit`), bolum sayfalari (`bolum/`), CVE listesi ve son ziyaret (`utils/sonZiyaret.js`, `useZiyaretTabani`). Worker baslatma zaman asimi gorulurse (Windows bind mount'ta yavas kurulum) `npm test -- --maxWorkers=2` ile kosun; o da asarsa `frontend`'i konteynerin kendi dosya sistemine (or. `/tmp`) kopyalayip orada kosun (tum takim ~10 sn).
 
 CI (`Backend (Django testleri)`) testleri PostgreSQL 16 servisiyle, `DEBUG=False` ve gercek bir `SECRET_KEY` ile kosar; migration'larin eksiksiz oldugu (`makemigrations --check`) ayni iste dogrulanir. Yeni bir test yazarken kodu gecici olarak bozup testin kirmiziya dondugunu gorun; mock'lanmis saglayici testlerinde "yesil ama hicbir seyi sinamiyor" tuzagi kolaydir.
 
@@ -404,7 +404,7 @@ Her bolum (news, cve, k8s, sre, devtools, ai) ayni endpoint yapisini kullanir:
 | POST | `/api/{bolum}/clear/` | Tum verileri sil (**yonetici oturumu gerekir**, aksi halde 403) |
 | GET | `/api/{bolum}/stats/` | Istatistikleri getir: `{success, total, by_source, last_update}`; CVE'de ayrica `by_severity`, Kubernetes'te `by_category`, DevTools'ta `by_type` |
 | GET | `/api/saglik/` | Bolum basina son basarili cekim, son durum, ceviri bekleyen/vazgecilen, yukseltmeden vazgecilen (`upgrade_given_up`), sessiz kaynaklar; ust duzeyde `translation_budget.gemini` (Gemini gunluk butcesi) (anonim, 60 sn cache) |
-| GET | `/api/gundem/` | Gundem karti: son 72 saatin en cok 6 olayi, CVE haric (anonim, 120 sn cache). Yanit `{success, olaylar[], hesaplandi}`; her olay `{bolum, kayit, kaynak_sayisi, kaynaklar[], makale_sayisi, bolumler[], puan, ilk, son}` (`kayit` bolumun kendi serilestiricisinin ciktisidir). Hesap hatasinda 500 yerine `200 {success: false, olaylar: []}` doner ve cache'e yazilmaz |
+| GET | `/api/gundem/` | Gundem karti: son 72 saatin en cok 6 olayi, CVE haric (anonim, 120 sn cache). Yanit `{success, olaylar[], hesaplandi}`; her olay `{bolum, kayit, kaynak_sayisi, kaynaklar[], diger_kaynaklar[], makale_sayisi, bolumler[], puan, ilk, son}` (`diger_kaynaklar`: temsilcinin kaynagi disindaki her kaynaktan bir makale `{kaynak, baslik, link, bolum, id}`; okuma paneli bunlari "Ayni olayi yazan diger kaynaklar" olarak listeler) (`kayit` bolumun kendi serilestiricisinin ciktisidir). Hesap hatasinda 500 yerine `200 {success: false, olaylar: []}` doner ve cache'e yazilmaz |
 | GET | `/api/ozet/` | Genel Bakis ozeti: `critical_count` (CVSS >= 9.0, son 24 sa), `high_count` (7.0-8.9, son 7 gun), `kev_count` (`kev_added_date` son 7 gun), `priority` (en fazla 5 oncelikli CVE), `chart` (CVSS noktalari), `unscored_count`, `sources{total,silent}`, `fetch{last_success_at,next_at}`; `?since=<ISO tarih>` ile ek olarak `new_since_count` (anonim, 60 sn cache; `new_since_count` cache'e girmez) |
 
 **Bolum isimleri:** `news` (Siber Guvenlik, fetch endpoint: `/api/fetch/`), `cve`, `k8s`, `sre`, `devtools`, `ai`
@@ -420,6 +420,8 @@ Alti liste ucu (`/api/news/`, `/api/cve/`, `/api/k8s/`, `/api/sre/`, `/api/devto
 | `sayfa` | 1, 2, ... | Sayfa numarasi; son sayfayi asan deger son sayfaya indirilir |
 | `boyut` | varsayilan 25, en fazla 100 | Sayfa boyutu |
 | `kaynak` | virgulle ayrilmis liste | Kaynak adi tam eslesme |
+| `ara` | metin (2-100 karakter) | Basliklarda ve aciklamalarda buyuk/kucuk harf duyarsiz arama; CVE'de `cve_id`'de de |
+| `id` | kayit kimligi | Tekil kayit: diger parametreler yok sayilir, yanit ayni zarfla 0 ya da 1 kayit tasir (`?kayit=` paylasilan baglanti) |
 | `onem` | CVE: `kritik`, `yuksek`, `orta`, `dusuk` | CVSS araliklari |
 | `kategori` | Kubernetes: `kubernetes` | Kategori filtresi |
 
@@ -620,7 +622,7 @@ cybersecurity_news/
 │   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
 │   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle, cve_baslik_cevir, cve_aciklama_tamamla
-│   ├── tests/                  # 922 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
+│   ├── tests/                  # 926 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
 │   │   └── fixtures/gundem_basliklari.json  # Gundem gruplama testlerinin gercek baslik ornekleri
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
 │   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
@@ -982,7 +984,7 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 
 | Is akisi | Tetik | Mod | Ne yapar |
 |---|---|---|---|
-| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 922 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (282 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
+| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 926 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (291 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
 | `Dependency Review` | PR | **Kapi** | HIGH/CRITICAL zafiyetli bagimlilik getiren PR'i durdurur |
 | `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
 | `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |

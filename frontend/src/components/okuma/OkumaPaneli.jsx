@@ -43,7 +43,12 @@ function PanelIcerigi({ kayit, baslikId }) {
   const kimlik = kayit.ustBaslik && kayit.ustBaslik !== kayit.baslik ? kayit.ustBaslik : null
   const altBilgi = [kayit.kaynak, kayit.tarih].filter(Boolean).join(' · ')
   const kaynakAdresi = guvenliAdres(kayit.link)
+  // Gundem olayinin diger kaynaklari (yalniz Genel Bakis'tan acilan kayitta); yalniz http(s) baglantilar
+  const digerKaynaklar = (kayit.digerKaynaklar || [])
+    .map(d => ({ ...d, adres: guvenliAdres(d.link) }))
+    .filter(d => d.adres)
   const altBolum = kayit.ekAlanlar.length > 0 || kayit.referanslar.length > 0 || kaynakAdresi
+    || digerKaynaklar.length > 0
 
   return (
     <>
@@ -144,6 +149,19 @@ function PanelIcerigi({ kayit, baslikId }) {
                     const adres = guvenliAdres(r)
                     return <li key={i}>{adres ? <DisBaglanti href={adres}>{r}</DisBaglanti> : <span>{r}</span>}</li>
                   })}
+                </ul>
+              </>
+            )}
+            {digerKaynaklar.length > 0 && (
+              <>
+                <div className="etiket-kucuk">{`Aynı olayı yazan diğer kaynaklar (${digerKaynaklar.length})`}</div>
+                <ul className="okuma-referanslar okuma-diger-kaynaklar">
+                  {digerKaynaklar.map((d, i) => (
+                    <li key={i}>
+                      <span className="okuma-diger-kaynak">{d.kaynak}</span>
+                      <DisBaglanti href={d.adres}>{d.baslik || d.adres}</DisBaglanti>
+                    </li>
+                  ))}
                 </ul>
               </>
             )}

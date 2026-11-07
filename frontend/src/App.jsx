@@ -28,6 +28,17 @@ const BILDIRIM_STILI = {
   border: '1px solid var(--cam-kenar)',
 }
 
+// Bilinmeyen adres (2026-11-07 inceleme): once yalniz menu cizilip icerik bos kaliyordu
+function SayfaBulunamadi() {
+  return (
+    <section className="cam-kart sayfa-bulunamadi" aria-labelledby="bulunamadi-baslik">
+      <h1 id="bulunamadi-baslik" className="sayfa-baslik">Sayfa bulunamadı</h1>
+      <p>Aradığınız adres bu uygulamada yok. Menüden bir bölüm seçebilir ya da ana sayfaya dönebilirsiniz.</p>
+      <Link to="/" className="cubuk-dugme birincil">Genel Bakış&apos;a dön</Link>
+    </section>
+  )
+}
+
 function App() {
   return (
     <div className="App">
@@ -64,6 +75,7 @@ function App() {
           <Route path="/sre" element={<SREComponent />} />
           <Route path="/devtools" element={<DevToolsComponent />} />
           <Route path="/ai" element={<AINewsComponent />} />
+          <Route path="*" element={<SayfaBulunamadi />} />
         </Routes>
       </Container>
     </div>

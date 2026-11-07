@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import useSeciliKayit from './useSeciliKayit'
 
@@ -115,5 +115,48 @@ describe('useSeciliKayit', () => {
     expect(result.current.konum.pathname).toBe('/cve')
     expect(result.current.konum.search).toBe('')
     expect(result.current.secili).toBeNull()
+  })
+
+  describe('listede olmayan paylasilan kayit', () => {
+    const kurUzak = (giris, tekilGetir, liste = kayitlar(), hazir = true) => renderHook(
+      ({ l, h }) => ({ ...useSeciliKayit(l, tekilGetir, h), konum: useLocation() }),
+      {
+        initialProps: { l: liste, h: hazir },
+        wrapper: ({ children }) => <MemoryRouter initialEntries={[giris]}>{children}</MemoryRouter>,
+      },
+    )
+
+    it('sunucudan_istenir_ve_panel_acilir', async () => {
+      const tekilGetir = vi.fn().mockResolvedValue({ id: 999, ad: 'eski kayit' })
+      const { result } = kurUzak('/cve?kayit=999', tekilGetir)
+      await waitFor(() => expect(result.current.secili?.ad).toBe('eski kayit'))
+      expect(tekilGetir).toHaveBeenCalledTimes(1)
+      expect(tekilGetir).toHaveBeenCalledWith(999)
+    })
+
+    it('liste_yuklenirken_istenmez_listede_varsa_hic_istenmez', async () => {
+      const tekilGetir = vi.fn().mockResolvedValue(null)
+      const { result, rerender } = kurUzak('/cve?kayit=7', tekilGetir, [], false)
+      expect(tekilGetir).not.toHaveBeenCalled()
+      rerender({ l: kayitlar(), h: true })
+      expect(result.current.secili.id).toBe(7)
+      expect(tekilGetir).not.toHaveBeenCalled()
+    })
+
+    it('bulunamazsa_parametre_silinir', async () => {
+      const tekilGetir = vi.fn().mockResolvedValue(null)
+      const { result } = kurUzak('/cve?kayit=999&gun=1', tekilGetir)
+      await waitFor(() => expect(result.current.konum.search).toBe('?gun=1'))
+      expect(result.current.secili).toBeNull()
+    })
+
+    it('ag_hatasinda_parametre_kalir', async () => {
+      const tekilGetir = vi.fn().mockRejectedValue(new Error('ag'))
+      const { result } = kurUzak('/cve?kayit=999', tekilGetir)
+      await waitFor(() => expect(tekilGetir).toHaveBeenCalled())
+      await act(async () => {})
+      expect(result.current.konum.search).toBe('?kayit=999')
+      expect(tekilGetir).toHaveBeenCalledTimes(1)
+    })
   })
 })

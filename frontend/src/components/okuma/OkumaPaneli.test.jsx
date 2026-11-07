@@ -177,4 +177,17 @@ describe('OkumaPaneli', () => {
     rerender(<OkumaPaneli kayit={kayit({ govdeTr: 'Bir.', govdeOrijinal: 'One.' })} onKapat={vi.fn()} />)
     expect(screen.getByText('One.')).toBeInTheDocument()
   })
+
+  it('diger_kaynaklar_listelenir_guvensiz_baglanti_atilir', () => {
+    render(<OkumaPaneli kayit={kayit({
+      govdeTr: 'Gövde.',
+      digerKaynaklar: [
+        { kaynak: 'SecurityWeek', baslik: 'Aynı olay SW', link: 'https://ornek.test/sw' },
+        { kaynak: 'Kotu', baslik: 'Zararli', link: 'javascript:alert(1)' },
+      ],
+    })} onKapat={vi.fn()} />)
+    expect(screen.getByText('Aynı olayı yazan diğer kaynaklar (1)')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Aynı olay SW' })).toHaveAttribute('href', 'https://ornek.test/sw')
+    expect(screen.queryByText('Zararli')).not.toBeInTheDocument()
+  })
 })

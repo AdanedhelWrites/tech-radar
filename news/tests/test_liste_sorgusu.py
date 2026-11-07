@@ -54,6 +54,32 @@ class ListeSorgusuTests(TestCase):
         """created_at'i 1 dakika arayla azalan `adet` kayit; ilki en yeni."""
         return [_kayit(model, self.simdi - timedelta(minutes=i), **alanlar) for i in range(adet)]
 
+    def test_id_tekil_kaydi_suzgecsiz_dondurur(self):
+        # Paylasilan ?kayit= baglantisi: donem disi (eski) kayit da gelir; zarf ayni
+        eski = _kayit(AINewsEntry, self.simdi - timedelta(days=60))
+        self._coklu(AINewsEntry, 3)
+        govde = self._al('/api/ai/', id=eski.pk, gun=1, kaynak='Baska')
+        self.assertEqual(set(govde), ZARF_ANAHTARLARI)
+        self.assertEqual([k['id'] for k in govde['data']], [eski.pk])
+        self.assertEqual(self._al('/api/ai/', id=999999)['data'], [])
+        # Gecersiz id yok sayilir: normal liste
+        self.assertEqual(self._al('/api/ai/', id='abc')['toplam'], 4)
+
+    def test_ara_baslik_ve_aciklamada_harf_duyarsiz(self):
+        hedef = _kayit(NewsArticle, original_title='Log4Shell returns', original_description='Body')
+        aciklamada = _kayit(NewsArticle, original_description='New LOG4SHELL variant spotted')
+        _kayit(NewsArticle, original_title='Unrelated')
+        govde = self._al('/api/news/', ara='log4shell')
+        self.assertEqual({k['id'] for k in govde['data']}, {hedef.pk, aciklamada.pk})
+        # Tek karakter suzmez; bosluklar atilir
+        self.assertEqual(self._al('/api/news/', ara='l')['toplam'], 3)
+        self.assertEqual(self._al('/api/news/', ara='  log4shell  ')['toplam'], 2)
+
+    def test_ara_cve_kimliginde(self):
+        kayit = _kayit(CVEEntry, cve_id='CVE-2026-424242')
+        _kayit(CVEEntry)
+        self.assertEqual([k['id'] for k in self._al('/api/cve/', ara='424242')['data']], [kayit.pk])
+
     def test_parametresiz_istek_en_yeni_25(self):
         kayitlar = self._coklu(AINewsEntry, 30)
         govde = self._al('/api/ai/')

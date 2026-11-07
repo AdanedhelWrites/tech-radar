@@ -28,6 +28,10 @@ export default function HaberBolumu({ tanim }) {
         boyut={liste.boyut}
         gun={liste.sorgu.gun}
         guncel={liste.guncel}
+        hata={liste.hata}
+        onYeniden={liste.yenile}
+        tekilGetir={veri.tekilGetir}
+        aramaVar={liste.sorgu.ara.length > 0}
         onSayfa={liste.sayfayaGit}
         cubuk={({ kapat }) => (
           <BolumCubugu

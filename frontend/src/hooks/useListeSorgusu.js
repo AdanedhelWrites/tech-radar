@@ -15,6 +15,8 @@ const VARSAYILAN_SIRALA = 'yeni'
 const SIRALAMALAR = ['yeni', 'eski', 'cvss']
 const TUMU = 'tumu'
 const YENILEME_MS = 5000
+// Sunucu 2 karakterden kisa aramayi suzmez (news/liste_sorgusu.py ARAMA_EN_AZ); istege hic gitmez
+export const ARAMA_EN_AZ = 2
 
 // Adresten gelen bozuk degerler varsayilana duser (sunucu da ayni kurali uygular)
 const gunOku = (ham) => {
@@ -68,6 +70,7 @@ export default function useListeSorgusu({ getir, ekAnahtarlar = [], kaynaklar = 
       gun: gunOku(parametreler.get('gun')),
       sirala: siralaOku(parametreler.get('sirala')),
       kaynak: kaynakOku(parametreler.get('kaynak'), kaynakMetni === null ? null : kaynakMetni.split(',')),
+      ara: (parametreler.get('ara') || '').trim(),
     }
     const izinliler = JSON.parse(ekDegerMetni)
     for (const ad of ekAnahtarMetni.split(',').filter(Boolean)) {
@@ -87,6 +90,7 @@ export default function useListeSorgusu({ getir, ekAnahtarlar = [], kaynaklar = 
     istek.sayfa = istenenSayfa
     istek.boyut = SAYFA_BOYUTU
     if (sorgu.kaynak.length) istek.kaynak = sorgu.kaynak.join(',')
+    if (sorgu.ara.length >= ARAMA_EN_AZ) istek.ara = sorgu.ara
     for (const ad of ekAnahtarMetni.split(',').filter(Boolean)) {
       if (sorgu[ad]) istek[ad] = sorgu[ad]
     }
@@ -154,9 +158,11 @@ export default function useListeSorgusu({ getir, ekAnahtarlar = [], kaynaklar = 
     yukle()
   }, [yukle])
 
-  // Sekme arka plandayken durur (hooks/useAraliklaYenile)
+  // Sekme arka plandayken durur (hooks/useAraliklaYenile). Yalniz ilk sayfada: yeni kayit gelince sonraki
+  // sayfalarin hepsi bir kayar; sayfa 2'de okuyan kullanicinin listesi ve tiklayacagi satir oynamasin
+  // (2026-11-07 inceleme). Sayfa degisince ya da Yenile ile o sayfa yine guncel istenir.
   useAraliklaYenile(() => {
-    if (!bekleyen.current) yukle(true)
+    if (!bekleyen.current && istenenSayfa === 1) yukle(true)
   }, YENILEME_MS)
 
   const yenile = useCallback(() => yukle(), [yukle])
