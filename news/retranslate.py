@@ -68,7 +68,7 @@ from django.utils import timezone
 from . import gemini
 from . import kayit_cevirmenleri
 from . import translation_utils as tu
-from .cve_basligi import baslik_ozeti, onekli_baslik, turkce_baslik
+from .cve_basligi import baslik_ozeti, onekli_baslik
 from .api_v1.cursor import InvalidCursor, apply_cursor, decode_cursor, encode_cursor
 from .models import (
     AINewsEntry, CVEEntry, DevToolsEntry, KubernetesEntry, NewsArticle, SREEntry,
@@ -235,11 +235,11 @@ def _baslik_ve_uzun_aciklama(kayit) -> Dict[str, str]:
 
 
 def _cve(kayit) -> Dict[str, str]:
-    # cve_scraper.process_cves ile ayni: sablon baslik cevrilmez (GHSA ozeti / KEV adi cevrilir), 30
-    # karakterden kisa aciklama oldugu gibi kalir
+    # cve_scraper.process_cves ile ayni: baslik LibreTranslate ile cevrilmez (GHSA ozeti / KEV adi yalniz kayit
+    # cevirmeni yolunda, _gemini_alanlari), 30 karakterden kisa aciklama oldugu gibi kalir
     aciklama = kayit.original_description or ''
     return {
-        'turkish_title': turkce_baslik(kayit.cve_id, kayit.original_title, tu.translate_text),
+        'turkish_title': kayit.original_title,
         'turkish_description': tu.translate_text(aciklama) if len(aciklama.strip()) > 30 else aciklama,
     }
 

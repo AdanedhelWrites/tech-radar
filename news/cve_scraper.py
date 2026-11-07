@@ -11,7 +11,6 @@ import json
 from typing import List, Dict, Optional
 import time
 
-from news.cve_basligi import turkce_baslik
 from news.translation_utils import ceviri_basarisizligi_isaretle, translate_text
 from news.base_scraper import BaseRSSScraper, oturum_kur
 import logging
@@ -696,8 +695,10 @@ class MultiCVEScraper(CVEScraper):
         
         for i, cve in enumerate(cves, 1):
             try:
-                # Sablon baslik ("CVE-x - Güvenlik Açığı") cevrilmez; GHSA ozeti / KEV zafiyet adi cevrilir
-                cve['turkish_title'] = turkce_baslik(cve['cve_id'], cve['original_title'], translate_text)
+                # Baslik burada cevrilmez: GHSA ozeti / KEV zafiyet adi yalniz kayit cevirmeniyle (Gemini) cevrilir,
+                # onem sinifindaki kayit retranslate yukseltmesinde alir. 11-07 olcumu: LibreTranslate kisa teknik
+                # basligi orijinalinden kotu ceviriyor ('XSS mağazası', 'kumbox'); dusuk/orta kayit Ingilizce kalir.
+                cve['turkish_title'] = cve['original_title']
                 
                 # Sadece description çevir
                 desc = cve.get('original_description', '')
