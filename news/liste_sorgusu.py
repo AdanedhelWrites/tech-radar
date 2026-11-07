@@ -6,7 +6,7 @@ Yeni kayit, arayuzun 5 sn'lik yenilemesinde dogrudan veritabanindan gorunur.
 from datetime import timedelta
 from typing import Dict, Tuple
 
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 from rest_framework.response import Response
 
@@ -30,6 +30,9 @@ LISTE_BOLUMLERI: Dict[str, Tuple[type, type]] = {
 GUN_SECENEKLERI = (1, 3, 7, 14, 30)
 VARSAYILAN_BOYUT = 25
 EN_FAZLA_BOYUT = 100
+# Arama metni: 2 karakterden kisa arama suzmez (her kayit eslesir), uzunu kesilir
+ARAMA_EN_AZ = 2
+ARAMA_EN_FAZLA = 100
 
 # onem -> (alt sinir dahil, ust sinir haric); None = sinirsiz. Skorsuz kayit hicbirine girmez.
 ONEM_ARALIKLARI = {
@@ -52,6 +55,23 @@ def liste_yaniti(request, bolum: str) -> Response:
     model, serializer_sinifi = LISTE_BOLUMLERI[bolum]
     parametre = request.query_params
     sorgu = model.objects.all()
+
+    # Tekil kayit (2026-11-07): paylasilan ?kayit=<id> baglantisi acik sayfada olmayan kaydi da acabilsin.
+    # Diger suzgecler uygulanmaz; kayit yoksa bos liste (zarf ayni).
+    kimlik = _tam_sayi(parametre.get('id'), None)
+    if kimlik is not None:
+        veri = serializer_sinifi(sorgu.filter(pk=kimlik)[:1], many=True).data
+        return Response({'success': True, 'data': veri, 'cached': False, 'count': len(veri),
+                         'toplam': len(veri), 'sayfa': 1, 'sayfa_sayisi': 1, 'boyut': 1})
+
+    # Metin aramasi (2026-11-07): basliklarda ve aciklamalarda, buyuk/kucuk harf duyarsiz; CVE'de kimlikte de
+    ara = (parametre.get('ara') or '').strip()[:ARAMA_EN_FAZLA]
+    if len(ara) >= ARAMA_EN_AZ:
+        kosul = (Q(turkish_title__icontains=ara) | Q(original_title__icontains=ara)
+                 | Q(turkish_description__icontains=ara) | Q(original_description__icontains=ara))
+        if bolum == 'cve':
+            kosul |= Q(cve_id__icontains=ara)
+        sorgu = sorgu.filter(kosul)
 
     gun = _tam_sayi(parametre.get('gun'), None)
     if gun in GUN_SECENEKLERI:

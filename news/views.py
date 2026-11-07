@@ -507,11 +507,12 @@ def _gundem_ogeleri(simdi):
     ogeler = []
     for bolum, model, yayin_alani in kaynaklar:
         satirlar = model.objects.filter(created_at__gte=alt).values(
-            'id', 'source', 'original_title', 'created_at', yayin_alani, 'translation_provider', 'turkish_title')
+            'id', 'source', 'original_title', 'created_at', yayin_alani, 'translation_provider', 'turkish_title',
+            'link')
         ogeler.extend(
             Ogeler(bolum=bolum, id=s['id'], source=s['source'], baslik=s['original_title'],
                    created_at=s['created_at'], yayin=s[yayin_alani], ceviri=s['translation_provider'],
-                   tr_baslik=s['turkish_title'])
+                   tr_baslik=s['turkish_title'], link=s['link'] or '')
             for s in satirlar)
     return ogeler
 
@@ -542,6 +543,7 @@ def _gundem_hesapla():
         'kayit': kayitlar[(olay['temsilci'].bolum, olay['temsilci'].id)],
         'kaynak_sayisi': olay['kaynak_sayisi'],
         'kaynaklar': olay['kaynaklar'],
+        'diger_kaynaklar': olay['diger_kaynaklar'],
         'makale_sayisi': olay['makale_sayisi'],
         'bolumler': olay['bolumler'],
         'puan': round(olay['puan'], 2),

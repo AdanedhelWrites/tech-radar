@@ -193,6 +193,26 @@ describe('BolumSayfasi', () => {
     expect(screen.queryByText(/gösteriliyor/)).toBeNull()
   })
 
+  it('yukleme_hatasi_eski_liste_yerine_yeniden_dene_gosterir', () => {
+    // Yeni sorgu hatayla bitti: eldeki (eski filtrenin) kayitlari gosterilmez
+    const onYeniden = vi.fn()
+    const { unmount } = sayfa({ hata: new Error('ag'), guncel: false, onYeniden, istatistik: { total: 0 } })
+    expect(screen.getByRole('alert')).toHaveTextContent('Kayıtlar yüklenemedi')
+    expect(screen.queryByText('Türkçe başlık 1')).toBeNull()
+    expect(screen.queryByText(/Liste boş/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Yeniden dene' }))
+    expect(onYeniden).toHaveBeenCalledTimes(1)
+    unmount()
+    // Guncel yanit varken (sessiz yenileme hatasi hata yazmaz) liste kalir
+    sayfa({ hata: null, guncel: true })
+    expect(screen.getByText('Türkçe başlık 1')).toBeInTheDocument()
+  })
+
+  it('arama_varken_bos_sonuc_eslesmeyen_filtre_der', () => {
+    sayfa({ kayitlar: [], toplam: 0, istatistik: { total: 0 }, aramaVar: true })
+    expect(screen.getByText('Bu filtreyle eşleşen kayıt bulunamadı.')).toBeInTheDocument()
+  })
+
   it('istatistik ve dagilim baslikta gosterilir', () => {
     sayfa({ istatistik: { total: 1234, last_update: saatOnce(2) }, dagilim: [['Sürüm', 61], ['Blog', 4]] })
     expect(screen.getByText('Toplam 1.234 kayıt')).toBeInTheDocument()
@@ -228,6 +248,20 @@ describe('BolumCubugu', () => {
     )
     return geriCagrilar
   }
+
+  it('arama_kutusu_gecikmeyle_adrese_yazar', async () => {
+    const onAraDegis = vi.fn()
+    cubuk({ ara: '', onAraDegis })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Kayıtlarda ara' }), { target: { value: ' log4j ' } })
+    expect(onAraDegis).not.toHaveBeenCalled()
+    await waitFor(() => expect(onAraDegis).toHaveBeenCalledWith('log4j'))
+    expect(onAraDegis).toHaveBeenCalledTimes(1)
+  })
+
+  it('arama_kutusu_onAraDegis_yoksa_cizilmez', () => {
+    cubuk()
+    expect(screen.queryByRole('searchbox')).toBeNull()
+  })
 
   it('donem_ve_sirala_secenekleri', () => {
     const { onGunDegis, onSiralaDegis } = cubuk()

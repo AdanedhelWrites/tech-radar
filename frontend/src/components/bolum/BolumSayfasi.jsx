@@ -1,11 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Form, Spinner, Dropdown } from 'react-bootstrap'
-import { FaDownload, FaSync, FaTrash, FaFileExport, FaFilter } from 'react-icons/fa'
+import { FaDownload, FaSync, FaTrash, FaFileExport, FaFilter, FaSearch } from 'react-icons/fa'
 import useSeciliKayit from '../../hooks/useSeciliKayit'
 import { haberOkumaKaydi, haberRozetleri, cevrilmediMi } from '../../utils/okumaKaydi'
 import { goreliZaman } from '../../utils/zaman'
 import CeviriEtiketi from '../CeviriEtiketi'
 import OkumaPaneli from '../okuma/OkumaPaneli'
+import listeDurumu from './ListeDurumu'
 import SayfaCubugu from './SayfaCubugu'
 import { cekimGunu, donemEtiketi, sayimMetni } from './secenekler'
 
@@ -49,6 +50,46 @@ function HaberSatiri({ kayit, bolum, onSec }) {
   )
 }
 
+// Arama kutusu (2026-11-07): yazim bittikten ARAMA_GECIKMESI ms sonra adrese (?ara=) yazilir; sunucu basliklarda
+// ve aciklamalarda (Zafiyetler'de CVE kimliginde de) arar. Adres disaridan degisirse (geri tusu) kutu izler.
+const ARAMA_GECIKMESI = 400
+
+function AramaKutusu({ kimlik, ara, onAraDegis }) {
+  const [metin, setMetin] = useState(ara)
+  const [izlenen, setIzlenen] = useState(ara)
+  // Cubuk ozellikleri her render'da yeni islev verir; zamanlayici her render'da sifirlanmasin
+  const degisRef = useRef(onAraDegis)
+  useEffect(() => {
+    degisRef.current = onAraDegis
+  })
+  if (ara !== izlenen) {
+    setIzlenen(ara)
+    setMetin(ara)
+  }
+  useEffect(() => {
+    if (metin.trim() === ara) return undefined
+    const zamanlayici = setTimeout(() => degisRef.current(metin.trim()), ARAMA_GECIKMESI)
+    return () => clearTimeout(zamanlayici)
+  }, [metin, ara])
+
+  return (
+    <label className="filtre-grubu arama-grubu">
+      <FaSearch aria-hidden="true" className="arama-ikonu" />
+      <Form.Control
+        size="sm"
+        type="search"
+        id={`${kimlik}-arama`}
+        className="cubuk-secim arama-kutusu"
+        placeholder="Ara…"
+        aria-label="Kayıtlarda ara"
+        value={metin}
+        maxLength={100}
+        onChange={(e) => setMetin(e.target.value)}
+      />
+    </label>
+  )
+}
+
 // Filtre/eylem cubugu: donem, siralama, kaynak acilir menusu, bolume ozgu ek filtre (ekFiltre),
 // Yenile, HTML rapor, onbellegi temizle, Cek. Donem ve kaynaklar hem listeyi suzer hem Cek'i belirler
 // (Cek en fazla 15 gun). Cek suresince dugme doner (eski tam ekran bekleme penceresi yok); HTML rapor
@@ -61,6 +102,7 @@ export function BolumCubugu({
   kimlik, gun, gunSecenekleri, onGunDegis,
   sirala, siralaSecenekleri, onSiralaDegis,
   kaynaklar, seciliKaynaklar, onKaynakDegis, kaynakSayilari = {},
+  ara = '', onAraDegis = null,
   ekFiltre = null,
   yukleniyor, cekiliyor, raporHazirlaniyor = false, onYenile, onRapor, onTemizle, onCek,
   basliklar = {},
@@ -74,6 +116,8 @@ export function BolumCubugu({
   return (
     <section className="filtre-cubugu cam-kart" aria-label="Filtreler ve eylemler">
       <div className="filtre-gruplari">
+        {onAraDegis && <AramaKutusu kimlik={kimlik} ara={ara} onAraDegis={onAraDegis} />}
+
         <label className="filtre-grubu">
           <span className="filtre-etiketi">Dönem</span>
           <Form.Select
@@ -184,27 +228,25 @@ export default function BolumSayfasi({
   bolum, baslik, kayitlar, yukleniyor, cubuk,
   istatistik = null, dagilim = [],
   toplam = kayitlar.length, sayfa = 1, sayfaSayisi = 1, boyut = 25, gun = null, onSayfa = () => {},
-  guncel = true,
+  guncel = true, hata = null, onYeniden = () => {}, tekilGetir = null, aramaVar = false,
 }) {
-  // Secim tum liste uzerinden cozulur: periyodik yenileme, sayfa ya da filtre degisikligi acik paneli kapatmaz
-  const { secili, sec, kapat } = useSeciliKayit(kayitlar)
+  // Secim tum liste uzerinden cozulur: periyodik yenileme, sayfa ya da filtre degisikligi acik paneli kapatmaz;
+  // listede olmayan paylasilan kayit sunucudan istenir (tekilGetir)
+  const { secili, sec, kapat } = useSeciliKayit(kayitlar, tekilGetir, !yukleniyor)
   const okumaKaydi = useMemo(() => (secili ? haberOkumaKaydi(secili, bolum) : null), [secili, bolum])
   // Yeni sorgu yuklenirken ya da hatayla bittiyse (guncel degil) eski sorgunun toplami yeni
   // donem/sayfayla karismasin: sayim satiri ve sayfa cubugu gosterilmez
   const sonucVar = guncel && !yukleniyor && kayitlar.length > 0
 
-  let liste
-  if (yukleniyor) {
-    liste = <p className="liste-bos">Kayıtlar yükleniyor…</p>
-  } else if (kayitlar.length === 0) {
-    liste = (
-      <p className="liste-bos">
-        {istatistik && Number(istatistik.total) > 0
-          ? 'Bu filtreyle eşleşen kayıt bulunamadı.'
-          : 'Liste boş. Kayıt almak için "Çek" düğmesini kullanın.'}
-      </p>
-    )
-  } else {
+  const durum = listeDurumu({
+    yukleniyor, hata, guncel, adet: kayitlar.length, onYeniden,
+    yukleniyorMetni: 'Kayıtlar yükleniyor…',
+    bosMetni: aramaVar || (istatistik && Number(istatistik.total) > 0)
+      ? 'Bu filtreyle eşleşen kayıt bulunamadı.'
+      : 'Liste boş. Kayıt almak için "Çek" düğmesini kullanın.',
+  })
+  let liste = durum
+  if (!durum) {
     liste = (
       <ul className="oncelikli-liste">
         {kayitlar.map(kayit => (

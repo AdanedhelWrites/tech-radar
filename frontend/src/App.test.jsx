@@ -28,6 +28,14 @@ const uygulama = (yol = '/') => render(
   </MemoryRouter>,
 )
 
+describe('App bilinmeyen adres', () => {
+  it('sayfa_bulunamadi_gosterir_ve_ana_sayfaya_baglar', () => {
+    uygulama('/olmayan/adres')
+    expect(screen.getByRole('heading', { name: 'Sayfa bulunamadı' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: "Genel Bakış'a dön" })).toHaveAttribute('href', '/')
+  })
+})
+
 describe('App gezinme', () => {
   it('yedi menu baglantisini sirasiyla ve dogru rotalarla gosterir', () => {
     uygulama()

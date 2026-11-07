@@ -288,6 +288,7 @@ class Ogeler:
     yayin: Optional[date]
     ceviri: str
     tr_baslik: str
+    link: str = ''
 
 
 def _anahtar(oge: Ogeler) -> Tuple[str, int]:
@@ -632,11 +633,26 @@ def _kaynak_adlari(olay: List[Ogeler]) -> List[str]:
     return sorted(adlar.values(), key=lambda a: (a.casefold(), a))
 
 
+def _diger_kaynaklar(olay: List[Ogeler], kayit: Ogeler) -> List[dict]:
+    """Temsilcinin kaynagi disindaki her kaynaktan bir makale (o kaynagin en iyi cevrilmis makalesi):
+    kaynak adi, baslik (Turkcesi yoksa orijinal) ve baglanti; kaynak adina gore sirali. Gundem karti olayi
+    "N kaynak" diye sayiyordu ama yalniz temsilcinin baglantisini veriyordu (2026-11-07 inceleme)."""
+    secilen: Dict[str, Ogeler] = {}
+    for o in sorted(_asil(olay), key=lambda o: (_ceviri_sirasi(o), o.created_at, o.id, o.bolum)):
+        anahtar = _kaynak(o)
+        if anahtar != _kaynak(kayit) and anahtar not in secilen and (o.link or '').strip():
+            secilen[anahtar] = o
+    return [{'kaynak': o.source, 'baslik': (o.tr_baslik or '').strip() or o.baslik, 'link': o.link,
+             'bolum': o.bolum, 'id': o.id}
+            for o in sorted(secilen.values(), key=lambda o: ((o.source or '').casefold(), o.source or ''))]
+
+
 def _olay_ozeti(olay: List[Ogeler], simdi: datetime, kayit: Ogeler) -> dict:
     return {
         'temsilci': kayit,
         'kaynak_sayisi': _kaynak_sayisi(olay),
         'kaynaklar': _kaynak_adlari(_asil(olay)),
+        'diger_kaynaklar': _diger_kaynaklar(olay, kayit),
         'makale_sayisi': len(olay),
         'bolumler': sorted({o.bolum for o in olay}),
         'puan': round(olay_puani(olay, simdi), 2),

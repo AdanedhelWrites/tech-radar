@@ -9,6 +9,7 @@ import OkumaPaneli from './okuma/OkumaPaneli'
 import CveSatiri from './cve/CveSatiri'
 import { ceviriRozeti } from './CeviriEtiketi'
 import { BolumCubugu, HataUyarisi } from './bolum/BolumSayfasi'
+import listeDurumu from './bolum/ListeDurumu'
 import SayfaCubugu from './bolum/SayfaCubugu'
 import { CVSS_SIRALAMASI, SIRALA_SECENEKLERI, sayimMetni } from './bolum/secenekler'
 import {
@@ -138,7 +139,7 @@ function CVEComponent() {
   // "Yeni" rozeti tabani: sekme basina (hooks/useZiyaretTabani, karar R9); bu sayfa yazmaz
   const sonZiyaret = useZiyaretTabani()
   // Secim id ile cozulur: periyodik yenileme, sayfa ya da filtre degisikligi acik paneli kapatmaz
-  const { secili, sec, kapat } = useSeciliKayit(kayitlar)
+  const { secili, sec, kapat } = useSeciliKayit(kayitlar, veri.tekilGetir, !yukleniyor)
   const okumaKaydi = useMemo(() => (secili ? cveOkumaKaydi(secili) : null), [secili])
 
   const siddetDagilimi = Object.entries(stats.by_severity || {}).sort(([a], [b]) => {
@@ -148,18 +149,15 @@ function CVEComponent() {
   // Yuklenirken ya da yeni sorgu hatayla bittiyse eski sorgunun sayilari gosterilmez (bolum/BolumSayfasi)
   const sonucVar = liste.guncel && !yukleniyor && kayitlar.length > 0
 
-  let listeOgesi
-  if (yukleniyor) {
-    listeOgesi = <p className="liste-bos">CVE kayıtları yükleniyor…</p>
-  } else if (kayitlar.length === 0) {
-    listeOgesi = (
-      <p className="liste-bos">
-        {Number(stats.total) > 0
-          ? 'Bu filtreyle eşleşen kayıt bulunamadı.'
-          : 'CVE listesi boş. Kayıt almak için "Çek" düğmesini kullanın.'}
-      </p>
-    )
-  } else {
+  const durum = listeDurumu({
+    yukleniyor, hata: liste.hata, guncel: liste.guncel, adet: kayitlar.length, onYeniden: liste.yenile,
+    yukleniyorMetni: 'CVE kayıtları yükleniyor…',
+    bosMetni: sorgu.ara || Number(stats.total) > 0
+      ? 'Bu filtreyle eşleşen kayıt bulunamadı.'
+      : 'CVE listesi boş. Kayıt almak için "Çek" düğmesini kullanın.',
+  })
+  let listeOgesi = durum
+  if (!durum) {
     listeOgesi = (
       <ul className="oncelikli-liste cve-listesi">
         {kayitlar.map(item => (

@@ -44,7 +44,7 @@ describe('useListeSorgusu', () => {
     const { result } = kur('/cve?gun=1&sirala=cvss&sayfa=2&kaynak=NVD,CISA%20KEV&onem=kritik',
       undefined, ['onem'])
     expect(result.current.sorgu).toEqual({
-      gun: 1, sirala: 'cvss', kaynak: ['NVD', 'CISA KEV'], onem: 'kritik',
+      gun: 1, sirala: 'cvss', kaynak: ['NVD', 'CISA KEV'], ara: '', onem: 'kritik',
     })
     expect(result.current.sayfa).toBe(2)
     await yuklendi(result)
@@ -59,7 +59,7 @@ describe('useListeSorgusu', () => {
     const { result } = kur('/k8s?gun=1&sirala=eski&kaynak=A&kategori=guvenlik', undefined, ['kategori'])
     await yuklendi(result)
     // Varsayilan sorgu: Son 7 gun, en yeni, bos kaynak/ek filtre
-    expect(kur('/k8s').result.current.sorgu).toEqual({ gun: 7, sirala: 'yeni', kaynak: [] })
+    expect(kur('/k8s').result.current.sorgu).toEqual({ gun: 7, sirala: 'yeni', kaynak: [], ara: '' })
     act(() => result.current.degistir({ gun: 7, sirala: 'yeni', kaynak: [], kategori: '' }))
     expect(result.current.konum.search).toBe('')
     // Tumu (null) varsayilan degil: adreste acikca tutulur
@@ -89,14 +89,14 @@ describe('useListeSorgusu', () => {
     await yuklendi(result)
     act(() => result.current.sayfayaGit(2))
     expect(result.current.konum.search).toBe('?gun=3&onem=orta&kayit=4&sayfa=2')
-    expect(result.current.sorgu).toEqual({ gun: 3, sirala: 'yeni', kaynak: [], onem: 'orta' })
+    expect(result.current.sorgu).toEqual({ gun: 3, sirala: 'yeni', kaynak: [], ara: '', onem: 'orta' })
     await waitFor(() => expect(result.current.sayfa).toBe(2))
     expect(getir).toHaveBeenLastCalledWith({ gun: 3, sirala: 'yeni', sayfa: 2, boyut: 25, onem: 'orta' })
   })
 
   it('gecersiz_adres_parametreleri_varsayilana_duser', async () => {
     const { result, getir } = kur('/news?gun=abc&sayfa=-3&sirala=x')
-    expect(result.current.sorgu).toEqual({ gun: 7, sirala: 'yeni', kaynak: [] })
+    expect(result.current.sorgu).toEqual({ gun: 7, sirala: 'yeni', kaynak: [], ara: '' })
     expect(result.current.sayfa).toBe(1)
     await yuklendi(result)
     expect(getir).toHaveBeenCalledWith({ gun: 7, sirala: 'yeni', sayfa: 1, boyut: 25 })
@@ -108,7 +108,7 @@ describe('useListeSorgusu', () => {
 
   it('yenileme_sayfayi_degistirmez', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    const { result, getir, durumlar } = kur('/sre?sayfa=2&kayit=7')
+    const { result, getir, durumlar } = kur('/sre?kayit=7')
     await yuklendi(result)
     const ilkRenderSayisi = durumlar.length
     expect(getir).toHaveBeenCalledTimes(1)
@@ -121,16 +121,16 @@ describe('useListeSorgusu', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
     expect(getir).toHaveBeenCalledTimes(2)
     expect(result.current.yukleniyor).toBe(false)
-    expect(result.current.kayitlar).toEqual([{ id: 200, ad: 'kayit' }])
+    expect(result.current.kayitlar).toEqual([{ id: 100, ad: 'kayit' }])
     // Yanit gelmeden bir sonraki tur istek yigmaz
     await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
     expect(getir).toHaveBeenCalledTimes(2)
     await act(async () => { coz() })
-    expect(getir).toHaveBeenLastCalledWith({ gun: 7, sirala: 'yeni', sayfa: 2, boyut: 25 })
+    expect(getir).toHaveBeenLastCalledWith({ gun: 7, sirala: 'yeni', sayfa: 1, boyut: 25 })
     expect(result.current.kayitlar).toEqual([{ id: 999 }])
     expect(result.current.toplam).toBe(61)
-    expect(result.current.sayfa).toBe(2)
-    expect(result.current.konum.search).toBe('?sayfa=2&kayit=7')
+    expect(result.current.sayfa).toBe(1)
+    expect(result.current.konum.search).toBe('?kayit=7')
     expect(durumlar.length).toBeGreaterThan(ilkRenderSayisi)
     expect(durumlar.slice(ilkRenderSayisi).every(d => d === false)).toBe(true)
     // Sessiz yenileme hatasi ekrandaki listeyi ve hatayi bozmaz
@@ -138,6 +138,35 @@ describe('useListeSorgusu', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
     expect(result.current.hata).toBeNull()
     expect(result.current.kayitlar).toEqual([{ id: 999 }])
+  })
+
+  it('sonraki_sayfalarda_sessiz_yenileme_yok', async () => {
+    // Yeni kayit gelince sayfa 2+ kayardi; okuyan kullanicinin listesi ve tiklayacagi satir oynamasin
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { result, getir } = kur('/sre?sayfa=2')
+    await yuklendi(result)
+    expect(getir).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000) })
+    expect(getir).toHaveBeenCalledTimes(1)
+    // Elle yenileme o sayfayi yine ister
+    await act(async () => { result.current.yenile() })
+    expect(getir).toHaveBeenCalledTimes(2)
+    expect(getir).toHaveBeenLastCalledWith({ gun: 7, sirala: 'yeni', sayfa: 2, boyut: 25 })
+  })
+
+  it('arama_adrese_ve_istege_yazilir', async () => {
+    const { result, getir } = kur('/cve?sayfa=3')
+    await yuklendi(result)
+    act(() => result.current.degistir({ ara: 'log4j' }))
+    expect(result.current.konum.search).toBe('?ara=log4j')
+    expect(result.current.sorgu.ara).toBe('log4j')
+    await waitFor(() => expect(getir).toHaveBeenLastCalledWith(
+      { gun: 7, sirala: 'yeni', sayfa: 1, boyut: 25, ara: 'log4j' }))
+    // Tek karakterlik arama istege gitmez (sunucu da suzmez); bos arama adresten silinir
+    act(() => result.current.degistir({ ara: 'x' }))
+    await waitFor(() => expect(getir).toHaveBeenLastCalledWith({ gun: 7, sirala: 'yeni', sayfa: 1, boyut: 25 }))
+    act(() => result.current.degistir({ ara: '' }))
+    expect(result.current.konum.search).toBe('')
   })
 
   it('getire_dogru_parametreler_gider', async () => {

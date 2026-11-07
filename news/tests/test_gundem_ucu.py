@@ -57,7 +57,7 @@ class GundemUcuTests(TestCase):
         self.assertEqual(len(olaylar), 2)
         ilk = olaylar[0]
         self.assertEqual(
-            set(ilk), {'bolum', 'kayit', 'kaynak_sayisi', 'kaynaklar', 'makale_sayisi',
+            set(ilk), {'bolum', 'kayit', 'kaynak_sayisi', 'kaynaklar', 'diger_kaynaklar', 'makale_sayisi',
                        'bolumler', 'puan', 'ilk', 'son'})
         self.assertEqual(ilk['kaynak_sayisi'], 2)
         self.assertEqual(ilk['kaynaklar'], ['BleepingComputer', 'The Hacker News'])
@@ -71,6 +71,21 @@ class GundemUcuTests(TestCase):
         self.assertEqual(dolgu['kaynak_sayisi'], 1)
         self.assertEqual(dolgu['makale_sayisi'], 1)
         self.assertEqual(dolgu['bolumler'], ['sre'])
+
+    def test_diger_kaynaklar_baglanti_tasir(self):
+        # Kart "N kaynak" diyordu ama yalniz temsilcinin baglantisi vardi (2026-11-07)
+        self._cok_kaynakli()
+        _uret(AINewsEntry, 4, 'TechCrunch AI', 'Zorbex9shell backdoor targets AI labs', 1.5)
+        olay = self.istemci.get(URL).json()['olaylar'][0]
+        temsilci_kaynagi = olay['kayit']['source']
+        diger = olay['diger_kaynaklar']
+        self.assertEqual(len(diger), olay['kaynak_sayisi'] - 1)
+        self.assertNotIn(temsilci_kaynagi, [d['kaynak'] for d in diger])
+        self.assertEqual([d['kaynak'] for d in diger], sorted(d['kaynak'] for d in diger))
+        for d in diger:
+            self.assertEqual(set(d), {'kaynak', 'baslik', 'link', 'bolum', 'id'})
+            self.assertTrue(d['link'].startswith('https://ornek.test/'))
+            self.assertTrue(d['baslik'].startswith('TR '), 'Turkce baslik tercih edilir')
 
     def test_cve_girmez(self):
         _uret(CVEEntry, 1, 'NVD', 'CVE-2026-0001 critical flaw in widget', 1, cve_id='CVE-2026-0001')

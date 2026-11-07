@@ -49,7 +49,16 @@ describe('Gundem', () => {
     const onSec = vi.fn()
     render(<Gundem olaylar={[o]} hata={false} onSec={onSec} />)
     fireEvent.click(screen.getByText('Büyük veri sızıntısı').closest('button'))
-    expect(onSec).toHaveBeenCalledWith(haberOkumaKaydi(o.kayit, 'kubernetes'))
+    expect(onSec).toHaveBeenCalledWith({ ...haberOkumaKaydi(o.kayit, 'kubernetes'), digerKaynaklar: [] })
+  })
+
+  it('diger_kaynaklar_okuma_kaydina_gecer', () => {
+    const diger = [{ kaynak: 'SecurityWeek', baslik: 'Aynı olay', link: 'https://ornek.test/sw', bolum: 'news', id: 9 }]
+    const o = { ...olay({ bolum: 'kubernetes' }), diger_kaynaklar: diger }
+    const onSec = vi.fn()
+    render(<Gundem olaylar={[o]} hata={false} onSec={onSec} />)
+    fireEvent.click(screen.getByText('Büyük veri sızıntısı').closest('button'))
+    expect(onSec.mock.calls[0][0].digerKaynaklar).toEqual(diger)
   })
 
   it('gundem_hatasi_karta_yansir', () => {
