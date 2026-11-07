@@ -14,6 +14,7 @@ from .kaynaklar import kayit_tavani, kaynak_sayaclari, kaynak_yazildi
 
 from scraper_multi import MultiSourceScraper
 from .cve_scraper import MultiCVEScraper
+from . import cve_guncelleme
 from .k8s_scraper import MultiK8sScraper
 from .sre_scraper import MultiSREScraper
 from .devtools_scraper import MultiDevToolsScraper
@@ -114,7 +115,20 @@ def fetch_cve_task(days=7, selected_sources=None, skip_existing=True):
         kaynaktan_gelen = len(cves)  # _drop_existing'den ONCE: kaynaktan kac kayit geldi
         kaynak_sayaci = kaynak_sayaclari('cve', selected_sources, cves)
         if skip_existing:
-            cves = _drop_existing(cves, CVEEntry, 'cve_id', key='cve_id')
+            # Cevrilmis CVE'ler yeniden cevrilmez ama ceviri disi alanlari (KEV, CVSS, yer tutucu
+            # aciklama) guncellenir (cve_guncelleme, 2026-11-07); yalniz yeniler ve bekleyenler kalir.
+            mevcut = {k.cve_id: k for k in CVEEntry.objects.filter(
+                cve_id__in=[c['cve_id'] for c in cves], needs_translation=False)}
+            yeniler = []
+            for cve in cves:
+                kayit = mevcut.get(cve['cve_id'])
+                if kayit is None:
+                    yeniler.append(cve)
+                elif cve_guncelleme.guncelle(kayit, cve):
+                    sayac = kaynak_sayaci.setdefault(cve['source'], {'fetched': 0, 'saved': 0})
+                    sayac['updated'] = sayac.get('updated', 0) + 1
+            cves = yeniler
+        cves = cve_guncelleme.yeni_kayit_secimi(cves, days)
         if cves:
             saved_count = 0
             consume_translation_failures()

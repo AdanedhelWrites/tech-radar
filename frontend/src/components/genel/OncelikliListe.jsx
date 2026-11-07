@@ -27,7 +27,7 @@ export default function OncelikliListe({ kayitlar, hata, sonZiyaret, onSec }) {
   return (
     <section className="oncelikli" aria-labelledby="oncelikli-baslik">
       <div className="bolum-basi">
-        <h2 id="oncelikli-baslik" className="etiket-kucuk">Öncelikli Zafiyetler</h2>
+        <h2 id="oncelikli-baslik" className="etiket-kucuk">Öncelikli Zafiyetler · Son 7 Gün</h2>
         <Link to="/cve?sirala=cvss" className="tumu-baglantisi">Tümünü görüntüle →</Link>
       </div>
       {icerik}

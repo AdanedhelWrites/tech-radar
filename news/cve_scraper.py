@@ -17,6 +17,35 @@ import logging
 
 log = logging.getLogger(__name__)
 
+# NVD 2.0 sayfalama (2026-11-07). Sayfa boyu API'nin izin verdigi en buyuk deger; tavanlar bir
+# turun suresini ve bellegini sinirlar (7 gunde ~3.000 yayin, 2 gunde ~6.600 degisiklik).
+NVD_SAYFA_BOYU = 2000
+NVD_YAYIN_TAVANI = 4000
+NVD_GUNCEL_GUN = 2
+NVD_GUNCEL_TAVANI = 8000
+NVD_ZAMAN_ASIMI = 60
+# NVD hiz siniri: anahtarsiz 5 istek / 30 sn, anahtarla 50 / 30 sn. Bir turdaki butun NVD istekleri
+# (KEV, yayin, guncel; sayfalar dahil) bu araliktan sik gitmez. None: anahtara gore secilir.
+# Test calistiricisi 0 yapar.
+NVD_ISTEK_ARALIGI = None
+_son_nvd_istegi = 0.0
+
+# Aciklamasi henuz yayinlanmamis CVE'lerde kaynaklarin koydugu yer tutucular (Tenable: 10-23'ten beri
+# 57 kayit "No description provided" ile kaldi). Boyle bir kayit gercek aciklama gelince guncellenir.
+_YER_TUTUCU_ACIKLAMALAR = {'no description provided', 'no description available', 'n/a'}
+
+
+def aciklama_yer_tutucu_mu(metin) -> bool:
+    """Aciklama bos, cok kisa ya da kaynagin yer tutucusu mu."""
+    temiz = (metin or '').strip().rstrip('.').lower()
+    return len(temiz) < 20 or temiz in _YER_TUTUCU_ACIKLAMALAR
+
+
+def _nvd_araligi() -> float:
+    if NVD_ISTEK_ARALIGI is not None:
+        return NVD_ISTEK_ARALIGI
+    return 0.7 if os.environ.get('NVD_API_KEY', '').strip() else 6.5
+
 
 def tekil_cwe(cwe_ids) -> List[str]:
     """CWE listesini sirayi koruyarak tekillestirir, bos degerleri atar."""
@@ -52,11 +81,36 @@ class CVEScraper(BaseRSSScraper):
         yayinlanan, guncel) ve 429'da scraper bos doner. Anahtarla 50 / 30 sn.
         Baslik tek istege konur ve yalniz services.nvd.nist.gov'a gider.
         """
+        global _son_nvd_istegi
         headers = dict(kwargs.pop('headers', None) or {})
         anahtar = os.environ.get('NVD_API_KEY', '').strip()
-        if anahtar and url.startswith(self.NVD_API):
-            headers['apiKey'] = anahtar
+        if url.startswith(self.NVD_API):
+            if anahtar:
+                headers['apiKey'] = anahtar
+            bekle = _son_nvd_istegi + _nvd_araligi() - time.monotonic()
+            if bekle > 0:
+                time.sleep(bekle)
+            _son_nvd_istegi = time.monotonic()
         return self.session.get(url, headers=headers, **kwargs)
+
+    def _nvd_sayfalari(self, url: str, params: Dict, tavan: int):
+        """NVD 2.0 `vulnerabilities` ogelerini startIndex ile sayfa sayfa verir; `tavan` kayitta durur.
+
+        totalResults yoksa (eski/sahte yanit) ya da sayfa bos donerse tek sayfada biter. Ara sayfada
+        hata firlarsa o ana kadar verilenler cagirana ulasmistir; hata yukari iletilir.
+        """
+        baslangic = 0
+        while baslangic < tavan:
+            sayfa = dict(params, resultsPerPage=min(NVD_SAYFA_BOYU, tavan - baslangic), startIndex=baslangic)
+            response = self._nvd_get(url, params=sayfa, timeout=NVD_ZAMAN_ASIMI)
+            response.raise_for_status()
+            veri = response.json() or {}
+            ogeler = veri.get('vulnerabilities', [])
+            yield from ogeler
+            baslangic += len(ogeler)
+            toplam = veri.get('totalResults')
+            if not ogeler or not isinstance(toplam, int) or baslangic >= toplam:
+                break
     def parse_cvss_score(self, severity_text: str) -> Optional[float]:
         """CVSS skorunu metinden çıkarır"""
         if not severity_text:
@@ -150,156 +204,35 @@ class CVEScraper(BaseRSSScraper):
 
 
 class NVDScraper(CVEScraper):
-    """NVD (National Vulnerability Database) scraper"""
-    
+    """NVD (National Vulnerability Database): yayin tarihi son `days` gun icinde olan CVE'ler.
+
+    2026-11-07: sayfalama eklendi. Once tek istekte ilk 100 kayit aliniyordu; 7 gunluk pencerede
+    NVD ~3.000 CVE tutar ve kalanlar hic gelmiyordu. Ust sinir NVD_YAYIN_TAVANI'dir.
+    """
+
     BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-    
+
     def fetch_cves(self, days: int = 30) -> List[Dict]:
-        """NVD'den CVE verilerini çeker"""
         log.info(f"[NVD] Son {days} gunun CVE'leri cekiliyor...")
-        
         cves = []
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
-        
+        params = {
+            'pubStartDate': start_date.strftime('%Y-%m-%dT00:00:00.000'),
+            'pubEndDate': end_date.strftime('%Y-%m-%dT23:59:59.999'),
+        }
+        elenen = 0
         try:
-            params = {
-                'pubStartDate': start_date.strftime('%Y-%m-%dT00:00:00.000'),
-                'pubEndDate': end_date.strftime('%Y-%m-%dT23:59:59.999'),
-                'resultsPerPage': 100
-            }
-            
-            response = self._nvd_get(self.BASE_URL, params=params, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            if 'vulnerabilities' not in data:
-                log.warning("[NVD] Veri bulunamadi")
-                return cves
-            
-            # NVD severity İngilizce -> Türkçe eşleme
-            severity_tr = {
-                'CRITICAL': 'Kritik',
-                'HIGH': 'Yüksek',
-                'MEDIUM': 'Orta',
-                'LOW': 'Düşük',
-            }
-
-            skipped_rejected = 0
-            skipped_no_cvss = 0
-
-            for item in data['vulnerabilities']:
-                try:
-                    cve_data = item.get('cve', {})
-                    cve_id = cve_data.get('id', '')
-                    
-                    if not cve_id:
-                        continue
-                    
-                    # Reddedilmiş veya ayrılmış (reserved) durumunu kontrol et
-                    vuln_status = cve_data.get('vulnStatus', '')
-                    if vuln_status in ('Rejected', 'Reserved'):
-                        skipped_rejected += 1
-                        continue
-
-                    descriptions = cve_data.get('descriptions', [])
-                    description = ""
-                    for desc in descriptions:
-                        if desc.get('lang') == 'en':
-                            description = desc.get('value', '')
-                            break
-                    
-                    if not description:
-                        description = descriptions[0].get('value', '') if descriptions else ''
-
-                    # Rejected/Reserved açıklamaları filtrele
-                    desc_lower = description.lower()
-                    if any(reject_pattern in desc_lower for reject_pattern in [
-                        'rejected reason', '** reserved **', '** reject **',
-                        'this cve id has been rejected', 'not used',
-                        'this candidate has been reserved',
-                    ]):
-                        skipped_rejected += 1
-                        continue
-                    
-                    # Boş veya anlamsız açıklamaları filtrele
-                    if not description or len(description.strip()) < 20:
-                        skipped_rejected += 1
-                        continue
-
-                    cvss_score = None
-                    severity = "Bilinmiyor"
-                    
-                    metrics = cve_data.get('metrics', {})
-                    if 'cvssMetricV31' in metrics:
-                        cvss_data = metrics['cvssMetricV31'][0].get('cvssData', {})
-                        cvss_score = cvss_data.get('baseScore')
-                        raw_severity = cvss_data.get('baseSeverity', '')
-                        severity = severity_tr.get(raw_severity, self.get_severity_from_score(cvss_score))
-                    elif 'cvssMetricV30' in metrics:
-                        cvss_data = metrics['cvssMetricV30'][0].get('cvssData', {})
-                        cvss_score = cvss_data.get('baseScore')
-                        raw_severity = cvss_data.get('baseSeverity', '')
-                        severity = severity_tr.get(raw_severity, self.get_severity_from_score(cvss_score))
-                    elif 'cvssMetricV2' in metrics:
-                        cvss_data = metrics['cvssMetricV2'][0].get('cvssData', {})
-                        cvss_score = cvss_data.get('baseScore')
-                        severity = self.get_severity_from_score(cvss_score)
-
-                    # CVSS skoru olmayan (henüz analiz edilmemiş) CVE'leri atla
-                    if cvss_score is None:
-                        skipped_no_cvss += 1
-                        continue
-                    
-                    references = []
-                    for ref in cve_data.get('references', []):
-                        if ref.get('url'):
-                            references.append(ref['url'])
-                    
-                    cwe_ids = nvd_cwe_listesi(cve_data.get('weaknesses'))
-
-                    published = cve_data.get('published', '')
-                    modified = cve_data.get('lastModified', '')
-                    
-                    try:
-                        published_date = datetime.strptime(published[:10], '%Y-%m-%d').date() if published else datetime.now().date()
-                    except:
-                        published_date = datetime.now().date()
-                    
-                    try:
-                        modified_date = datetime.strptime(modified[:10], '%Y-%m-%d').date() if modified else None
-                    except:
-                        modified_date = None
-                    
-                    cve = {
-                        'cve_id': cve_id,
-                        'source': 'NVD',
-                        'original_title': f"{cve_id} - Güvenlik Açığı",
-                        'original_description': description,
-                        'severity': severity,
-                        'cvss_score': cvss_score,
-                        'published_date': published_date,
-                        'modified_date': modified_date,
-                        'link': f"https://nvd.nist.gov/vuln/detail/{cve_id}",
-                        'cwe_ids': cwe_ids,
-                        'references': references[:5],
-                        'affected_products': ''
-                    }
-                    
-                    cves.append(cve)
-                    
-                except Exception as e:
-                    log.warning(f"[NVD] CVE işleme hatası: {e}")
-                    continue
-            
-            log.info(f"[NVD] Atlanan: {skipped_rejected} reddedilmiş/ayrılmış, {skipped_no_cvss} CVSS'siz")
-            
-            log.info(f"[NVD] {len(cves)} CVE bulundu")
-            
+            for item in self._nvd_sayfalari(self.BASE_URL, params, NVD_YAYIN_TAVANI):
+                kayit = self._nvd_kaydi(item.get('cve', {}), 'NVD')
+                if kayit:
+                    cves.append(kayit)
+                else:
+                    elenen += 1
         except Exception as e:
+            # Sayfa ortasinda hata: o ana kadar okunanlar yine doner
             log.warning(f"[NVD] Hata: {e}")
-        
+        log.info(f"[NVD] {len(cves)} CVE bulundu ({elenen} reddedilmis/aciklamasiz/CVSS'siz atlandi)")
         return cves
 
 
@@ -487,7 +420,7 @@ class TenableScraper(CVEScraper):
                         source = entry.get('_source', {})
                         
                         description = source.get('description', '')
-                        if not description or len(description.strip()) < 10:
+                        if aciklama_yer_tutucu_mu(description):  # "No description provided" dahil
                             continue
                         
                         # Severity: cvss3_severity > severity > cvss2_severity
@@ -551,7 +484,7 @@ class TenableScraper(CVEScraper):
                         # Description: <p> tag (clearfix'in kardeşi)
                         desc_p = item.find('p')
                         description = desc_p.text.strip() if desc_p else ''
-                        if not description:
+                        if aciklama_yer_tutucu_mu(description):
                             continue
                         
                         # Severity badge
@@ -592,140 +525,34 @@ class TenableScraper(CVEScraper):
 
 
 class NVDRecentScraper(CVEScraper):
-    """NVD'den ek CVE'leri farklı parametrelerle çeker (Modified tarihine göre)"""
-    
+    """NVD'de son NVD_GUNCEL_GUN gunde degisen CVE'ler: yalniz guncelleme kaynagi (2026-11-07).
+
+    Once lastMod penceresinden rastgele bir dilim (startIndex=100'den 50 kayit) yeni kayit olarak
+    ekleniyordu. Simdi bu kayitlar veritabanindaki CVE'lerin CVSS/KEV/aciklama guncellemesini
+    tasir; yeni kayit olarak yalniz yayin tarihi cekim penceresindeyse alinir (bkz.
+    tasks.fetch_cve_task). Pencere `days`'ten bagimsiz: NVD gunde ~3.000 kaydi degistirir.
+    """
+
     BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-    
+
     def fetch_cves(self, days: int = 30) -> List[Dict]:
-        """NVD'den son değiştirilen CVE'leri çeker"""
-        log.info(f"[NVD Güncel] Son {days} günde değiştirilen CVE'ler çekiliyor...")
-        
+        gun = min(days, NVD_GUNCEL_GUN)
+        log.info(f"[NVD Güncel] Son {gun} günde değiştirilen CVE'ler çekiliyor...")
         cves = []
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=days)
-        
-        severity_tr = {
-            'CRITICAL': 'Kritik',
-            'HIGH': 'Yüksek',
-            'MEDIUM': 'Orta',
-            'LOW': 'Düşük',
+        start_date = end_date - timedelta(days=gun)
+        params = {
+            'lastModStartDate': start_date.strftime('%Y-%m-%dT%H:%M:%S.000'),
+            'lastModEndDate': end_date.strftime('%Y-%m-%dT%H:%M:%S.999'),
         }
-        
         try:
-            # lastModified tarihine göre çek (published yerine)
-            params = {
-                'lastModStartDate': start_date.strftime('%Y-%m-%dT00:00:00.000'),
-                'lastModEndDate': end_date.strftime('%Y-%m-%dT23:59:59.999'),
-                'resultsPerPage': 50,
-                'startIndex': 100,  # İlk 100'ü NVD scraper alıyor, bunlar farklı
-            }
-            
-            # NVD rate limit - ilk scraper'dan sonra biraz bekle
-            time.sleep(2)
-            
-            response = self._nvd_get(self.BASE_URL, params=params, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            if 'vulnerabilities' not in data:
-                log.warning("[NVD Güncel] Veri bulunamadı")
-                return cves
-            
-            for item in data['vulnerabilities']:
-                try:
-                    cve_data = item.get('cve', {})
-                    cve_id = cve_data.get('id', '')
-                    
-                    if not cve_id:
-                        continue
-                    
-                    vuln_status = cve_data.get('vulnStatus', '')
-                    if vuln_status in ('Rejected', 'Reserved'):
-                        continue
-                    
-                    descriptions = cve_data.get('descriptions', [])
-                    description = ""
-                    for desc in descriptions:
-                        if desc.get('lang') == 'en':
-                            description = desc.get('value', '')
-                            break
-                    
-                    if not description:
-                        description = descriptions[0].get('value', '') if descriptions else ''
-                    
-                    desc_lower = description.lower()
-                    if any(p in desc_lower for p in [
-                        'rejected reason', '** reserved **', '** reject **',
-                        'this cve id has been rejected', 'not used',
-                        'this candidate has been reserved',
-                    ]):
-                        continue
-                    
-                    if not description or len(description.strip()) < 20:
-                        continue
-                    
-                    cvss_score = None
-                    severity = "Bilinmiyor"
-                    
-                    metrics = cve_data.get('metrics', {})
-                    if 'cvssMetricV31' in metrics:
-                        cvss_data = metrics['cvssMetricV31'][0].get('cvssData', {})
-                        cvss_score = cvss_data.get('baseScore')
-                        raw_sev = cvss_data.get('baseSeverity', '')
-                        severity = severity_tr.get(raw_sev, self.get_severity_from_score(cvss_score))
-                    elif 'cvssMetricV30' in metrics:
-                        cvss_data = metrics['cvssMetricV30'][0].get('cvssData', {})
-                        cvss_score = cvss_data.get('baseScore')
-                        raw_sev = cvss_data.get('baseSeverity', '')
-                        severity = severity_tr.get(raw_sev, self.get_severity_from_score(cvss_score))
-                    elif 'cvssMetricV2' in metrics:
-                        cvss_data = metrics['cvssMetricV2'][0].get('cvssData', {})
-                        cvss_score = cvss_data.get('baseScore')
-                        severity = self.get_severity_from_score(cvss_score)
-                    
-                    if cvss_score is None:
-                        continue
-                    
-                    published = cve_data.get('published', '')
-                    try:
-                        published_date = datetime.strptime(published[:10], '%Y-%m-%d').date() if published else datetime.now().date()
-                    except:
-                        published_date = datetime.now().date()
-                    
-                    cwe_ids = nvd_cwe_listesi(cve_data.get('weaknesses'))
-
-                    references = []
-                    for ref in cve_data.get('references', []):
-                        if ref.get('url'):
-                            references.append(ref['url'])
-                    
-                    cve = {
-                        'cve_id': cve_id,
-                        'source': 'NVD Güncel',
-                        'original_title': f"{cve_id} - Güvenlik Açığı",
-                        'original_description': description,
-                        'severity': severity,
-                        'cvss_score': cvss_score,
-                        'published_date': published_date,
-                        'modified_date': None,
-                        'link': f"https://nvd.nist.gov/vuln/detail/{cve_id}",
-                        'cwe_ids': cwe_ids,
-                        'references': references[:5],
-                        'affected_products': ''
-                    }
-                    
-                    cves.append(cve)
-                    
-                except Exception as e:
-                    log.warning(f"[NVD Güncel] CVE işleme hatası: {e}")
-                    continue
-            
-            log.info(f"[NVD Güncel] {len(cves)} CVE bulundu")
-            
+            for item in self._nvd_sayfalari(self.BASE_URL, params, NVD_GUNCEL_TAVANI):
+                kayit = self._nvd_kaydi(item.get('cve', {}), 'NVD Güncel')
+                if kayit:
+                    cves.append(kayit)
         except Exception as e:
             log.warning(f"[NVD Güncel] Hata: {e}")
-        
+        log.info(f"[NVD Güncel] {len(cves)} CVE bulundu")
         return cves
 
 
@@ -753,14 +580,9 @@ class CISAKEVScraper(CVEScraper):
             params = {
                 'lastModStartDate': start_date.strftime('%Y-%m-%dT00:00:00.000'),
                 'lastModEndDate': end_date.strftime('%Y-%m-%dT23:59:59.999'),
-                'resultsPerPage': 200,
             }
             # hasKev degersiz bir bayrak; requests params ile `hasKev=` uretir, API onu kabul etmez
-            response = self._nvd_get(f"{self.BASE_URL}?hasKev", params=params, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-
-            for item in data.get('vulnerabilities', []):
+            for item in self._nvd_sayfalari(f"{self.BASE_URL}?hasKev", params, NVD_SAYFA_BOYU):
                 try:
                     cve_data = item.get('cve', {})
                     eklenme = cve_data.get('cisaExploitAdd', '')
@@ -796,6 +618,25 @@ class CISAKEVScraper(CVEScraper):
         return cves
 
 
+# Ayni CVE birden fazla kaynaktan gelirse tutulacak kayit (2026-11-07). NVD ailesi once: CVSS'i NVD
+# analizinden gelir; Tenable'in skoru onem kovasinin sabit degeridir (Critical -> 9.5), GHSA'nin
+# basligi Ingilizce ozettir. KEV en once: somuru bilgisini tasir. Listede olmayan kaynak en sona.
+KAYNAK_ONCELIGI = ('CISA KEV', 'NVD', 'NVD Güncel', 'GitHub Advisory', 'Tenable')
+
+
+def tekillestir(cves: List[Dict]) -> List[Dict]:
+    """CVE kimligi basina KAYNAK_ONCELIGI'ne gore en iyi kaydi tutar; ilk gorulme sirasi korunur."""
+    sira = {ad: i for i, ad in enumerate(KAYNAK_ONCELIGI)}
+    secilen: Dict[str, Dict] = {}
+    for cve in cves:
+        mevcut = secilen.get(cve['cve_id'])
+        if mevcut is None:
+            secilen[cve['cve_id']] = cve
+        elif sira.get(cve.get('source'), len(sira)) < sira.get(mevcut.get('source'), len(sira)):
+            secilen[cve['cve_id']] = cve
+    return list(secilen.values())
+
+
 class MultiCVEScraper(CVEScraper):
     """Tum CVE kaynaklarini birlestiren scraper"""
 
@@ -806,8 +647,8 @@ class MultiCVEScraper(CVEScraper):
         self.github_scraper = GitHubAdvisoryScraper()
         self.tenable_scraper = TenableScraper()
         self.nvd_recent_scraper = NVDRecentScraper()
-        # KEV once: ayni CVE birden fazla kaynaktan gelirse ilk goruleni kalir ve
-        # KEV kaydi somuru bilgisini (baslik/aciklama oneki) tasir.
+        # Ayni CVE birden fazla kaynaktan gelirse hangisinin tutulacagini KAYNAK_ONCELIGI belirler
+        # (bkz. tekillestir); bu sira yalniz cekim ve saglik listesinin sirasidir.
         # Kayit defteri news/kaynaklar.py tarafindan da okunur (kaynak sagligi).
         # 2026-10-14: CIRCL cikarildi (/api/last yalniz PYSEC/GHSA ve eski published donuyor; NVD + GitHub Advisory kapsiyor)
         self.sources = {
@@ -839,13 +680,8 @@ class MultiCVEScraper(CVEScraper):
             except Exception as e:
                 log.warning(f"  -> {source_name}: HATA - {e}")
         
-        seen_ids = set()
-        unique_cves = []
-        for cve in all_cves:
-            if cve['cve_id'] not in seen_ids:
-                seen_ids.add(cve['cve_id'])
-                unique_cves.append(cve)
-        
+        unique_cves = tekillestir(all_cves)
+
         log.info("=" * 80)
         log.info(f"TOPLAM {len(unique_cves)} CVE CEKILDI")
         log.info("=" * 80)

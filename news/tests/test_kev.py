@@ -87,7 +87,8 @@ class NvdYenidenYazimiTests(TestCase):
     def _kayit(self, **ek):
         kayit = {
             'cve_id': 'CVE-2026-0100', 'source': 'NVD Güncel', 'original_title': 'CVE-2026-0100 - X',
-            'original_description': 'Aciklama.', 'published_date': date(2026, 10, 1),
+            # NVD Guncel yeni kayit olarak yalniz yayin tarihi pencerede ise alinir (cve_guncelleme)
+            'original_description': 'Aciklama.', 'published_date': date.today() - timedelta(days=1),
             'link': 'https://ornek.test/cve/100',
         }
         kayit.update(ek)
