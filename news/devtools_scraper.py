@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 import re
 from typing import List, Dict
 
-from news.translation_utils import translate_text, translate_long_text
+from news.translation_utils import ceviri_basarisizligi_isaretle, translate_text, translate_long_text
 from news.metin_temizle import kayit_hazirla
 from news.base_scraper import BaseRSSScraper, link_guvenli, oturum_kur
 import logging
@@ -997,6 +997,7 @@ class MultiDevToolsScraper(DevToolsScraper):
                 try:
                     translated_title = translate_text(entry['title'])
                 except Exception:
+                    ceviri_basarisizligi_isaretle()
                     translated_title = entry['title']
                 translated_desc = translate_long_text(entry['description'])
                 yield {
@@ -1012,6 +1013,7 @@ class MultiDevToolsScraper(DevToolsScraper):
                 }
             except Exception as e:
                 log.warning(f"  DevTools haber isleme hatasi: {e}")
+                ceviri_basarisizligi_isaretle()
                 yield {
                     'original_title': entry['title'],
                     'turkish_title': entry['title'],

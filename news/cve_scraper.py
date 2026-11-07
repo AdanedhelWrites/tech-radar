@@ -11,7 +11,8 @@ import json
 from typing import List, Dict, Optional
 import time
 
-from news.translation_utils import translate_text
+from news.cve_basligi import turkce_baslik
+from news.translation_utils import ceviri_basarisizligi_isaretle, translate_text
 from news.base_scraper import BaseRSSScraper, oturum_kur
 import logging
 
@@ -695,8 +696,8 @@ class MultiCVEScraper(CVEScraper):
         
         for i, cve in enumerate(cves, 1):
             try:
-                # Title zaten Türkçe formatında ("CVE-XXXX - Güvenlik Açığı"), çevirme
-                cve['turkish_title'] = cve['original_title']
+                # Sablon baslik ("CVE-x - Güvenlik Açığı") cevrilmez; GHSA ozeti / KEV zafiyet adi cevrilir
+                cve['turkish_title'] = turkce_baslik(cve['cve_id'], cve['original_title'], translate_text)
                 
                 # Sadece description çevir
                 desc = cve.get('original_description', '')
@@ -711,6 +712,7 @@ class MultiCVEScraper(CVEScraper):
                 
             except Exception as e:
                 log.warning(f"İşleme hatası ({cve['cve_id']}): {e}")
+                ceviri_basarisizligi_isaretle()
                 cve['turkish_title'] = cve['original_title']
                 cve['turkish_description'] = cve['original_description']
                 yield cve

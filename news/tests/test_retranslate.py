@@ -200,7 +200,7 @@ class RetranslatePendingTests(RetranslateTestBase):
         """cve_scraper.process_cves ile ayni kural."""
         cevirmen = self.use_translator(FakeTranslator(CEVIRILER))
         cve = CVEEntry.objects.create(
-            cve_id='CVE-2026-5000', source='NVD', original_title='CVE-2026-5000 - Guvenlik Acigi',
+            cve_id='CVE-2026-5000', source='NVD', original_title='CVE-2026-5000 - Güvenlik Açığı',
             original_description='A remote attacker can read arbitrary files from the server.',
             published_date=date(2026, 9, 12), link='https://ornek.test/cve/5000', needs_translation=True)
 
@@ -208,7 +208,7 @@ class RetranslatePendingTests(RetranslateTestBase):
 
         cve.refresh_from_db()
         self.assertFalse(cve.needs_translation)
-        self.assertEqual(cve.turkish_title, 'CVE-2026-5000 - Guvenlik Acigi')
+        self.assertEqual(cve.turkish_title, 'CVE-2026-5000 - Güvenlik Açığı')
         self.assertEqual(cve.turkish_description, 'Uzaktaki bir saldırgan sunucudaki rastgele dosyaları okuyabilir.')
         self.assertEqual(len(cevirmen.calls), 1)
 
@@ -712,8 +712,8 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
     def test_cve_kisa_aciklama_gemini_adayi_degil(self):
         self.gemini_ayarla(_gemini_cevirisi)
         kayit = CVEEntry.objects.create(
-            cve_id='CVE-2026-0001', source='NVD', original_title='CVE-2026-0001 - Guvenlik Acigi',
-            turkish_title='CVE-2026-0001 - Guvenlik Acigi', original_description='Short text.',
+            cve_id='CVE-2026-0001', source='NVD', original_title='CVE-2026-0001 - Güvenlik Açığı',
+            turkish_title='CVE-2026-0001 - Güvenlik Açığı', original_description='Short text.',
             turkish_description='Short text.', link='https://ornek.test/cve/1',
             published_date=date(2026, 9, 12), severity='Orta', needs_translation=True)
 
@@ -728,8 +728,8 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
         self.gemini_ayarla(_gemini_cevirisi)
         govde = 'A remote attacker can read arbitrary files from the server.'
         kayit = CVEEntry.objects.create(
-            cve_id='CVE-2026-0002', source='NVD', original_title='CVE-2026-0002 - Guvenlik Acigi',
-            turkish_title='CVE-2026-0002 - Guvenlik Acigi', original_description=govde,
+            cve_id='CVE-2026-0002', source='NVD', original_title='CVE-2026-0002 - Güvenlik Açığı',
+            turkish_title='CVE-2026-0002 - Güvenlik Açığı', original_description=govde,
             turkish_description=govde, link='https://ornek.test/cve/2',
             published_date=date(2026, 9, 12), severity='Yuksek', cvss_score=8.1, needs_translation=True)
 
@@ -737,13 +737,15 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
 
         kayit.refresh_from_db()
         self.assertEqual(self.gemini_cagrilar, [{'description': govde}])
-        self.assertEqual(kayit.turkish_title, 'CVE-2026-0002 - Guvenlik Acigi')
+        self.assertEqual(kayit.turkish_title, 'CVE-2026-0002 - Güvenlik Açığı')
         self.assertEqual(kayit.turkish_description, 'GEMINI ' + govde)
         self.assertEqual(kayit.translation_provider, 'gemini')
 
     def test_kubernetes_yapisal_changelog_tek_alan_olarak_gider(self):
         self.gemini_ayarla(_gemini_cevirisi)
-        govde = '===SECTION:Features===\n- Add new scheduler flag.\n===SECTION:Bug Fixes===\n- Fix kubelet crash.'
+        # 10 kelimenin altinda: sahte 'GEMINI ...' cevirisi Turkce harf tasimaz; daha uzun olsaydi gercek
+        # dogrulamanin reddedecegi bir ceviri olurdu ve ayni turda ASCII yukseltme adayi sayilirdi
+        govde = '===SECTION:Features===\n- Add flag.\n===SECTION:Fixes===\n- Fix crash.'
         kayit = KubernetesEntry.objects.create(
             source='GitHub Releases', category='release', version='v1.31.0',
             original_title='Kubernetes v1.31.0 released', turkish_title='Kubernetes v1.31.0 released',
@@ -1003,8 +1005,8 @@ class RetranslateGeminiTests(GeminiSahteMixin, SaglayiciZinciriMixin, Retranslat
 def _cve_kaydi(no, cvss=None, kev=None, needs_translation=False):
     govde = 'A remote attacker can read arbitrary files from the server.'
     return CVEEntry.objects.create(
-        cve_id=f'CVE-2026-{no}', source='NVD', original_title=f'CVE-2026-{no} - Guvenlik Acigi',
-        turkish_title=f'CVE-2026-{no} - Guvenlik Acigi', original_description=govde,
+        cve_id=f'CVE-2026-{no}', source='NVD', original_title=f'CVE-2026-{no} - Güvenlik Açığı',
+        turkish_title=f'CVE-2026-{no} - Güvenlik Açığı', original_description=govde,
         turkish_description=govde if needs_translation else 'LIBRE ' + govde,
         link=f'https://ornek.test/cve/{no}', published_date=date(2026, 9, 12),
         cvss_score=cvss, kev_added_date=kev, needs_translation=needs_translation,
@@ -1701,10 +1703,10 @@ class GeminiBolumAdiTests(TestCase):
 
         cve = CVEEntry.objects.create(
             cve_id='CVE-2026-9500', source='NVD',
-            original_title='CVE-2026-9500 - Guvenlik Acigi',
+            original_title='CVE-2026-9500 - Güvenlik Açığı',
             original_description='A remote attacker can read arbitrary files from the server.',
             published_date=date(2026, 9, 12), link='https://ornek.test/cve/9500',
-            turkish_title='CVE-2026-9500 - Guvenlik Acigi',
+            turkish_title='CVE-2026-9500 - Güvenlik Açığı',
             turkish_description='Eski LibreTranslate cevirisi.', cvss_score=9.8,
             needs_translation=False, translation_provider='libretranslate')
 

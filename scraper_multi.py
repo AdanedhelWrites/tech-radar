@@ -18,7 +18,7 @@ from abc import abstractmethod
 
 from urllib.parse import urlsplit
 
-from news.translation_utils import translate_text, translate_long_text
+from news.translation_utils import ceviri_basarisizligi_isaretle, translate_text, translate_long_text
 from news.base_scraper import BaseRSSScraper, kok_alan, link_guvenli, oturum_kur
 from news.metin_temizle import kayit_hazirla, paragraf_metni
 import logging
@@ -690,6 +690,7 @@ class MultiSourceScraper(BaseRSSScraper):
                     translated_title = translate_text(article['title'])
                     time.sleep(0.2)
                 except Exception:
+                    ceviri_basarisizligi_isaretle()
                     translated_title = article['title']
 
                 # Tam icerik cevirisi (chunk'larla)
@@ -710,6 +711,7 @@ class MultiSourceScraper(BaseRSSScraper):
                 }
             except Exception as e:
                 log.warning(f"Haber islenirken hata: {e}")
+                ceviri_basarisizligi_isaretle()
                 yield {
                     'original_title': article['title'],
                     'turkish_title': article['title'],

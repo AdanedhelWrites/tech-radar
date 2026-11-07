@@ -98,6 +98,19 @@ _URL_SONU = '.,;:!?)]}>\'"`'
 # Proje kurali "kod ASCII Turkce" bu metne UYGULANMAZ: talimat modele gider ve model yazimini taklit
 # eder. 2026-10-16'ya kadar diakritiksiz yazilmisti; Gemini cevirilerinin yarisi (CVE'de %53) Turkce
 # karaktersiz geldi ('kimligi dogrulanmamis saldirgan'). Ornekler ve kural bu yuzden duzgun Turkcedir.
+# Terim sozlugu (2026-11-07 inceleme): ayni terim kayittan kayda farkli cevriliyordu ('zafiyet' / 'güvenlik
+# açığı' / 'kırılganlık', 'istismar' / 'sömürü'). Yazilim akisi terimleri Ingilizce kalir; LibreTranslate
+# icin translation_utils.TRANSLATION_FIXES'in zorladigiyla ayni (depo -> repository, kabuk -> shell).
+_TERIM_SOZLUGU = (
+    "- Terimleri her kayıtta aynı karşılıkla çevir: vulnerability -> güvenlik açığı; exploit -> istismar "
+    "(fiil: istismar etmek); privilege escalation -> yetki yükseltme; denial of service -> hizmet reddi (DoS); "
+    "cross-site scripting -> siteler arası betik çalıştırma (XSS); SQL injection -> SQL enjeksiyonu; "
+    "path traversal -> dizin geçişi; arbitrary code execution -> keyfi kod çalıştırma; buffer overflow -> "
+    "arabellek taşması; out-of-bounds read/write -> sınır dışı okuma/yazma; authentication bypass -> kimlik "
+    "doğrulamayı atlatma; patch -> yama; deprecated -> kullanımdan kaldırılmış.\n"
+    "- Şu yazılım terimlerini İngilizce bırak: commit, branch, merge, pull request, pipeline, repository, "
+    "shell, stack, gateway, pod, namespace, container, cluster, use-after-free.\n"
+)
 _TALIMAT_GOVDESI = (
     "Sen teknik haber ve güvenlik bültenleri çeviren bir çevirmensin. Verilen JSON nesnesindeki "
     "her alanın İngilizce metnini doğal ve anlaşılır Türkçeye çevir; aynı anahtarlarla bir JSON nesnesi döndür.\n"
@@ -113,6 +126,7 @@ _TALIMAT_GOVDESI = (
     "- Özetleme, ekleme, yorum yapma; metnin tamamını çevir.\n"
     "- Güvenlik terimlerini teknik anlamıyla çevir (örn. 'unauthenticated attacker' -> "
     "'kimliği doğrulanmamış saldırgan', 'remote code execution' -> 'uzaktan kod çalıştırma').\n"
+    + _TERIM_SOZLUGU
 )
 _TALIMAT_SONU = "- Yalnızca JSON döndür."
 SISTEM_TALIMATI = _TALIMAT_GOVDESI + _TALIMAT_SONU
@@ -349,12 +363,22 @@ def _kayit_cevirisi(alanlar: Dict[str, str], cikti: dict, onek: str = '',
     Istenmeyen alanlar yok sayilir. onek ve log_adi yalniz log icindir (paket kimligi, saglayici)."""
     sonuc = {}
     for ad, orijinal in alanlar.items():
-        sorun = _alan_sorunu(orijinal, cikti.get(ad))
+        sorun = _alan_sorunu(orijinal, cikti.get(ad)) or _eksik_capa(orijinal, cikti[ad])
         if sorun:
             log.warning(f"  [{log_adi}] dogrulama basarisiz ({onek}{ad}: {sorun}).")
             return None
         sonuc[ad] = cikti[ad].strip()
     return sonuc
+
+
+def _eksik_capa(orijinal: str, ceviri: str) -> Optional[str]:
+    """Alanin her capasi (CVE/GHSA kimligi, URL, kod parcasi, surum) ceviride aynen var mi; yoksa sebep.
+    Tek kayit yolunda capraz denetim yoktu: model bir surumu ya da CVE numarasini degistirse ceviri
+    yaziliyordu. Kod parcasinda ters tirnak zorunlu degil (model tirnaksiz yazabilir); icerigi aranir.
+    Duz alt dize testi: Turkce ek kesmeden sonra gelir ('2.4.1'den')."""
+    metin = ceviri.upper()
+    eksik = [capa for capa in _capalar(orijinal) if capa.strip('`') not in metin]
+    return f'capa kayip ({len(eksik)})' if eksik else None
 
 
 def _capalar(metin: str) -> Set[str]:

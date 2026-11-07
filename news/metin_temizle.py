@@ -49,6 +49,23 @@ _YAZAR_BIYO = re.compile(
     r'^[A-Z][^.\n]{0,80}\b(?:is|was) (?:an?|the) [^.\n]{0,80}\b(?:at|for) SecurityWeek\b')
 
 
+# Etkinlik reklami paragraflari (2026-11-07 olcumu: TechCrunch AI ~400 paragraf, "Disrupt ... % off tickets",
+# "REGISTER HERE", "Book Exhibit Table"; CNCF "Don't forget to register for KubeCon"). Yalniz kisa paragraf
+# atilir; reklam kalibini haber olarak anlatan uzun paragraf kalir. Bleeping Computer'in "Sponsored and
+# written by X." satiri sponsorlu icerik bildirimidir, atilmaz.
+REKLAM_MAX_KARAKTER = 500
+_REKLAM = re.compile(
+    r'\bREGISTER HERE\b|\bBook (?:an )?Exhibit Table\b'
+    r'|\b\d+% off (?:tickets|a second pass|your)\b|\bticket savings\b|\bpass savings\b'
+    r'|\bGet your pass\b|\bBuy One Pass\b|\bExpo\+ Pass\b|\bsave up to \$[\d,]+ on your\b'
+    r'|\bregister(?:ing)? for your pass\b|\bforget to register for KubeCon\b',
+    re.I)
+
+
+def _reklam_mi(paragraf):
+    return len(paragraf) <= REKLAM_MAX_KARAKTER and bool(_REKLAM.search(paragraf))
+
+
 def _bosluk_duzelt(metin):
     metin = _OZEL_BOSLUK.sub(' ', metin.replace('\r\n', '\n'))
     metin = _SATIR_SONU_BOSLUK.sub('\n', metin)
@@ -110,7 +127,7 @@ def _paragraf_kaliplari(metin):
     paragraflar = []
     for p in metin.split('\n\n'):
         p = _RELATED.sub('', p).strip()
-        if p:
+        if p and not _reklam_mi(p):
             paragraflar.append(p)
     if paragraflar and len(paragraflar[-1]) <= 600 and _YAZAR_BIYO.match(paragraflar[-1]):
         paragraflar.pop()

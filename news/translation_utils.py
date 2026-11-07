@@ -161,6 +161,12 @@ _PLACEHOLDER_RE = re.compile(r'XTRM\d{4}X')
 _BROKEN_PLACEHOLDER_RE = re.compile(r'[Xx]\s*[Tt]\s*[Rr]\s*[Mm]\s*(\d{4})\s*[Xx]')
 
 
+# Noktali tanimlayici (bkz. _protect_terms 4b2 ve turkish_post_process): noktanin ardi kucuk harf, rakam ya
+# da alt cizgi; tamami ASCII. Sondaki nokta (cumle sonu) eslesmeye girmez.
+_NOKTALI_TANIMLAYICI = re.compile(
+    r'(?<![\w.])(?!(?:e\.g|i\.e)\b)[A-Za-z_][A-Za-z0-9_-]*(?:\.[a-z0-9_][A-Za-z0-9_-]*)+(?![\w])')
+
+
 def _repair_placeholders(text: str) -> str:
     """Saglayicinin bozdugu yer tutuculari standart bicime getirir.
 
@@ -211,6 +217,11 @@ def _protect_terms(text: str) -> Tuple[str, Dict[str, str]]:
         r'\b[A-Za-z_][A-Za-z0-9_]*(?:(?:::|\.)[A-Za-z_][A-Za-z0-9_]*)*\(\)',
         _replace_match, result
     )
+
+    # 4b2) Noktali tanimlayici ve dosya adlari: os.environ.get, blazer_usb.c, node.js, example.com.
+    # Yalniz ASCII ve noktanin ardi kucuk harfle: cumle sonu ("yapildi.Bu") ve Turkce kelime eslesmez.
+    # 'e.g' / 'i.e' kisaltmalari cevrilsin diye disarida.
+    result = _NOKTALI_TANIMLAYICI.sub(_replace_match, result)
 
     # 4c) Alt cizgili tanimlayicilar: tribe_events, pg_stat_lock
     # LibreTranslate alt cizgiyi siler; diger saglayicilar da zaman zaman kelimelere boler.
@@ -352,6 +363,14 @@ def consume_translation_failures() -> int:
     return count
 
 
+def ceviri_basarisizligi_isaretle() -> None:
+    """Scraper'in ceviri istisnasini yakalayip orijinali yazdigi dal icin: sayaci artirir ki kayit
+    needs_translation olarak yazilsin ve retranslate onu yeniden cevirsin. 2026-11-07'ye kadar bu
+    dallar Ingilizceyi 'cevrildi' olarak yaziyordu (ornek K8s 428)."""
+    global _failure_count
+    _failure_count += 1
+
+
 # ------------------------------------------------------------
 # Saglayici zinciri (spec 2026-09-14-ceviri-saglayici-zinciri)
 # ------------------------------------------------------------
@@ -418,13 +437,15 @@ def translate_text(text: str) -> str:
             translated = _repair_placeholders(translated)
             sorun = verify_translation(protected, translated, replacements)
             if sorun is None:
-                restored = _restore_terms(translated, replacements)
+                # Son islem geri koymadan ONCE: korunan kod/URL/surum yer tutucu icindeyken noktalama ve
+                # buyuk harf kurallari ona dokunamaz (2026-11-07: "os.environ.get" -> "Os. Environ.get")
+                restored = _restore_terms(turkish_post_process(translated), replacements)
                 if any(kod in restored for kod in replacements):
                     sorun = 'yer tutucu kalintisi'
             if sorun:
                 log.warning(f"  [Ceviri] {saglayici.name} dogrulama basarisiz ({sorun}).")
                 continue
-            sonuc = turkish_post_process(restored)
+            sonuc = restored.strip()
         except Exception as e:
             log.warning(f"  [Ceviri] {saglayici.name} hata: {e}")
             continue
@@ -555,8 +576,15 @@ def turkish_post_process(text: str) -> str:
         _pp_replacements[ph] = m.group(0)
         return ph
 
+    # Kod parcalari, noktali ve alt cizgili tanimlayicilar: translate_long_text ve changelog cevirisi bu
+    # islemi geri konmus metne de uygular; "os.environ.get" / "blazer_usb.c" bozulmasin
+    result = re.sub(r'`[^`\n]+`', _pp_protect, result)
+    # Cevrilmeden kalan 'e.g.' / 'i.e.' "e. G." olmasin
+    result = re.sub(r'\b(?:e\.g|i\.e)\.', _pp_protect, result)
     # URL'leri koru
     result = re.sub(r'https?://\S+', _pp_protect, result)
+    result = _NOKTALI_TANIMLAYICI.sub(_pp_protect, result)
+    result = re.sub(r'\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b', _pp_protect, result)
     # Email adreslerini koru
     result = re.sub(r'\S+@\S+\.\S+', _pp_protect, result)
     # Surum numaralarini koru (v1.2.3, 8.19.12, 25.0.2+10)
