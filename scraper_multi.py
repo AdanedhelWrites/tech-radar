@@ -19,7 +19,7 @@ from abc import abstractmethod
 from urllib.parse import urlsplit
 
 from news.translation_utils import ceviri_basarisizligi_isaretle, translate_text, translate_long_text
-from news.base_scraper import BaseRSSScraper, kok_alan, link_guvenli, oturum_kur
+from news.base_scraper import BaseRSSScraper, ay_tarihi_coz, kok_alan, link_guvenli, oturum_kur
 from news.metin_temizle import kayit_hazirla, paragraf_metni
 import logging
 
@@ -192,13 +192,12 @@ class TheHackerNewsSource(NewsSource):
         return articles
 
     def _parse_date(self, date_str):
-        try:
-            return datetime.strptime(date_str, '%B %d, %Y')
-        except:
-            try:
-                return datetime.strptime(date_str, '%b %d, %Y')
-            except:
-                return datetime.now()
+        # Metin icinden ayiklanir (THN ikon karakteri); okunamayan tarih bugune duser ama loga yazilir
+        tarih = ay_tarihi_coz(date_str)
+        if tarih is None:
+            log.warning(f"[{self.get_name()}] Tarih okunamadi, cekim gunu yazildi: {date_str!r}")
+            return datetime.now()
+        return tarih
 
 
 class BleepingComputerSource(NewsSource):
@@ -317,13 +316,12 @@ class BleepingComputerSource(NewsSource):
         return articles
 
     def _parse_date(self, date_str):
-        try:
-            return datetime.strptime(date_str, '%B %d, %Y')
-        except:
-            try:
-                return datetime.strptime(date_str, '%b %d, %Y')
-            except:
-                return datetime.now()
+        # Metin icinden ayiklanir (THN ikon karakteri); okunamayan tarih bugune duser ama loga yazilir
+        tarih = ay_tarihi_coz(date_str)
+        if tarih is None:
+            log.warning(f"[{self.get_name()}] Tarih okunamadi, cekim gunu yazildi: {date_str!r}")
+            return datetime.now()
+        return tarih
 
 
 class RSSNewsSource(NewsSource):
@@ -600,13 +598,12 @@ class KrebsOnSecuritySource(NewsSource):
         return articles
 
     def _parse_date(self, date_str):
-        try:
-            return datetime.strptime(date_str, '%B %d, %Y')
-        except:
-            try:
-                return datetime.strptime(date_str, '%b %d, %Y')
-            except:
-                return datetime.now()
+        # Metin icinden ayiklanir (THN ikon karakteri); okunamayan tarih bugune duser ama loga yazilir
+        tarih = ay_tarihi_coz(date_str)
+        if tarih is None:
+            log.warning(f"[{self.get_name()}] Tarih okunamadi, cekim gunu yazildi: {date_str!r}")
+            return datetime.now()
+        return tarih
 
 class MultiSourceScraper(BaseRSSScraper):
     """Coklu kaynak haber cekici"""
