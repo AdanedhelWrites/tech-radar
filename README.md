@@ -9,7 +9,7 @@ Siber guvenlik haberleri, CVE zafiyetleri, Kubernetes ekosistemi, SRE (Site Reli
 | **Uygulama surumu** | `appVersion` 2026.10.3 (CalVer; imaj etiketi) |
 | **Helm chart** | 2.2.1 (SemVer; etiket `chart-2.2.1`) — [CHANGELOG](helm/tech-radar/CHANGELOG.md) |
 | **Calisma zamani** | Python 3.11, Django 5.2, Node 22, PostgreSQL 16, Redis 7 |
-| **Testler** | 940 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 291 Vitest testi, 24 dosya (`frontend/src/`) |
+| **Testler** | 941 Django testi (`news/tests/`, PostgreSQL uzerinde CI'da kosar) ve 291 Vitest testi, 24 dosya (`frontend/src/`) |
 | **Dagitim** | Docker Compose (canli, yerel) · Helm (generic) · Argo CD + Vault (yerel GitOps, ADR-0008) |
 | **Lisans** | MIT |
 
@@ -309,7 +309,7 @@ Ardindan `http://localhost:8000/admin/` adresinden giris yapin. Oturum cerezi ay
 
 ### Testler
 
-940 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
+941 Django testi `news/tests/` altindadir ve `news/test_runner.py` (`GuvenliTestRunner`) ile kosar. Calistirici uc garanti verir: hicbir test gercek LibreTranslate'e gitmez (`LIBRETRANSLATE_URL` bos), hicbir test gercek Gemini'ye gitmez (`GEMINI_API_KEY` bos), hicbir test canli Redis devre kesicisini okumaz veya acmaz (kapilar surec ici). Saglayici testleri adresi/anahtari `override_settings` ile kendileri verir ve HTTP'yi mock'lar.
 
 ```bash
 # Canli compose yigininda (ayni PostgreSQL sunucusunda ayri test veritabani acilir)
@@ -622,7 +622,7 @@ cybersecurity_news/
 │   ├── veri_tasima.py          # Tam hassasiyetli dump/ozet (SQLite -> PostgreSQL gecisi)
 │   ├── test_runner.py          # GuvenliTestRunner: testler gercek saglayiciya gitmez
 │   ├── management/commands/    # veri_tasi_dump, veri_ozeti, bozuk_cevirileri_isaretle, cve_baslik_cevir, cve_aciklama_tamamla
-│   ├── tests/                  # 940 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
+│   ├── tests/                  # 941 test (v1 sozlesmesi, ceviri, saklama, migration, ayar, gundem)
 │   │   └── fixtures/gundem_basliklari.json  # Gundem gruplama testlerinin gercek baslik ornekleri
 │   ├── base_scraper.py         # Ortak RSS okuyucu (BaseRSSScraper)
 │   ├── ai_scraper.py           # 9 Yapay Zeka kaynagi scraper'i
@@ -773,7 +773,7 @@ Ceviri sonrasi otomatik duzeltmeler:
 `retranslate_pending` Celery Beat gorevi (`retranslate-pending-hourly`) saatlik calisir: dakika 05, saatler 1-5, 7-11, 13-17 ve 19-23; cekim saatleri (00/06/12/18) atlanir, yani gunde 20 tur. Her tur iki isi yapar: bekleyen (`needs_translation=True`) kayitlari LibreTranslate ile cevirir (bolum basina imlec sirasiyla), ardindan `translation_provider='libretranslate'` kayitlari Gemini API (`gemini-3.5-flash-lite`) ile yukseltir; birden cok kayit tek istekte (paket) cevrilir.
 
 - **Onem sinifi:** CVE'lerde yalniz CVSS >= 7.0 ya da CISA KEV'deki kayitlar Gemini adayidir; digerleri (dusuk/orta skorlu ya da skoru olmayan) kalici olarak LibreTranslate cevirisiyle kalir, ne bekleyen ne yukseltme asamasinda Gemini'ye gitmez. Diger bolumlerde butun kayitlar adaydir.
-- **Yeni kayit once:** Yukseltme asamasinin imleci yoktur; her tur bolum basina en fazla `RETRANSLATE_UPGRADE_BATCH` kaydi `created_at` azalan sirayla (en yeniden eskiye) alir. Eski LibreTranslate birikimi butce kaldikca geriye dogru erir.
+- **Yeni kayit once:** Yukseltme asamasinin imleci yoktur; her tur bolum basina en fazla `RETRANSLATE_UPGRADE_BATCH` (CVE'de `RETRANSLATE_UPGRADE_BATCH_CVE`) kaydi `created_at` azalan sirayla (en yeniden eskiye) alir. Eski LibreTranslate birikimi butce kaldikca geriye dogru erir.
 - **Bolum onceligi:** Sira CVE, haber, AI, SRE, DevTools, Kubernetes'tir ve katidir: ustteki bolumun adaylari bitmeden alttaki Gemini payi almaz. Bolumler icin ayrilmis bir pay yoktur (`GEMINI_CVE_RESERVE` kaldirildi, bkz. [ADR-0005](docs/ADR-0005-CVE-Saklama-ve-Gemini-Onceligi.md)).
 - **Paketleme:** Yukseltme asamasi adaylari siraya sadik kalarak paketler; paket `GEMINI_BATCH_CHARS` (varsayilan 10000) karakteri ya da `GEMINI_BATCH_MAX` (varsayilan 15) kaydi asmaz. Yapili Kubernetes degisiklik kayitlari paketlenmez, tek basina gider. Paket cevirisi kayit basina dogrulanir; ek olarak capa capraz denetimi (CVE/GHSA numarasi, URL, kod parcasi, 3+ parcali surum) cevirisi baska kaydin capasini tasiyan kaydi reddeder (ayni bicimli yer degisimi onlenir); capasiz kayitlar etkilenmez. Paketli K8s cevirileri de ayni yapi isareti denetiminden gecer.
 - **Bolme:** Kesilen (MAX_TOKENS), bozuk yanitli (SAFETY vb. tamamlanmamis ya da cozulemeyen JSON, `yanit_bozuk`) ya da kayda ozgu 4xx alan paket ikiye bolunup ayni turda yeniden denenir; yalniz hala basarisiz olan tek kayit deneme sayacini artirir. Bekleyen asama kayit basina calismaya devam eder.
@@ -986,7 +986,7 @@ Dokuz GitHub Actions is akisi vardir. `CI`, `Dependency Review`, PR'da `gitleaks
 
 | Is akisi | Tetik | Mod | Ne yapar |
 |---|---|---|---|
-| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 940 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (291 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
+| `CI` | PR, push, elle | **Kapi** | `Backend (Django testleri)`: ruff (F, E9), PostgreSQL 16 ile 941 test + coverage kapisi (`MIN_COVERAGE`) + `makemigrations --check`; `Frontend (Vite build)`: ESLint, Vitest (291 test), build; `Helm / Compose dogrulama`: `helm lint`, `helm template` (varsayilan + Argo CD modu), kubeconform, chart surum/imaj etiket kapilari, `docker compose config` |
 | `Dependency Review` | PR | **Kapi** | HIGH/CRITICAL zafiyetli bagimlilik getiren PR'i durdurur |
 | `gitleaks` | PR, push, Pazartesi | PR'da kapi | Commit'lerde sir tarar; baseline `.gitleaksignore` |
 | `trivy` | PR, push, Carsamba | Rapor | Kaynak agaci (vuln + secret + misconfig), backend ve frontend imajlari; CycloneDX SBOM artefakti |
@@ -1097,6 +1097,7 @@ Uygulama tamamen ortam degiskenleri ile yapilandirabilir. Docker Compose'da `doc
 | `GEMINI_BATCH_MAX` | `15` | Yukseltme paketindeki en fazla kayit sayisi |
 | `RETRANSLATE_BATCH` | `100` | Retranslate turunda bolum basina taranan bekleyen kayit sayisi |
 | `RETRANSLATE_UPGRADE_BATCH` | `40` | Tur ve bolum basina yukseltme siniri (en yeni kayittan baslar) |
+| `RETRANSLATE_UPGRADE_BATCH_CVE` | `150` | CVE bolumunun tur basina yukseltme siniri (gunde ~600 yeni onemli CVE; 40'lik tavan eski adaylara sira birakmiyordu) |
 | `RETRANSLATE_MAX_ATTEMPTS` | `5` | Bir kaydin icerik hatasiyla (saglayici reddetti / dogrulama gecmedi) kac kez denenecegi; esige ulasan kayit kuyruktan duser (`needs_translation` kalir) ve `/api/v1/status/` `translation_given_up` ile sayilir. Basarili cevirinin sayaci sifirlar. Sayaci elle sifirlamak (admin ya da shell) kaydi yeniden kuyruga alir |
 | `TRANSLATE_MIN_RATIO` | `0.4` | Ceviri kirpilma esigi: 80+ karakterlik metinde cikti/girdi orani bunun altindaysa ceviri reddedilir, kayit `needs_translation` kalir |
 | `RETENTION_DAYS` | `90` | Saklama penceresi; `updated_at` bundan eski kayitlar cekim basinda silinir (cekim penceresinden ayridir) |

@@ -81,6 +81,11 @@ log = logging.getLogger(__name__)
 RETRANSLATE_BATCH = int(os.environ.get('RETRANSLATE_BATCH', '100'))
 # Yukseltme Gemini gunluk butcesini kullanir; asil sinir butcedir (gemini.GEMINI_DAILY_BUDGET).
 RETRANSLATE_UPGRADE_BATCH = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH', '40'))
+# CVE bolumu ayri (2026-11-08): NVD sayfalamasindan (11-07) beri gunde ~600 yeni onemli CVE LibreTranslate ile
+# geliyor; en yeniden baslayan 40'lik tavan bu akisi ancak karsiliyor, eski aday (ASCII'ye kaymis Gemini
+# cevirileri, 2563 kayit) hic sirasini almiyordu. Gemini butcesi bostu (27/450); asil sinir butce ve tur
+# payidir, 15'lik paketlerle 150 aday tur basina ~10 istek.
+RETRANSLATE_UPGRADE_BATCH_CVE = int(os.environ.get('RETRANSLATE_UPGRADE_BATCH_CVE', '150'))
 # Icerik hatasi (saglayici reddetti / dogrulama gecmedi) bu kadar kez tekrarlanan kayit
 # kuyruktan duser: needs_translation kalir ama sorgu onu elemez; status ucu
 # translation_given_up ile sayar. 2026-10-08: ayni ~23 kayit her 2 saatte Gemini
@@ -737,6 +742,8 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
     sure_butcesi = RETRANSLATE_TIME_BUDGET if sure_butcesi is None else sure_butcesi
     bitis = time.monotonic() + sure_butcesi
     batch = RETRANSLATE_BATCH if batch is None else batch
+    # Cagiran tavan verdiyse (testler) butun bolumlere o uygulanir
+    cve_upgrade_batch = RETRANSLATE_UPGRADE_BATCH_CVE if upgrade_batch is None else upgrade_batch
     upgrade_batch = RETRANSLATE_UPGRADE_BATCH if upgrade_batch is None else upgrade_batch
     tur = _turu_kur() if tur is None else tur
     sonuc = {'translated': 0, 'failed': 0, 'upgraded': 0, 'stopped': False, 'stopped_reason': None,
@@ -756,7 +763,9 @@ def retranslate_pending(redis_client=None, prefix: str = 'retranslate',
         cevrilen, basarisiz, durdu = _bekleyenler(ad, model, cevir, redis_client, prefix, batch, sonuc,
                                                   bitis, tur)
         yukseltilen, yukseltme_basarisiz = ((0, 0) if durdu
-                                            else _yukselt(ad, model, upgrade_batch, sonuc, bitis, tur))
+                                            else _yukselt(ad, model,
+                                                          cve_upgrade_batch if ad == 'cve' else upgrade_batch,
+                                                          sonuc, bitis, tur))
         basarisiz += yukseltme_basarisiz  # iki asamanin icerik hatalari tek 'failed' sayacinda
 
         # update: _yukselt bolum satirina stopped_reason yazmis olabilir (ardisik icerik hatasi)
