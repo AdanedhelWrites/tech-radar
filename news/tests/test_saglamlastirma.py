@@ -177,3 +177,28 @@ class RedisYedekDonusuTests(SimpleTestCase):
             yedek.kurulma -= gemini.REDIS_YENIDEN_DENEME_SN
             with mock.patch.object(gemini, '_redis_client', return_value=self.redis):
                 self.assertIsInstance(gemini._get_butce(), gemini._RedisButce)
+
+
+class CveYukseltmeTavaniTests(SimpleTestCase):
+    """2026-11-08: CVE bolumu ayri, daha yuksek yukseltme tavani alir (gunde ~600 yeni onemli CVE)."""
+
+    def test_cve_kendi_tavanini_digerleri_genel_tavani_alir(self):
+        from news import retranslate
+        cagrilar = []
+
+        def yukselt(ad, model, sinir, sonuc, bitis=None, tur=None):
+            cagrilar.append((ad, sinir))
+            return 0, 0
+
+        with mock.patch.object(retranslate, '_bekleyenler', return_value=(0, 0, False)), \
+                mock.patch.object(retranslate, '_yukselt', side_effect=yukselt), \
+                mock.patch.object(retranslate.tu, 'herhangi_saglayici_hazir', return_value=True), \
+                mock.patch.object(retranslate, 'RETRANSLATE_UPGRADE_BATCH', 40), \
+                mock.patch.object(retranslate, 'RETRANSLATE_UPGRADE_BATCH_CVE', 150):
+            retranslate.retranslate_pending(redis_client=mock.Mock(), tur=retranslate._Tur(10, 0))
+            self.assertEqual(dict(cagrilar), {'cve': 150, 'news': 40, 'ai': 40, 'sre': 40, 'devtools': 40,
+                                              'kubernetes': 40})
+            # Cagiran tavan verirse (testler) butun bolumlere o uygulanir
+            cagrilar.clear()
+            retranslate.retranslate_pending(redis_client=mock.Mock(), tur=retranslate._Tur(10, 0), upgrade_batch=5)
+            self.assertEqual({sinir for _, sinir in cagrilar}, {5})
