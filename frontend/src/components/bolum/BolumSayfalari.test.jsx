@@ -63,7 +63,7 @@ const SAYFALAR = [
   {
     ad: 'AINewsComponent', Bilesen: AINewsComponent, api: () => aiApi, liste: 'getAINews', cek: 'fetchAINews',
     baslik: 'Yapay Zeka', kaynakSayisi: 9, ilkKaynak: 'Hugging Face',
-    yuklemeHatasi: 'AI güncellemeleri yüklenirken hata oluştu',
+    yuklemeHatasi: 'Yapay Zeka güncellemeleri yüklenirken hata oluştu',
   },
 ]
 
@@ -242,7 +242,7 @@ describe.each(SAYFALAR)('$ad', ({ Bilesen, api, liste, cek, baslik, kaynakSayisi
     // Temizlik sonrasi liste bos gelir; panel son bilinen kayitla acik kalmamali
     api()[liste].mockResolvedValue({ data: { success: true, data: [], toplam: 0, sayfa: 1, sayfa_sayisi: 1, boyut: 25 } })
     api().getStats.mockResolvedValue({ data: { success: true, total: 0, by_source: {}, last_update: null } })
-    fireEvent.click(screen.getByRole('button', { name: /Önbelleği temizle/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Kayıtları sıfırla/ }))
     await waitFor(() => expect(konum()).toBe(''))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(api()[liste].mock.calls.length).toBeGreaterThan(oncekiCagri)

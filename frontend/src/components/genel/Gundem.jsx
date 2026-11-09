@@ -14,7 +14,9 @@ const BOLUM_ADI = {
   ai: 'Yapay Zeka',
 }
 
-export default function Gundem({ olaylar, hata, onSec }) {
+export default function Gundem({ olaylar: hamOlaylar, hata, onSec }) {
+  // Temsilci kaydi gelmeyen olay (sunucu sozlesmesi disi) karti cokertmesin: atlanir
+  const olaylar = Array.isArray(hamOlaylar) ? hamOlaylar.filter(o => o?.kayit) : hamOlaylar
   let icerik
   if (hata) icerik = <p className="genel-bos">Gündem bilgisi alınamadı.</p>
   else if (!olaylar) icerik = <p className="genel-bos">Yükleniyor…</p>

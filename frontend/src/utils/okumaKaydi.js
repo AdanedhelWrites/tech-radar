@@ -1,6 +1,7 @@
 // API kayitlarini okuma panelinin ortak bicimine (OkumaKaydi) donusturur (spec 2026-10-31 G5, §6).
 import { kevOnekiAyir, markdownSadelestir } from './okuma'
 import { cveListeBasligi } from './cve'
+import { tarihBicimle } from './zaman'
 
 // Ceviri KEV onekini de Turkceye cevirir ("2026-10-20 tarihinde CISA KEV kataloguna eklendi; ... ."),
 // Ingilizce regex onu tanimaz. Yalniz orijinalde onek bulunduysa ve metnin ILK cumlesi hem "CISA KEV
@@ -118,7 +119,7 @@ export const cveOkumaKaydi = (cve) => {
     govdeTr: trGovde,
     govdeOrijinal: markdownSadelestir(orijinal.govde),
     kevMeta,
-    tarih: metin(cve?.published_date),
+    tarih: tarihBicimle(metin(cve?.published_date)),
     ekAlanlar: urunler ? [{ etiket: 'Etkilenen ürünler', deger: urunler }] : [],
     referanslar: Array.isArray(cve?.references) ? cve.references.filter(r => typeof r === 'string' && r) : [],
   }
@@ -145,7 +146,7 @@ export const haberOkumaKaydi = (kayit, bolum) => {
       ? metin(kayit?.turkish_description) || metin(kayit?.turkish_summary)
       : metin(kayit?.turkish_description)),
     govdeOrijinal: degisiklikGunlugu(metin(kayit?.original_description)),
-    tarih: metin(bolum === 'news' ? kayit?.date : kayit?.published_date),
+    tarih: tarihBicimle(metin(bolum === 'news' ? kayit?.date : kayit?.published_date)),
     prAdresi: bolum === 'kubernetes' ? K8S_PR_ADRESI : null,
   }
 }

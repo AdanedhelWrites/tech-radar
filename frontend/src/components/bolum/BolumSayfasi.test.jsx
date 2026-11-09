@@ -107,14 +107,14 @@ describe('BolumSayfasi', () => {
   it('news bolumunde tarih date alanindan okunur', async () => {
     sayfa({}, '/news?kayit=1')
     const panel = await screen.findByRole('dialog')
-    expect(within(panel).getByText('The Hacker News · 2026-10-30')).toBeInTheDocument()
-    expect(within(panel).queryByText(/2026-10-29/)).toBeNull()
+    expect(within(panel).getByText('The Hacker News · 30 Ekim 2026')).toBeInTheDocument()
+    expect(within(panel).queryByText(/29 Ekim 2026/)).toBeNull()
   })
 
   it('diger bolumlerde tarih published_date alanindan okunur', async () => {
     sayfa({ bolum: 'sre', baslik: 'SRE' }, '/news?kayit=1')
     const panel = await screen.findByRole('dialog')
-    expect(within(panel).getByText('The Hacker News · 2026-10-29')).toBeInTheDocument()
+    expect(within(panel).getByText('The Hacker News · 29 Ekim 2026')).toBeInTheDocument()
   })
 
   it('bolume ozgu bilgi rozetleri satirda gorunur', () => {

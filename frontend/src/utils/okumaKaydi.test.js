@@ -64,7 +64,7 @@ describe('cveOkumaKaydi', () => {
       ustBaslik: 'CVE-2026-1001',
       baslik: 'Örnek VPN ağ geçidinde uzaktan kod çalıştırma',
       skor: 9.8,
-      tarih: '2026-09-01',
+      tarih: '1 Eylül 2026',
       kaynak: 'CISA KEV',
       link: 'https://nvd.nist.gov/vuln/detail/CVE-2026-1001',
     })
@@ -144,7 +144,7 @@ const haber = (ek = {}) => ({
 describe('haberOkumaKaydi', () => {
   it('news tarihi date alanindan, govde summary yedegiyle', () => {
     const k = haberOkumaKaydi(haber({ turkish_description: '' }), 'news')
-    expect(k.tarih).toBe('2026-10-30')
+    expect(k.tarih).toBe('30 Ekim 2026')
     expect(k.govdeTr).toBe('Türkçe özet.')
     expect(k.govdeOrijinal).toBe('Original description.')
     expect(haberOkumaKaydi(haber(), 'news').govdeTr).toBe('Türkçe açıklama.')
@@ -156,7 +156,7 @@ describe('haberOkumaKaydi', () => {
 
   it('diger bolumlerde tarih published_date, ozet yedegi kullanilmaz', () => {
     const k = haberOkumaKaydi(haber({ turkish_description: '' }), 'sre')
-    expect(k.tarih).toBe('2026-10-29')
+    expect(k.tarih).toBe('29 Ekim 2026')
     expect(k.govdeTr).toBe('')
   })
 

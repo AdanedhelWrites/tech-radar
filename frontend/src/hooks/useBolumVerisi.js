@@ -1,6 +1,7 @@
 import toast from 'react-hot-toast'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import useListeSorgusu from './useListeSorgusu'
+import useAraliklaYenile from './useAraliklaYenile'
 import { istekHataMesaji } from '../services/api'
 import { raporHtml, raporIndir, raporKayitlariniGetir } from '../utils/rapor'
 import { DONEM_SECENEKLERI, SIRALA_SECENEKLERI, cekimGunu, donemEtiketi } from '../components/bolum/secenekler'
@@ -19,7 +20,11 @@ import { DONEM_SECENEKLERI, SIRALA_SECENEKLERI, cekimGunu, donemEtiketi } from '
 //                 raporAciklamaEki(sorgu) -> rapor meta satirina eklenen metin ('' = yok)
 
 const YONETICI_GEREKLI = 'Sıfırlama için yönetici girişi gerekli: önce Django admin (/admin) üzerinden oturum açın.'
-const CEKIM_BASLADI = 'Haber çekimi başladı! Haberler otomatik olarak ekrana yansıyacak.'
+// Bolumden bagimsiz: DevTools ve Yapay Zeka'da da "Haber cekimi" yaziyordu (2026-11-09)
+const CEKIM_BASLADI = 'Çekim başladı. Yeni kayıtlar otomatik olarak ekrana yansıyacak.'
+// Baslik ozeti (toplam, son guncelleme, kaynak sayilari) yalniz acilista, Cek ve sifirlamadan sonra
+// yukleniyordu; liste 5 sn'de tazelenirken baslik eskide kaliyordu
+const ISTATISTIK_YENILEME_MS = 60000
 
 export default function useBolumVerisi({
   kaynaklar, api, metinler, rapor,
@@ -34,6 +39,7 @@ export default function useBolumVerisi({
   const [istatistik, setIstatistik] = useState({ total: 0, by_source: {}, last_update: null })
   const [cekiliyor, setCekiliyor] = useState(false)
   const [raporHazirlaniyor, setRaporHazirlaniyor] = useState(false)
+  const [sifirlaniyor, setSifirlaniyor] = useState(false)
   // Durum guncellemesi beklenmeden ikinci tiklamayi da durdurur (dugme ayrica devre disi)
   const raporSuruyor = useRef(false)
   const [hata, setHata] = useState(null)
@@ -52,6 +58,9 @@ export default function useBolumVerisi({
   useEffect(() => {
     istatistikYukle()
   }, [istatistikYukle])
+
+  // Sekme arka plandayken durur (hooks/useAraliklaYenile)
+  useAraliklaYenile(istatistikYukle, ISTATISTIK_YENILEME_MS)
 
   // Kaynak secimi adreste: bos = hepsi (sorgu.kaynak yalniz bilinen adlari icerir)
   const seciliDegerler = sorgu.kaynak.length ? tumKaynaklar.filter(v => sorgu.kaynak.includes(v)) : tumKaynaklar
@@ -86,7 +95,8 @@ export default function useBolumVerisi({
   // kapat: okuma panelini kapatir. Liste bosalsa da panel son bilinen kayitla acik kalacagi icin
   // (useSeciliKayit) temizlik sonrasi acikca kapatilir ve liste yeniden istenir.
   const temizle = async (kapat) => {
-    if (!window.confirm(metinler.temizleOnayi)) return
+    if (sifirlaniyor || !window.confirm(metinler.temizleOnayi)) return
+    setSifirlaniyor(true)
     try {
       await api.temizle()
       kapat()
@@ -95,6 +105,8 @@ export default function useBolumVerisi({
       toast.success('Veriler başarıyla temizlendi', { icon: '🗑️' })
     } catch (err) {
       setHata(err.response?.status === 403 ? YONETICI_GEREKLI : 'Sıfırlama sırasında hata oluştu')
+    } finally {
+      setSifirlaniyor(false)
     }
   }
 
@@ -150,6 +162,7 @@ export default function useBolumVerisi({
     yukleniyor: liste.yukleniyor,
     cekiliyor,
     raporHazirlaniyor,
+    sifirlaniyor,
     onYenile: () => liste.yenile(),
     onRapor: raporAl,
     onTemizle: () => temizle(kapat),
