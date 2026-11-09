@@ -32,6 +32,24 @@ describe('raporHtml', () => {
     expect(raporHtml({ ...temel, kayitlar: [{ ...kayit, version: '' }] })).not.toContain('class="ek-rozet')
   })
 
+  it('varsayilan_ek_rozet_ceviri_durumunu_tasir', () => {
+    // Haber bolumlerinin raporunda da makine cevirisi ve cevrilmemis kayit ayirt edilir
+    const libre = raporHtml({ ...temel, kayitlar: [{ ...kayit, version: '', translation_provider: 'libretranslate' }] })
+    expect(libre).toContain('class="ek-rozet ceviri uyari"')
+    const cevrilmedi = raporHtml({ ...temel, kayitlar: [{ ...kayit, version: '', needs_translation: true, translation_provider: '' }] })
+    expect(cevrilmedi).toContain('class="ek-rozet ceviri cevrilmedi"')
+  })
+
+  it('tarih_turkce_ve_baglanti_guvenli', () => {
+    const html = raporHtml(temel)
+    expect(html).toContain('<span class="date">30 Ekim 2026</span>')
+    expect(html).toContain('href="https://ornek.test/1" target="_blank" rel="noopener noreferrer"')
+    // Gecersiz adreste baglanti hic cizilmez (bos href raporun kendisini aciyordu)
+    const gecersiz = raporHtml({ ...temel, kayitlar: [{ ...kayit, link: 'javascript:alert(1)' }] })
+    expect(gecersiz).not.toContain('Kaynağa Git')
+    expect(gecersiz).not.toContain('href=""')
+  })
+
   it('bosluk_korunur_secenegi_girintiyi_korur', () => {
     // Kubernetes degisiklik gunlugu girintisi icin govdede white-space: pre-wrap
     expect(raporHtml({ ...temel, boslukKorunur: true })).toMatch(/\.article \.content \{[^}]*white-space: pre-wrap/)

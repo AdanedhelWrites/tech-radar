@@ -45,7 +45,8 @@ const TANIM = {
     dosyaOnEki: 'siber_guvenlik_raporu',
     // Haberde tarih date alaninda, govde ozetle tamamlanir
     tarih: (k) => k.date || k.original_date || '',
-    icerik: (k) => k.turkish_description || k.turkish_summary || '',
+    // Ceviri yoksa orijinal: rapor maddesi hic bos kalmaz (ceviri rozeti durumu belirtir)
+    icerik: (k) => k.turkish_description || k.turkish_summary || k.original_description || '',
   },
 }
 

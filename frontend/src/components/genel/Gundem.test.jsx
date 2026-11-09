@@ -61,6 +61,11 @@ describe('Gundem', () => {
     expect(onSec.mock.calls[0][0].digerKaynaklar).toEqual(diger)
   })
 
+  it('temsilcisi_olmayan_olay_atlanir', () => {
+    render(<Gundem olaylar={[{ bolum: 'news', kayit: null }, olay()]} hata={false} onSec={() => {}} />)
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+  })
+
   it('gundem_hatasi_karta_yansir', () => {
     render(<Gundem olaylar={null} hata onSec={() => {}} />)
     expect(screen.getByText('Gündem bilgisi alınamadı.')).toBeInTheDocument()

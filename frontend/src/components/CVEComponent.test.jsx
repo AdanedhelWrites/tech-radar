@@ -213,7 +213,7 @@ describe('CVEComponent', () => {
     sayfa('/cve?gun=30')
     await screen.findByText('VPN ağ geçidinde uzaktan kod çalıştırma')
     expect(screen.getByRole('button', { name: /HTML rapor/ })).toHaveAttribute('title', 'CVE zafiyetlerini HTML rapor olarak indir')
-    expect(screen.getByRole('button', { name: /Önbelleği temizle/ })).toHaveAttribute('title', 'Tüm CVE verilerini sil ve sıfırla')
+    expect(screen.getByRole('button', { name: /Kayıtları sıfırla/ })).toHaveAttribute('title', 'Tüm CVE verilerini sil ve sıfırla')
     // Cek en fazla 15 gun ceker; baslik da bunu soyler
     expect(screen.getByRole('button', { name: /^Çek/ })).toHaveAttribute('title', 'Seçili kaynaklardan son 15 günün CVE kayıtlarını çek')
   })
@@ -239,7 +239,7 @@ describe('CVEComponent', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
     cveApi.getCVEs.mockResolvedValue({ data: { success: true, data: [], toplam: 0, sayfa: 1, sayfa_sayisi: 1, boyut: 25 } })
     cveApi.getStats.mockResolvedValue({ data: { success: true, total: 0, by_source: {}, by_severity: {}, last_update: null } })
-    fireEvent.click(screen.getByRole('button', { name: /Önbelleği temizle/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Kayıtları sıfırla/ }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(await screen.findByText('CVE listesi boş. Kayıt almak için "Çek" düğmesini kullanın.')).toBeInTheDocument()
     vi.restoreAllMocks()

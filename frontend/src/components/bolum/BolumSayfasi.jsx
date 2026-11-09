@@ -104,7 +104,7 @@ export function BolumCubugu({
   kaynaklar, seciliKaynaklar, onKaynakDegis, kaynakSayilari = {},
   ara = '', onAraDegis = null,
   ekFiltre = null,
-  yukleniyor, cekiliyor, raporHazirlaniyor = false, onYenile, onRapor, onTemizle, onCek,
+  yukleniyor, cekiliyor, raporHazirlaniyor = false, sifirlaniyor = false, onYenile, onRapor, onTemizle, onCek,
   basliklar = {},
 }) {
   const seciliSayisi = kaynaklar.filter(k => seciliKaynaklar[k.value]).length
@@ -200,8 +200,16 @@ export function BolumCubugu({
         >
           <FaFileExport aria-hidden="true" />HTML rapor
         </button>
-        <button type="button" className="cubuk-dugme tehlike" onClick={onTemizle} title={basliklar.temizle || 'Bu bölümün bütün kayıtlarını sil ve sıfırla'}>
-          <FaTrash aria-hidden="true" />Önbelleği temizle
+        {/* "Onbellegi temizle" yanilticiydi: bolumun butun kayitlarini siler (yonetici girisi gerekir) */}
+        <button
+          type="button"
+          className="cubuk-dugme tehlike"
+          onClick={onTemizle}
+          disabled={sifirlaniyor}
+          aria-busy={sifirlaniyor}
+          title={basliklar.temizle || 'Bu bölümün bütün kayıtlarını sil ve sıfırla'}
+        >
+          <FaTrash aria-hidden="true" />Kayıtları sıfırla
         </button>
         <button
           type="button"

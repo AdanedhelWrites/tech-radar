@@ -28,12 +28,12 @@ const TANIM = {
     istatistik: () => aiApi.getStats(),
   },
   metinler: {
-    yuklemeHatasi: 'AI güncellemeleri yüklenirken hata oluştu',
-    cekimHatasi: 'AI haberleri getirilirken hata oluştu',
-    temizleOnayi: 'Tüm AI güncellemeleri silinecek ve sıfırlanacak. Emin misiniz?',
+    yuklemeHatasi: 'Yapay Zeka güncellemeleri yüklenirken hata oluştu',
+    cekimHatasi: 'Yapay Zeka güncellemeleri getirilirken hata oluştu',
+    temizleOnayi: 'Tüm Yapay Zeka güncellemeleri silinecek ve sıfırlanacak. Emin misiniz?',
   },
   rapor: {
-    belgeBasligi: 'Yapay Zeka (AI) Raporu',
+    belgeBasligi: 'Yapay Zeka Raporu',
     baslik: 'Yapay Zeka Güncellemeleri Raporu',
     birim: 'güncelleme',
     dosyaOnEki: 'ai_haberleri_raporu',

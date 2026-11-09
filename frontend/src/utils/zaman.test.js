@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { goreliZaman } from './zaman'
+import { goreliZaman, tarihBicimle } from './zaman'
 
 const T = Date.parse('2026-10-14T12:00:00Z')
 
@@ -20,5 +20,19 @@ describe('goreliZaman', () => {
     expect(goreliZaman(undefined, T)).toBe('-')
     expect(goreliZaman('bozuk', T)).toBe('-')
     expect(goreliZaman('2026-10-14T13:00:00Z', T)).toBe('-')
+  })
+})
+
+describe('tarihBicimle', () => {
+  it('iso_gunu_turkce_yazar', () => {
+    expect(tarihBicimle('2026-11-05')).toBe('5 Kasım 2026')
+    expect(tarihBicimle('2026-01-31T23:30:00Z')).toBe('31 Ocak 2026')
+  })
+
+  it('iso_olmayan_ve_bozuk_deger_aynen_doner', () => {
+    expect(tarihBicimle('Nov 05, 2026')).toBe('Nov 05, 2026')
+    expect(tarihBicimle('2026-02-31')).toBe('2026-02-31')
+    expect(tarihBicimle('')).toBe('')
+    expect(tarihBicimle(null)).toBe('')
   })
 })

@@ -1,4 +1,6 @@
 import { kacis, kacisliParagraf, guvenliHref } from './html'
+import { tarihBicimle } from './zaman'
+import { ceviriRozeti } from '../components/CeviriEtiketi'
 
 // Bolum HTML raporu (spec 2026-11-05 G4, §7): gecerli filtre ve siralamayla, sayfadan bagimsiz.
 // Liste ucundan boyut=100 ile sirayla en fazla 5 sayfa (500 kayit) alinir; toplam daha buyukse
@@ -37,9 +39,22 @@ export async function raporKayitlariniGetir(getir, istek) {
 // Varsayilanlar haber disindaki bolumlerin alanlari; Siber Guvenlik tarih/icerik'i kendisi verir
 const varsayilanTarih = (k) => k.published_date || ''
 const varsayilanIcerik = (k) => k.turkish_description || k.original_description || ''
-// Ek rozetler ham metin dondurur: [{ metin, sinif? }] (surum; Zafiyetler'de CVE kimligi, CVSS, KEV).
-// Kacis sablonda yapilir, cagiran unutamaz.
-const varsayilanEkRozetler = (k) => (k.version ? [{ metin: k.version }] : [])
+// Ek rozetler ham metin dondurur: [{ metin, sinif? }] (surum, ceviri rozeti; Zafiyetler'de CVE kimligi, CVSS,
+// KEV). Kacis sablonda yapilir, cagiran unutamaz. Ceviri rozeti 2026-11-09'a kadar yalniz Zafiyetler'deydi:
+// haber bolumlerinin raporunda makine cevirisi ya da cevrilmemis kayit ayirt edilmiyordu.
+export const varsayilanEkRozetler = (k) => {
+  const rozetler = k.version ? [{ metin: k.version }] : []
+  const ceviri = ceviriRozeti(k)
+  if (ceviri) rozetler.push(ceviri)
+  return rozetler
+}
+
+// Kaynak baglantisi: yalniz http(s); gecersiz adreste baglanti hic cizilmez (bos href raporun kendisini
+// yeni sekmede aciyordu). Yeni sekme noopener ile acilir.
+const kaynakBaglantisi = (link) => {
+  const adres = guvenliHref(link)
+  return adres ? `\n  <a href="${adres}" target="_blank" rel="noopener noreferrer">Kaynağa Git &rarr;</a>` : ''
+}
 
 const rozetHtml = ({ metin, sinif = '' }) =>
   `<span class="ek-rozet${sinif ? ` ${kacis(sinif)}` : ''}">${kacis(metin)}</span>`
@@ -87,10 +102,9 @@ export function raporHtml({
 <h1>${kacis(baslik)}</h1>
 <p class="meta">${gun} tarihinde oluşturuldu &mdash; ${sayi(kayitlar.length)} ${kacis(birim)}${aciklama ? ` &mdash; ${kacis(aciklama)}` : ''}</p>
 ${kesildi ? `<p class="not">İlk ${sayi(kayitlar.length)} kayıt (toplam ${sayi(toplam)})</p>\n` : ''}${kayitlar.map(item => `<div class="article">
-  <span class="source">${kacis(item.source || '')}</span>${ekRozetler(item).map(rozetHtml).join('')}<span class="date">${kacis(tarih(item))}</span>
+  <span class="source">${kacis(item.source || '')}</span>${ekRozetler(item).map(rozetHtml).join('')}<span class="date">${kacis(tarihBicimle(tarih(item)))}</span>
   <h3>${kacis(item.turkish_title || item.original_title || '')}</h3>
-  <div class="content">${kacisliParagraf(icerik(item))}</div>
-  <a href="${guvenliHref(item.link)}" target="_blank">Kaynağa Git &rarr;</a>
+  <div class="content">${kacisliParagraf(icerik(item))}</div>${kaynakBaglantisi(item.link)}
 </div>`).join('\n')}
 </body></html>`
 }
